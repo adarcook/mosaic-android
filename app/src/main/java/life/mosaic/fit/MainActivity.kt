@@ -48,7 +48,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun MealCaptureScreen() {
-        var serverUrl by remember { mutableStateOf("http://10.0.2.2:8000") }
+        var serverUrl by remember { mutableStateOf("http://192.168.1.200:8000") }
         var selectedImage by remember { mutableStateOf<Uri?>(null) }
         var resultText by remember { mutableStateOf("Choose a meal photo to begin.") }
         var loading by remember { mutableStateOf(false) }
