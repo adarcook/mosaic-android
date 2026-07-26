@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +34,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -47,12 +47,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -313,7 +313,12 @@ class MainActivity : ComponentActivity() {
                 ) { CircularProgressIndicator(color = MosaicCyan) }
             }
             if (message.isNotBlank()) {
-                Text(message, color = MosaicMuted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text(
+                    message,
+                    color = MosaicMuted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             analysis?.let {
                 MealAnalysisResult(it)
@@ -365,7 +370,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun GlowCard(content: @Composable Column.() -> Unit) {
+    private fun GlowCard(content: @Composable ColumnScope.() -> Unit) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
@@ -513,7 +518,9 @@ class MainActivity : ComponentActivity() {
             if (values.isEmpty()) {
                 Text(emptyText, color = MosaicMuted)
             } else {
-                values.forEach { Text("• $it", color = MosaicMuted, modifier = Modifier.padding(vertical = 3.dp)) }
+                values.forEach {
+                    Text("• $it", color = MosaicMuted, modifier = Modifier.padding(vertical = 3.dp))
+                }
             }
         }
     }
