@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MosaicFit"
+rootProject.name = "MosaicAndroid"
 include(":app")
