@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import life.mosaic.core.settings.MosaicSettings
-import life.mosaic.feature.fit.FitApp
 import life.mosaic.feature.fit.FitMealJournal
 
 class MainActivity : ComponentActivity() {
@@ -22,7 +21,7 @@ class MainActivity : ComponentActivity() {
             var themeId by remember { mutableStateOf(settings.selectedThemeId) }
             var serverUrl by remember { mutableStateOf(settings.serverUrl) }
 
-            FitApp(
+            MosaicAppShell(
                 journal = journal,
                 serverUrl = serverUrl,
                 onServerUrlChanged = {
