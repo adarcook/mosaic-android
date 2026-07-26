@@ -1,6 +1,5 @@
 package life.mosaic.feature.training
 
-import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,6 +49,7 @@ private val RequiredPermissions = setOf(
 data class TrainingSession(
     val id: String,
     val title: String,
+    val exerciseType: Int,
     val startTime: Instant,
     val durationMinutes: Long,
     val sourcePackage: String
@@ -109,7 +109,7 @@ fun TrainingApp(modifier: Modifier = Modifier) {
             item {
                 Text("אימונים", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "מעקב אחר 3 אימוני שחייה ו-2 אימוני קליסטניקס בשבוע",
+                    "קורא כרגע את כל האימונים כדי לזהות כיצד Samsung Health מסווגת אותם",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(12.dp))
@@ -131,7 +131,7 @@ fun TrainingApp(modifier: Modifier = Modifier) {
 
                 loading -> item { StatusCard("טוען אימונים…") }
                 error != null -> item { StatusCard(error.orEmpty()) }
-                sessions.isEmpty() -> item { StatusCard("לא נמצאו אימוני שחייה או כוח ב-30 הימים האחרונים") }
+                sessions.isEmpty() -> item { StatusCard("לא נמצאו כלל אימונים ב-30 הימים האחרונים") }
                 else -> {
                     item {
                         WeeklySummary(sessions)
@@ -158,26 +158,17 @@ private suspend fun readTrainingSessions(client: HealthConnectClient): List<Trai
         )
     )
 
-    return response.records
-        .filter { it.exerciseType in RelevantExerciseTypes }
-        .map { record ->
-            TrainingSession(
-                id = record.metadata.id,
-                title = exerciseTitle(record.exerciseType),
-                startTime = record.startTime,
-                durationMinutes = Duration.between(record.startTime, record.endTime).toMinutes(),
-                sourcePackage = record.metadata.dataOrigin.packageName
-            )
-        }
+    return response.records.map { record ->
+        TrainingSession(
+            id = record.metadata.id,
+            title = exerciseTitle(record.exerciseType),
+            exerciseType = record.exerciseType,
+            startTime = record.startTime,
+            durationMinutes = Duration.between(record.startTime, record.endTime).toMinutes(),
+            sourcePackage = record.metadata.dataOrigin.packageName
+        )
+    }
 }
-
-private val RelevantExerciseTypes = setOf(
-    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
-    ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER,
-    ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS,
-    ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING,
-    ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
-)
 
 private fun exerciseTitle(type: Int): String = when (type) {
     ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "שחייה בבריכה"
@@ -185,15 +176,23 @@ private fun exerciseTitle(type: Int): String = when (type) {
     ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS -> "קליסטניקס"
     ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "אימון כוח"
     ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "הרמת משקולות"
-    else -> "אימון"
+    else -> "אימון מסוג $type"
 }
+
+private fun isSwim(type: Int): Boolean = type == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL ||
+    type == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER
+
+private fun isStrength(type: Int): Boolean = type == ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS ||
+    type == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
+    type == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
 
 @Composable
 private fun WeeklySummary(sessions: List<TrainingSession>) {
     val weekAgo = Instant.now().minus(Duration.ofDays(7))
     val recent = sessions.filter { it.startTime >= weekAgo }
-    val swims = recent.count { it.title.startsWith("שחייה") }
-    val strength = recent.size - swims
+    val swims = recent.count { isSwim(it.exerciseType) }
+    val strength = recent.count { isStrength(it.exerciseType) }
+    val uncategorized = recent.size - swims - strength
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -204,6 +203,12 @@ private fun WeeklySummary(sessions: List<TrainingSession>) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("שחייה: $swims / 3")
                 Text("כוח: $strength / 2")
+            }
+            if (uncategorized > 0) {
+                Text(
+                    "אימונים שעדיין לא סווגו: $uncategorized",
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
     }
@@ -217,6 +222,7 @@ private fun TrainingCard(session: TrainingSession) {
         Column(Modifier.padding(18.dp)) {
             Text(session.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("$localTime · ${session.durationMinutes} דקות")
+            Text("exerciseType = ${session.exerciseType}")
             Text(session.sourcePackage, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
