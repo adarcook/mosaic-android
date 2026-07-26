@@ -33,6 +33,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.launch
@@ -40,6 +41,8 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+private const val SamsungHealthPackage = "com.sec.android.app.shealth"
 
 private val RequiredPermissions = setOf(
     HealthPermission.getReadPermission(ExerciseSessionRecord::class),
@@ -53,6 +56,13 @@ data class TrainingSession(
     val startTime: Instant,
     val durationMinutes: Long,
     val sourcePackage: String
+)
+
+private data class TrainingReadResult(
+    val sessions: List<TrainingSession>,
+    val allRecordCount: Int,
+    val samsungRecordCount: Int,
+    val grantedPermissions: Set<String>
 )
 
 @Composable
@@ -70,11 +80,13 @@ fun TrainingApp(modifier: Modifier = Modifier) {
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var sessions by remember { mutableStateOf<List<TrainingSession>>(emptyList()) }
+    var diagnostic by remember { mutableStateOf("טרם בוצעה קריאה") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         PermissionController.createRequestPermissionResultContract()
     ) { granted ->
         hasPermissions = granted.containsAll(RequiredPermissions)
+        diagnostic = "הרשאות שהוחזרו ממסך האישור: ${granted.size}"
         if (!hasPermissions) error = "נדרשת הרשאה לקריאת אימונים ודופק"
     }
 
@@ -85,12 +97,21 @@ fun TrainingApp(modifier: Modifier = Modifier) {
         runCatching {
             val granted = healthClient.permissionController.getGrantedPermissions()
             hasPermissions = granted.containsAll(RequiredPermissions)
-            if (!hasPermissions) return@runCatching emptyList()
-            readTrainingSessions(healthClient)
-        }.onSuccess {
-            sessions = it
+            if (!hasPermissions) {
+                TrainingReadResult(emptyList(), 0, 0, granted)
+            } else {
+                readTrainingSessions(healthClient, granted)
+            }
+        }.onSuccess { result ->
+            sessions = result.sessions
+            diagnostic = buildString {
+                append("הרשאות: ${result.grantedPermissions.size}")
+                append(" · כל המקורות: ${result.allRecordCount}")
+                append(" · Samsung Health: ${result.samsungRecordCount}")
+            }
         }.onFailure {
             error = it.message ?: "קריאת האימונים נכשלה"
+            diagnostic = "שגיאה: ${it::class.simpleName}"
         }
         loading = false
     }
@@ -109,10 +130,11 @@ fun TrainingApp(modifier: Modifier = Modifier) {
             item {
                 Text("אימונים", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "קורא כרגע את כל האימונים כדי לזהות כיצד Samsung Health מסווגת אותם",
+                    "בדיקת Health Connect: כל האימונים וכל מקורות הנתונים",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(12.dp))
+                DiagnosticCard(diagnostic)
             }
 
             when {
@@ -131,7 +153,13 @@ fun TrainingApp(modifier: Modifier = Modifier) {
 
                 loading -> item { StatusCard("טוען אימונים…") }
                 error != null -> item { StatusCard(error.orEmpty()) }
-                sessions.isEmpty() -> item { StatusCard("לא נמצאו כלל אימונים ב-30 הימים האחרונים") }
+                sessions.isEmpty() -> item {
+                    StatusCard("Health Connect החזיר אפס ExerciseSessionRecord גם ללא סינון")
+                    Button(
+                        onClick = { scope.launch { refresh() } },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("בדיקה מחדש") }
+                }
                 else -> {
                     item {
                         WeeklySummary(sessions)
@@ -147,27 +175,52 @@ fun TrainingApp(modifier: Modifier = Modifier) {
     }
 }
 
-private suspend fun readTrainingSessions(client: HealthConnectClient): List<TrainingSession> {
-    val end = Instant.now()
-    val start = end.minus(Duration.ofDays(30))
-    val response = client.readRecords(
+private suspend fun readTrainingSessions(
+    client: HealthConnectClient,
+    grantedPermissions: Set<String>
+): TrainingReadResult {
+    val end = Instant.now().plus(Duration.ofMinutes(5))
+    val start = end.minus(Duration.ofDays(365))
+    val timeRange = TimeRangeFilter.between(start, end)
+
+    val allResponse = client.readRecords(
         ReadRecordsRequest(
             recordType = ExerciseSessionRecord::class,
-            timeRangeFilter = TimeRangeFilter.between(start, end),
+            timeRangeFilter = timeRange,
             ascendingOrder = false
         )
     )
 
-    return response.records.map { record ->
-        TrainingSession(
-            id = record.metadata.id,
-            title = exerciseTitle(record.exerciseType),
-            exerciseType = record.exerciseType,
-            startTime = record.startTime,
-            durationMinutes = Duration.between(record.startTime, record.endTime).toMinutes(),
-            sourcePackage = record.metadata.dataOrigin.packageName
+    val samsungResponse = client.readRecords(
+        ReadRecordsRequest(
+            recordType = ExerciseSessionRecord::class,
+            timeRangeFilter = timeRange,
+            dataOriginFilter = setOf(DataOrigin(SamsungHealthPackage)),
+            ascendingOrder = false
         )
+    )
+
+    val records = if (allResponse.records.isNotEmpty()) {
+        allResponse.records
+    } else {
+        samsungResponse.records
     }
+
+    return TrainingReadResult(
+        sessions = records.map { record ->
+            TrainingSession(
+                id = record.metadata.id,
+                title = exerciseTitle(record.exerciseType),
+                exerciseType = record.exerciseType,
+                startTime = record.startTime,
+                durationMinutes = Duration.between(record.startTime, record.endTime).toMinutes(),
+                sourcePackage = record.metadata.dataOrigin.packageName
+            )
+        },
+        allRecordCount = allResponse.records.size,
+        samsungRecordCount = samsungResponse.records.size,
+        grantedPermissions = grantedPermissions
+    )
 }
 
 private fun exerciseTitle(type: Int): String = when (type) {
@@ -224,6 +277,20 @@ private fun TrainingCard(session: TrainingSession) {
             Text("$localTime · ${session.durationMinutes} דקות")
             Text("exerciseType = ${session.exerciseType}")
             Text(session.sourcePackage, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticCard(message: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text("אבחון", fontWeight = FontWeight.Bold)
+            Text(message)
         }
     }
 }
