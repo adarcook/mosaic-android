@@ -18,7 +18,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -107,6 +106,7 @@ internal fun AnalyzeMealScreen(
             "ניתוח ארוחה",
             "צלם, סרוק, תקן במקרה הצורך ושמור ביומן"
         )
+
         GlowCard(palette) {
             OutlinedTextField(
                 value = serverUrl,
@@ -146,7 +146,7 @@ internal fun AnalyzeMealScreen(
 
             selectedImage?.let { uri ->
                 Spacer(Modifier.height(14.dp))
-                MealScanPreview(uri = uri, scanning = loading, palette = palette)
+                MealScanPreview(uri, loading, palette)
                 Spacer(Modifier.height(12.dp))
                 Button(
                     enabled = !loading,
@@ -197,9 +197,7 @@ internal fun AnalyzeMealScreen(
                         onClick = { editing = true },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Text("עריכת הניתוח")
-                    }
+                    ) { Text("עריכת הניתוח") }
                     Button(
                         onClick = { onSave(result) },
                         modifier = Modifier.weight(1f),
@@ -208,9 +206,7 @@ internal fun AnalyzeMealScreen(
                             containerColor = palette.success,
                             contentColor = palette.background
                         )
-                    ) {
-                        Text("שמירה למעקב", fontWeight = FontWeight.Bold)
-                    }
+                    ) { Text("שמירה למעקב", fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -223,9 +219,7 @@ private fun MealScanPreview(uri: Uri, scanning: Boolean, palette: ThemePalette) 
     val bitmap = remember(uri) {
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                ImageDecoder.decodeBitmap(
-                    ImageDecoder.createSource(context.contentResolver, uri)
-                )
+                ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
             } else {
                 @Suppress("DEPRECATION")
                 MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
@@ -243,21 +237,17 @@ private fun MealScanPreview(uri: Uri, scanning: Boolean, palette: ThemePalette) 
         label = "scan-position"
     )
 
-    BoxWithConstraints(
+    Box(
         Modifier
             .fillMaxWidth()
             .height(280.dp)
             .clip(RoundedCornerShape(22.dp))
             .background(palette.surfaceHighlight)
-            .border(
-                1.dp,
-                palette.primary.copy(alpha = 0.45f),
-                RoundedCornerShape(22.dp)
-            )
+            .border(1.dp, palette.primary.copy(alpha = 0.45f), RoundedCornerShape(22.dp))
     ) {
-        if (bitmap != null) {
+        bitmap?.let {
             Image(
-                bitmap = bitmap,
+                bitmap = it,
                 contentDescription = "תמונת הארוחה",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -269,7 +259,7 @@ private fun MealScanPreview(uri: Uri, scanning: Boolean, palette: ThemePalette) 
                 Modifier
                     .fillMaxWidth()
                     .height(56.dp)
-                    .offset(y = maxHeight * progress)
+                    .offset(y = 224.dp * progress)
                     .background(
                         Brush.verticalGradient(
                             listOf(
@@ -289,10 +279,7 @@ private fun MealScanPreview(uri: Uri, scanning: Boolean, palette: ThemePalette) 
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(16.dp)
-                    .background(
-                        Color.Black.copy(alpha = 0.58f),
-                        RoundedCornerShape(14.dp)
-                    )
+                    .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(14.dp))
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             )
         }
@@ -311,18 +298,10 @@ private fun MealAnalysisEditor(
             addAll(initial.items.map { EditableItem(it.name, it.estimatedQuantity) })
         }
     }
-    var calories by remember(initial.analysisId) {
-        mutableStateOf(initial.nutrition.caloriesKcal.toString())
-    }
-    var protein by remember(initial.analysisId) {
-        mutableStateOf(formatNumber(initial.nutrition.proteinG))
-    }
-    var carbs by remember(initial.analysisId) {
-        mutableStateOf(formatNumber(initial.nutrition.carbohydratesG))
-    }
-    var fat by remember(initial.analysisId) {
-        mutableStateOf(formatNumber(initial.nutrition.fatG))
-    }
+    var calories by remember(initial.analysisId) { mutableStateOf(initial.nutrition.caloriesKcal.toString()) }
+    var protein by remember(initial.analysisId) { mutableStateOf(formatNumber(initial.nutrition.proteinG)) }
+    var carbs by remember(initial.analysisId) { mutableStateOf(formatNumber(initial.nutrition.carbohydratesG)) }
+    var fat by remember(initial.analysisId) { mutableStateOf(formatNumber(initial.nutrition.fatG)) }
 
     fun applyMultiplier(multiplier: Double) {
         calories = (initial.nutrition.caloriesKcal * multiplier).toInt().toString()
@@ -341,9 +320,7 @@ private fun MealAnalysisEditor(
                     OutlinedButton(
                         onClick = { applyMultiplier(multiplier) },
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Text(label, fontSize = 12.sp)
-                    }
+                    ) { Text(label, fontSize = 12.sp) }
                 }
         }
         Spacer(Modifier.height(12.dp))
@@ -356,9 +333,7 @@ private fun MealAnalysisEditor(
     GlowCard(palette) {
         Text("מזונות", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         items.forEachIndexed { index, item ->
-            if (index > 0) {
-                HorizontalDivider(color = palette.muted.copy(alpha = 0.25f))
-            }
+            if (index > 0) HorizontalDivider(color = palette.muted.copy(alpha = 0.25f))
             OutlinedTextField(
                 value = item.name,
                 onValueChange = { items[index] = item.copy(name = it) },
@@ -378,9 +353,7 @@ private fun MealAnalysisEditor(
         OutlinedButton(
             onClick = { items.add(EditableItem("", "")) },
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("+ הוספת מזון")
-        }
+        ) { Text("+ הוספת מזון") }
     }
 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -388,9 +361,7 @@ private fun MealAnalysisEditor(
             onClick = onCancel,
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(18.dp)
-        ) {
-            Text("ביטול")
-        }
+        ) { Text("ביטול") }
         Button(
             enabled = calories.toIntOrNull() != null &&
                 listOf(protein, carbs, fat).all { it.toDoubleOrNull() != null },
@@ -403,10 +374,7 @@ private fun MealAnalysisEditor(
                         status = "confirmed",
                         items = editedItems,
                         nutrition = NutritionEstimate(
-                            calories.toInt(),
-                            protein.toDouble(),
-                            carbs.toDouble(),
-                            fat.toDouble()
+                            calories.toInt(), protein.toDouble(), carbs.toDouble(), fat.toDouble()
                         ),
                         originalItems = initial.originalItems.ifEmpty { initial.items },
                         originalNutrition = initial.originalNutrition ?: initial.nutrition,
@@ -420,9 +388,7 @@ private fun MealAnalysisEditor(
                 containerColor = palette.success,
                 contentColor = palette.background
             )
-        ) {
-            Text("שמירת התיקון", fontWeight = FontWeight.Bold)
-        }
+        ) { Text("שמירת התיקון", fontWeight = FontWeight.Bold) }
     }
 }
 
@@ -439,16 +405,11 @@ private fun MealAnalysisResult(palette: ThemePalette, analysis: MealAnalysis) {
         GlowCard(palette) {
             Text("מזונות שזוהו", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             analysis.items.forEachIndexed { index, item ->
-                if (index > 0) {
-                    HorizontalDivider(color = palette.muted.copy(alpha = 0.25f))
-                }
+                if (index > 0) HorizontalDivider(color = palette.muted.copy(alpha = 0.25f))
                 Column(Modifier.padding(vertical = 8.dp)) {
                     Text(item.name, fontWeight = FontWeight.Bold)
                     Text(item.estimatedQuantity, color = palette.muted)
-                    Text(
-                        "רמת ביטחון: ${(item.confidence * 100).toInt()}%",
-                        color = palette.primary
-                    )
+                    Text("רמת ביטחון: ${(item.confidence * 100).toInt()}%", color = palette.primary)
                 }
             }
         }
@@ -490,13 +451,14 @@ private suspend fun uploadMeal(
     val body = ByteArrayOutputStream().apply {
         write("--$boundary\r\n".toByteArray())
         write(
-            "Content-Disposition: form-data; name=\"image\"; " +
-                "filename=\"meal.jpg\"\r\n".toByteArray()
+            ("Content-Disposition: form-data; name=\"image\"; " +
+                "filename=\"meal.jpg\"\r\n").toByteArray()
         )
         write("Content-Type: $mimeType\r\n\r\n".toByteArray())
         write(imageBytes)
         write("\r\n--$boundary--\r\n".toByteArray())
     }.toByteArray()
+
     val connection = (endpoint.openConnection() as HttpURLConnection).apply {
         requestMethod = "POST"
         doOutput = true
@@ -527,11 +489,7 @@ private fun parseMealAnalysis(json: JSONObject): MealAnalysis {
     val questionsJson = json.getJSONArray("confirmation_questions")
     val items = List(itemsJson.length()) { index ->
         itemsJson.getJSONObject(index).let {
-            MealItem(
-                it.getString("name"),
-                it.getString("estimated_quantity"),
-                it.getDouble("confidence")
-            )
+            MealItem(it.getString("name"), it.getString("estimated_quantity"), it.getDouble("confidence"))
         }
     }
     val nutrition = NutritionEstimate(
