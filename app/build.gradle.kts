@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "life.mosaic.fit"
-        minSdk = 26
+        minSdk = 28
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":core:settings"))
     implementation(project(":feature:fit"))
     implementation(project(":feature:photos"))
+    implementation(project(":feature:training"))
     implementation(platform("androidx.compose:compose-bom:2025.01.01"))
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.core:core-ktx:1.15.0")
