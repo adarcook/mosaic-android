@@ -24,14 +24,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -42,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -49,7 +49,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,6 +59,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -157,14 +157,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val preferences = getSharedPreferences(PreferencesName, Context.MODE_PRIVATE)
-        val initialThemeId = preferences.getString(ThemePreferenceKey, Themes.first().id) ?: Themes.first().id
-        val initialServerUrl = preferences.getString(ServerUrlPreferenceKey, DefaultServerUrl) ?: DefaultServerUrl
+        val initialTheme = preferences.getString(ThemePreferenceKey, Themes.first().id)
+            ?: Themes.first().id
+        val initialServer = preferences.getString(ServerUrlPreferenceKey, DefaultServerUrl)
+            ?: DefaultServerUrl
         val journal = MealJournal(this)
 
         setContent {
-            var selectedThemeId by remember { mutableStateOf(initialThemeId) }
-            var serverUrl by remember { mutableStateOf(initialServerUrl) }
-            val palette = Themes.firstOrNull { it.id == selectedThemeId } ?: Themes.first()
+            var themeId by remember { mutableStateOf(initialTheme) }
+            var serverUrl by remember { mutableStateOf(initialServer) }
+            val palette = Themes.firstOrNull { it.id == themeId } ?: Themes.first()
 
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 MaterialTheme(colorScheme = palette.colorScheme) {
@@ -176,9 +178,9 @@ class MainActivity : ComponentActivity() {
                             serverUrl = it
                             preferences.edit().putString(ServerUrlPreferenceKey, it).apply()
                         },
-                        selectedThemeId = selectedThemeId,
+                        selectedThemeId = themeId,
                         onThemeSelected = {
-                            selectedThemeId = it
+                            themeId = it
                             preferences.edit().putString(ThemePreferenceKey, it).apply()
                         }
                     )
@@ -225,21 +227,33 @@ class MainActivity : ComponentActivity() {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Brush.verticalGradient(listOf(palette.backgroundTop, palette.background, palette.backgroundBottom)))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(palette.backgroundTop, palette.background, palette.backgroundBottom)
+                        )
+                    )
                     .padding(paddingValues)
             ) {
                 when (destination) {
-                    AppDestination.Today -> TodayScreen(palette, meals, loadingHistory) {
-                        destination = AppDestination.Analyze
-                    }
+                    AppDestination.Today -> TodayScreen(
+                        palette,
+                        meals,
+                        loadingHistory
+                    ) { destination = AppDestination.Analyze }
+
                     AppDestination.Analyze -> AnalyzeScreen(
-                        palette = palette,
-                        serverUrl = serverUrl,
-                        onServerUrlChanged = onServerUrlChanged,
-                        onSave = ::saveMeal
+                        palette,
+                        serverUrl,
+                        onServerUrlChanged,
+                        ::saveMeal
                     )
+
                     AppDestination.Insights -> InsightsScreen(palette, meals)
-                    AppDestination.Settings -> SettingsScreen(palette, selectedThemeId, onThemeSelected)
+                    AppDestination.Settings -> SettingsScreen(
+                        palette,
+                        selectedThemeId,
+                        onThemeSelected
+                    )
                 }
             }
         }
@@ -256,7 +270,9 @@ class MainActivity : ComponentActivity() {
                 NavigationBarItem(
                     selected = selected == destination,
                     onClick = { onSelected(destination) },
-                    icon = { Text(destination.symbol, fontSize = 20.sp, fontWeight = FontWeight.Bold) },
+                    icon = {
+                        Text(destination.symbol, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    },
                     label = { Text(destination.label) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = palette.primary,
@@ -277,23 +293,29 @@ class MainActivity : ComponentActivity() {
         loading: Boolean,
         onAddMeal: () -> Unit
     ) {
-        val today = LocalDate.now()
-        val meals = allMeals.filter { it.localDate() == today }
+        val meals = allMeals.filter { it.localDate() == LocalDate.now() }
         val nutrition = meals.fold(NutritionEstimate(0, 0.0, 0.0, 0.0)) { total, meal ->
-            NutritionEstimate(
-                total.caloriesKcal + meal.nutrition.caloriesKcal,
-                total.proteinG + meal.nutrition.proteinG,
-                total.carbohydratesG + meal.nutrition.carbohydratesG,
-                total.fatG + meal.nutrition.fatG
-            )
+            total + meal.nutrition
         }
 
         ScreenColumn {
-            Header(palette, "MOSAIC FIT", "היום שלך", "הארוחות נשמרות במכשיר באופן מקומי")
+            Header(
+                palette,
+                "MOSAIC FIT",
+                "היום שלך",
+                "הארוחות נשמרות במכשיר באופן מקומי"
+            )
             GlowCard(palette) {
-                Text("סיכום יומי", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "סיכום יומי",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Metric(palette, "קלוריות", nutrition.caloriesKcal.toString(), "קק״ל")
                     Metric(palette, "חלבון", formatNumber(nutrition.proteinG), "גרם")
                     Metric(palette, "פחמימות", formatNumber(nutrition.carbohydratesG), "גרם")
@@ -322,20 +344,23 @@ class MainActivity : ComponentActivity() {
         var selectedImage by remember { mutableStateOf<Uri?>(null) }
         var message by remember { mutableStateOf("בחר תמונה של הארוחה כדי להתחיל") }
         var analysis by remember { mutableStateOf<MealAnalysis?>(null) }
+        var editing by remember { mutableStateOf(false) }
         var loading by remember { mutableStateOf(false) }
-        val answers = remember { mutableStateMapOf<String, String>() }
-        val customAnswers = remember { mutableStateMapOf<String, String>() }
         val scope = rememberCoroutineScope()
         val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             selectedImage = uri
             analysis = null
-            answers.clear()
-            customAnswers.clear()
+            editing = false
             message = if (uri == null) "לא נבחרה תמונה" else "התמונה מוכנה לניתוח"
         }
 
         ScreenColumn {
-            Header(palette, "AI MEAL SCAN", "ניתוח ארוחה", "בחר תמונה, אשר פרטים ושמור ביומן")
+            Header(
+                palette,
+                "AI MEAL SCAN",
+                "ניתוח ארוחה",
+                "נתח, תקן במקרה הצורך ושמור ביומן"
+            )
             GlowCard(palette) {
                 OutlinedTextField(
                     value = serverUrl,
@@ -345,8 +370,7 @@ class MainActivity : ComponentActivity() {
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = palette.primary,
-                        focusedLabelColor = palette.primary,
-                        cursorColor = palette.primary
+                        focusedLabelColor = palette.primary
                     )
                 )
                 Spacer(Modifier.height(14.dp))
@@ -354,7 +378,9 @@ class MainActivity : ComponentActivity() {
                     onClick = { picker.launch("image/*") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp)
-                ) { Text("בחירת תמונת ארוחה") }
+                ) {
+                    Text("בחירת תמונת ארוחה")
+                }
                 Spacer(Modifier.height(10.dp))
                 Button(
                     enabled = selectedImage != null && !loading,
@@ -362,141 +388,293 @@ class MainActivity : ComponentActivity() {
                         val uri = selectedImage ?: return@Button
                         loading = true
                         analysis = null
-                        answers.clear()
+                        editing = false
                         message = "מנתח את הארוחה…"
                         scope.launch {
                             runCatching { uploadMeal(serverUrl, uri) }
-                                .onSuccess { analysis = it; message = "הניתוח הושלם" }
-                                .onFailure { message = "הניתוח נכשל: ${it.message}" }
+                                .onSuccess {
+                                    analysis = it
+                                    message = "הניתוח הושלם"
+                                }
+                                .onFailure {
+                                    message = "הניתוח נכשל: ${it.message}"
+                                }
                             loading = false
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = palette.primary, contentColor = palette.background)
-                ) { Text("ניתוח באמצעות AI", fontWeight = FontWeight.Bold) }
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = palette.primary,
+                        contentColor = palette.background
+                    )
+                ) {
+                    Text("ניתוח באמצעות AI", fontWeight = FontWeight.Bold)
+                }
             }
 
             if (loading) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     CircularProgressIndicator(color = palette.primary)
                 }
             }
-            Text(message, color = palette.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+
+            Text(
+                message,
+                color = palette.muted,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             analysis?.let { result ->
-                MealAnalysisResult(palette, result)
-                if (result.confirmationQuestions.isNotEmpty()) {
-                    SectionTitle("אישור מהיר")
-                    Text("בחר תשובה בלחיצה. הקלדה נדרשת רק בבחירת „אחר”.", color = palette.muted)
-                    result.confirmationQuestions.forEach { question ->
-                        ConfirmationQuestionCard(
-                            palette = palette,
-                            question = question,
-                            selectedAnswer = answers[question],
-                            customAnswer = customAnswers[question].orEmpty(),
-                            onAnswerSelected = { selected ->
-                                answers[question] = selected
-                                if (selected != "אחר") customAnswers.remove(question)
-                            },
-                            onCustomAnswerChanged = {
-                                customAnswers[question] = it
-                                answers[question] = it
-                            }
-                        )
-                    }
-                }
-
-                val complete = result.confirmationQuestions.all { answers[it].isNullOrBlank().not() }
-                Button(
-                    enabled = complete,
-                    onClick = { onSave(result.copy(answers = answers.toMap())) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = palette.success, contentColor = palette.background)
-                ) {
-                    Text(
-                        if (result.confirmationQuestions.isEmpty()) "שמירה במעקב היומי" else "אישור ושמירה במעקב",
-                        fontWeight = FontWeight.Bold
+                if (editing) {
+                    MealAnalysisEditor(
+                        palette = palette,
+                        initial = result,
+                        onCancel = { editing = false },
+                        onSave = onSave
                     )
-                }
-                if (!complete) {
-                    Text("יש לענות על כל השאלות לפני השמירה.", color = palette.secondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                } else {
+                    MealAnalysisResult(palette, result)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { editing = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Text("עריכת הניתוח")
+                        }
+                        Button(
+                            onClick = { onSave(result) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = palette.success,
+                                contentColor = palette.background
+                            )
+                        ) {
+                            Text("שמירה למעקב", fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
     }
 
     @Composable
-    private fun ConfirmationQuestionCard(
+    private fun MealAnalysisEditor(
         palette: ThemePalette,
-        question: String,
-        selectedAnswer: String?,
-        customAnswer: String,
-        onAnswerSelected: (String) -> Unit,
-        onCustomAnswerChanged: (String) -> Unit
+        initial: MealAnalysis,
+        onCancel: () -> Unit,
+        onSave: (MealAnalysis) -> Unit
     ) {
-        val options = suggestedAnswers(question)
+        val items = remember(initial.analysisId) {
+            mutableStateListOf<EditableItem>().apply {
+                addAll(initial.items.map { EditableItem(it.name, it.estimatedQuantity) })
+            }
+        }
+        var calories by remember(initial.analysisId) {
+            mutableStateOf(initial.nutrition.caloriesKcal.toString())
+        }
+        var protein by remember(initial.analysisId) {
+            mutableStateOf(formatNumber(initial.nutrition.proteinG))
+        }
+        var carbs by remember(initial.analysisId) {
+            mutableStateOf(formatNumber(initial.nutrition.carbohydratesG))
+        }
+        var fat by remember(initial.analysisId) {
+            mutableStateOf(formatNumber(initial.nutrition.fatG))
+        }
+
+        fun applyMultiplier(multiplier: Double) {
+            calories = (initial.nutrition.caloriesKcal * multiplier).toInt().toString()
+            protein = formatNumber(initial.nutrition.proteinG * multiplier)
+            carbs = formatNumber(initial.nutrition.carbohydratesG * multiplier)
+            fat = formatNumber(initial.nutrition.fatG * multiplier)
+        }
+
         GlowCard(palette) {
-            Text(question, fontWeight = FontWeight.Bold)
+            Text(
+                "עריכת הניתוח",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "הערכים המקוריים של ה-AI יישמרו לצד התיקון שלך.",
+                color = palette.muted
+            )
             Spacer(Modifier.height(12.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                options.chunked(3).forEach { rowOptions ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        rowOptions.forEach { option ->
-                            FilterChip(
-                                selected = selectedAnswer == option,
-                                onClick = { onAnswerSelected(option) },
-                                label = { Text(option) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = palette.primary,
-                                    selectedLabelColor = palette.background
-                                )
-                            )
-                        }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "חצי מנה" to 0.5,
+                    "מנה מלאה" to 1.0,
+                    "שתי מנות" to 2.0
+                ).forEach { (label, multiplier) ->
+                    OutlinedButton(
+                        onClick = { applyMultiplier(multiplier) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(label, fontSize = 12.sp)
                     }
                 }
             }
-            if (selectedAnswer == "אחר" || (selectedAnswer != null && selectedAnswer !in options)) {
-                Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
+            NumericField("קלוריות", calories) { calories = it }
+            NumericField("חלבון (גרם)", protein) { protein = it }
+            NumericField("פחמימות (גרם)", carbs) { carbs = it }
+            NumericField("שומן (גרם)", fat) { fat = it }
+        }
+
+        GlowCard(palette) {
+            Text(
+                "מזונות",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            items.forEachIndexed { index, item ->
+                if (index > 0) {
+                    HorizontalDivider(color = palette.muted.copy(alpha = 0.25f))
+                }
                 OutlinedTextField(
-                    value = customAnswer,
-                    onValueChange = onCustomAnswerChanged,
-                    label = { Text("תשובה קצרה") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = palette.primary)
+                    value = item.name,
+                    onValueChange = { items[index] = item.copy(name = it) },
+                    label = { Text("שם המזון") },
+                    modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = item.quantity,
+                    onValueChange = { items[index] = item.copy(quantity = it) },
+                    label = { Text("כמות") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                TextButton(onClick = { items.removeAt(index) }) {
+                    Text("מחיקת מזון", color = palette.secondary)
+                }
+            }
+            OutlinedButton(
+                onClick = { items.add(EditableItem("", "")) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("+ הוספת מזון")
             }
         }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Text("ביטול")
+            }
+            Button(
+                enabled = calories.toIntOrNull() != null &&
+                    listOf(protein, carbs, fat).all { it.toDoubleOrNull() != null },
+                onClick = {
+                    val editedItems = items
+                        .filter { it.name.isNotBlank() }
+                        .map {
+                            MealItem(
+                                it.name.trim(),
+                                it.quantity.trim(),
+                                1.0
+                            )
+                        }
+                    onSave(
+                        initial.copy(
+                            status = "confirmed",
+                            items = editedItems,
+                            nutrition = NutritionEstimate(
+                                calories.toInt(),
+                                protein.toDouble(),
+                                carbs.toDouble(),
+                                fat.toDouble()
+                            ),
+                            originalItems = initial.originalItems.ifEmpty { initial.items },
+                            originalNutrition = initial.originalNutrition ?: initial.nutrition,
+                            userEdited = true
+                        )
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.success,
+                    contentColor = palette.background
+                )
+            ) {
+                Text("שמירת התיקון", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    @Composable
+    private fun NumericField(
+        label: String,
+        value: String,
+        onValueChange: (String) -> Unit
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { candidate ->
+                if (candidate.isEmpty() || candidate.matches(Regex("\\d*(\\.\\d*)?"))) {
+                    onValueChange(candidate)
+                }
+            },
+            label = { Text(label) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+        )
     }
 
     @Composable
     private fun InsightsScreen(palette: ThemePalette, meals: List<MealAnalysis>) {
         val lastSevenDays = (0L..6L).map { LocalDate.now().minusDays(it) }
         val recent = meals.filter { it.localDate() in lastSevenDays }
-        val daysWithMeals = recent.map { it.localDate() }.distinct().size
-        val averageCalories = if (daysWithMeals == 0) 0 else recent.sumOf { it.nutrition.caloriesKcal } / daysWithMeals
-        val averageProtein = if (daysWithMeals == 0) 0.0 else recent.sumOf { it.nutrition.proteinG } / daysWithMeals
+        val days = recent.map { it.localDate() }.distinct().size
+        val avgCalories = if (days == 0) 0 else recent.sumOf { it.nutrition.caloriesKcal } / days
+        val avgProtein = if (days == 0) 0.0 else recent.sumOf { it.nutrition.proteinG } / days
 
         ScreenColumn {
-            Header(palette, "MOSAIC INSIGHTS", "מגמות ותובנות", "סיכום בסיסי מתוך הנתונים המקומיים")
+            Header(
+                palette,
+                "MOSAIC INSIGHTS",
+                "מגמות ותובנות",
+                "סיכום בסיסי מתוך הנתונים המקומיים"
+            )
             GlowCard(palette) {
-                Text("7 הימים האחרונים", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                NutritionRow(palette, "ימים עם מעקב", "$daysWithMeals מתוך 7")
-                NutritionRow(palette, "ממוצע קלוריות", "$averageCalories קק״ל")
-                NutritionRow(palette, "ממוצע חלבון", "${formatNumber(averageProtein)} גרם")
+                Text(
+                    "7 הימים האחרונים",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                NutritionRow(palette, "ימים עם מעקב", "$days מתוך 7")
+                NutritionRow(palette, "ממוצע קלוריות", "$avgCalories קק״ל")
+                NutritionRow(palette, "ממוצע חלבון", "${formatNumber(avgProtein)} גרם")
                 NutritionRow(palette, "ארוחות שנשמרו", recent.size.toString())
-            }
-            GlowCard(palette) {
-                Text("השלב הבא", color = palette.primary, fontWeight = FontWeight.Bold)
-                Text("בהמשך נוסיף יעדים אישיים, גרפים חודשיים וסנכרון למחשב הביתי.", color = palette.muted)
             }
         }
     }
 
     @Composable
-    private fun SettingsScreen(palette: ThemePalette, selectedThemeId: String, onThemeSelected: (String) -> Unit) {
+    private fun SettingsScreen(
+        palette: ThemePalette,
+        selectedThemeId: String,
+        onThemeSelected: (String) -> Unit
+    ) {
         ScreenColumn {
             Header(palette, "PERSONALIZE", "הגדרות", "התאם את Mosaic Fit לטעם שלך")
             SectionTitle("ערכת צבעים")
@@ -504,20 +682,38 @@ class MainActivity : ComponentActivity() {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(if (option.id == selectedThemeId) Modifier.border(2.dp, palette.primary, RoundedCornerShape(22.dp)) else Modifier)
+                        .then(
+                            if (option.id == selectedThemeId) {
+                                Modifier.border(
+                                    2.dp,
+                                    palette.primary,
+                                    RoundedCornerShape(22.dp)
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
                         .clickable { onThemeSelected(option.id) },
                     shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = palette.surface)
                 ) {
                     Row(
-                        Modifier.fillMaxWidth().padding(18.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(option.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             Text(option.description, color = palette.muted)
-                            if (option.id == selectedThemeId) Text("נבחרה", color = palette.primary, fontWeight = FontWeight.Bold)
+                            if (option.id == selectedThemeId) {
+                                Text(
+                                    "נבחרה",
+                                    color = palette.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             ThemeDot(option.background)
@@ -534,46 +730,92 @@ class MainActivity : ComponentActivity() {
     private fun MealAnalysisResult(palette: ThemePalette, analysis: MealAnalysis) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             GlowCard(palette) {
-                Text("הערכה תזונתית", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                NutritionRow(palette, "קלוריות", "${analysis.nutrition.caloriesKcal} קק״ל")
-                NutritionRow(palette, "חלבון", "${formatNumber(analysis.nutrition.proteinG)} גרם")
-                NutritionRow(palette, "פחמימות", "${formatNumber(analysis.nutrition.carbohydratesG)} גרם")
-                NutritionRow(palette, "שומן", "${formatNumber(analysis.nutrition.fatG)} גרם")
+                Text(
+                    "הערכה תזונתית",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                NutritionRow(
+                    palette,
+                    "קלוריות",
+                    "${analysis.nutrition.caloriesKcal} קק״ל"
+                )
+                NutritionRow(
+                    palette,
+                    "חלבון",
+                    "${formatNumber(analysis.nutrition.proteinG)} גרם"
+                )
+                NutritionRow(
+                    palette,
+                    "פחמימות",
+                    "${formatNumber(analysis.nutrition.carbohydratesG)} גרם"
+                )
+                NutritionRow(
+                    palette,
+                    "שומן",
+                    "${formatNumber(analysis.nutrition.fatG)} גרם"
+                )
             }
             GlowCard(palette) {
-                Text("מזונות שזוהו", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "מזונות שזוהו",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
                 analysis.items.forEachIndexed { index, item ->
-                    if (index > 0) HorizontalDivider(color = palette.muted.copy(alpha = 0.25f))
+                    if (index > 0) {
+                        HorizontalDivider(color = palette.muted.copy(alpha = 0.25f))
+                    }
                     Column(Modifier.padding(vertical = 8.dp)) {
                         Text(item.name, fontWeight = FontWeight.Bold)
                         Text(item.estimatedQuantity, color = palette.muted)
-                        Text("רמת ביטחון: ${(item.confidence * 100).toInt()}%", color = palette.primary)
+                        Text(
+                            "רמת ביטחון: ${(item.confidence * 100).toInt()}%",
+                            color = palette.primary
+                        )
                     }
                 }
             }
-            TextListCard(palette, "הנחות", analysis.assumptions, "לא דווחו הנחות")
+            TextListCard(
+                palette,
+                "הנחות",
+                analysis.assumptions,
+                "לא דווחו הנחות"
+            )
         }
     }
 
     @Composable
     private fun SavedMealCard(palette: ThemePalette, meal: MealAnalysis) {
         GlowCard(palette) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Column(Modifier.weight(1f)) {
-                    Text(meal.items.firstOrNull()?.name ?: "ארוחה שנותחה", fontWeight = FontWeight.Bold)
+                    Text(
+                        meal.items.firstOrNull()?.name ?: "ארוחה שנותחה",
+                        fontWeight = FontWeight.Bold
+                    )
                     Text(meal.formattedTime(), color = palette.muted)
                 }
-                Text("${meal.nutrition.caloriesKcal} קק״ל", fontWeight = FontWeight.Bold)
+                Text(
+                    "${meal.nutrition.caloriesKcal} קק״ל",
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Spacer(Modifier.height(10.dp))
             Text(
-                "חלבון ${formatNumber(meal.nutrition.proteinG)} ג׳  •  פחמימות ${formatNumber(meal.nutrition.carbohydratesG)} ג׳  •  שומן ${formatNumber(meal.nutrition.fatG)} ג׳",
+                "חלבון ${formatNumber(meal.nutrition.proteinG)} ג׳  •  " +
+                    "פחמימות ${formatNumber(meal.nutrition.carbohydratesG)} ג׳  •  " +
+                    "שומן ${formatNumber(meal.nutrition.fatG)} ג׳",
                 color = palette.muted
             )
-            if (meal.answers.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                Text("אושר על ידך", color = palette.success, fontWeight = FontWeight.Bold)
+            if (meal.userEdited) {
+                Text(
+                    "נערכה ידנית",
+                    color = palette.success,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
@@ -581,14 +823,22 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
         Column(
-            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
             content = content
         )
     }
 
     @Composable
-    private fun Header(palette: ThemePalette, eyebrow: String, title: String, subtitle: String) {
+    private fun Header(
+        palette: ThemePalette,
+        eyebrow: String,
+        title: String,
+        subtitle: String
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(eyebrow, color = palette.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text(title, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
@@ -597,22 +847,41 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun GlowCard(palette: ThemePalette, content: @Composable ColumnScope.() -> Unit) {
+    private fun GlowCard(
+        palette: ThemePalette,
+        content: @Composable ColumnScope.() -> Unit
+    ) {
         Card(
             Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
             colors = CardDefaults.cardColors(containerColor = palette.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+            elevation = CardDefaults.cardElevation(6.dp)
         ) {
             Column(
-                Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(palette.surfaceHighlight, palette.surface, palette.surface))).padding(20.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                palette.surfaceHighlight,
+                                palette.surface,
+                                palette.surface
+                            )
+                        )
+                    )
+                    .padding(20.dp),
                 content = content
             )
         }
     }
 
     @Composable
-    private fun Metric(palette: ThemePalette, label: String, value: String, unit: String) {
+    private fun Metric(
+        palette: ThemePalette,
+        label: String,
+        value: String,
+        unit: String
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(value, color = palette.text, fontSize = 21.sp, fontWeight = FontWeight.Bold)
             Text(unit, color = palette.primary, fontSize = 11.sp)
@@ -626,120 +895,169 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun PrimaryButton(palette: ThemePalette, label: String, onClick: () -> Unit) {
+    private fun PrimaryButton(
+        palette: ThemePalette,
+        label: String,
+        onClick: () -> Unit
+    ) {
         Button(
             onClick = onClick,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = palette.primary, contentColor = palette.background)
-        ) { Text(label, fontWeight = FontWeight.Bold) }
+            colors = ButtonDefaults.buttonColors(
+                containerColor = palette.primary,
+                contentColor = palette.background
+            )
+        ) {
+            Text(label, fontWeight = FontWeight.Bold)
+        }
     }
 
     @Composable
     private fun EmptyMealCard(palette: ThemePalette, onAddMeal: () -> Unit) {
         GlowCard(palette) {
             Text("עדיין לא נוספה ארוחה היום", fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            Text("הוסף צילום ראשון כדי להתחיל לבנות את הסיכום היומי.", color = palette.muted)
-            Spacer(Modifier.height(16.dp))
+            Text(
+                "הוסף צילום ראשון כדי להתחיל לבנות את הסיכום היומי.",
+                color = palette.muted
+            )
             PrimaryButton(palette, "הוספת ארוחה", onAddMeal)
         }
     }
 
     @Composable
-    private fun NutritionRow(palette: ThemePalette, label: String, value: String) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    private fun NutritionRow(
+        palette: ThemePalette,
+        label: String,
+        value: String
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 5.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
             Text(label, color = palette.muted)
             Text(value, fontWeight = FontWeight.Bold)
         }
     }
 
     @Composable
-    private fun TextListCard(palette: ThemePalette, title: String, values: List<String>, emptyText: String) {
+    private fun TextListCard(
+        palette: ThemePalette,
+        title: String,
+        values: List<String>,
+        emptyText: String
+    ) {
         GlowCard(palette) {
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            if (values.isEmpty()) Text(emptyText, color = palette.muted)
-            else values.forEach { Text("• $it", color = palette.muted, modifier = Modifier.padding(vertical = 3.dp)) }
+            if (values.isEmpty()) {
+                Text(emptyText, color = palette.muted)
+            } else {
+                values.forEach { Text("• $it", color = palette.muted) }
+            }
         }
     }
 
     @Composable
     private fun ThemeDot(color: Color) {
-        Box(Modifier.size(24.dp).background(color, CircleShape).border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape))
+        Box(
+            Modifier
+                .size(24.dp)
+                .background(color, CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+        )
     }
 
-    private suspend fun uploadMeal(serverUrl: String, uri: Uri): MealAnalysis = withContext(Dispatchers.IO) {
-        val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: error("לא ניתן לקרוא את התמונה שנבחרה")
-        val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
-        val boundary = "MosaicBoundary-${UUID.randomUUID()}"
-        val endpoint = URL("${serverUrl.trimEnd('/')}/v1/meals/analyze")
-        val body = ByteArrayOutputStream().apply {
-            write("--$boundary\r\n".toByteArray())
-            write("Content-Disposition: form-data; name=\"image\"; filename=\"meal.jpg\"\r\n".toByteArray())
-            write("Content-Type: $mimeType\r\n\r\n".toByteArray())
-            write(imageBytes)
-            write("\r\n--$boundary--\r\n".toByteArray())
-        }.toByteArray()
-        val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 15_000
-            readTimeout = 120_000
-            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-            setRequestProperty("Content-Length", body.size.toString())
+    private suspend fun uploadMeal(serverUrl: String, uri: Uri): MealAnalysis =
+        withContext(Dispatchers.IO) {
+            val imageBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?: error("לא ניתן לקרוא את התמונה שנבחרה")
+            val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
+            val boundary = "MosaicBoundary-${UUID.randomUUID()}"
+            val endpoint = URL("${serverUrl.trimEnd('/')}/v1/meals/analyze")
+            val body = ByteArrayOutputStream().apply {
+                write("--$boundary\r\n".toByteArray())
+                write(
+                    "Content-Disposition: form-data; name=\"image\"; " +
+                        "filename=\"meal.jpg\"\r\n".toByteArray()
+                )
+                write("Content-Type: $mimeType\r\n\r\n".toByteArray())
+                write(imageBytes)
+                write("\r\n--$boundary--\r\n".toByteArray())
+            }.toByteArray()
+            val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 15_000
+                readTimeout = 120_000
+                setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                setRequestProperty("Content-Length", body.size.toString())
+            }
+            try {
+                connection.outputStream.use { it.write(body) }
+                val responseText = (
+                    if (connection.responseCode in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }
+                    ).bufferedReader().use { it.readText() }
+                if (connection.responseCode !in 200..299) {
+                    error("השרת החזיר ${connection.responseCode}: $responseText")
+                }
+                parseMealAnalysis(JSONObject(responseText))
+            } finally {
+                connection.disconnect()
+            }
         }
-        try {
-            connection.outputStream.use { it.write(body) }
-            val responseText = (if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream)
-                .bufferedReader().use { it.readText() }
-            if (connection.responseCode !in 200..299) error("השרת החזיר ${connection.responseCode}: $responseText")
-            parseMealAnalysis(JSONObject(responseText))
-        } finally {
-            connection.disconnect()
-        }
-    }
 
     private fun parseMealAnalysis(json: JSONObject): MealAnalysis {
         val nutritionJson = json.getJSONObject("nutrition")
         val itemsJson = json.getJSONArray("items")
         val assumptionsJson = json.getJSONArray("assumptions")
         val questionsJson = json.getJSONArray("confirmation_questions")
+        val items = List(itemsJson.length()) { index ->
+            itemsJson.getJSONObject(index).let {
+                MealItem(
+                    it.getString("name"),
+                    it.getString("estimated_quantity"),
+                    it.getDouble("confidence")
+                )
+            }
+        }
+        val nutrition = NutritionEstimate(
+            nutritionJson.getInt("calories_kcal"),
+            nutritionJson.getDouble("protein_g"),
+            nutritionJson.getDouble("carbohydrates_g"),
+            nutritionJson.getDouble("fat_g")
+        )
         return MealAnalysis(
             analysisId = json.getString("analysis_id"),
             status = json.getString("status"),
-            items = List(itemsJson.length()) { index ->
-                val item = itemsJson.getJSONObject(index)
-                MealItem(item.getString("name"), item.getString("estimated_quantity"), item.getDouble("confidence"))
-            },
-            nutrition = NutritionEstimate(
-                nutritionJson.getInt("calories_kcal"),
-                nutritionJson.getDouble("protein_g"),
-                nutritionJson.getDouble("carbohydrates_g"),
-                nutritionJson.getDouble("fat_g")
-            ),
+            items = items,
+            nutrition = nutrition,
             assumptions = List(assumptionsJson.length()) { assumptionsJson.getString(it) },
-            confirmationQuestions = List(questionsJson.length()) { questionsJson.getString(it) }
+            confirmationQuestions = List(questionsJson.length()) { questionsJson.getString(it) },
+            originalItems = items,
+            originalNutrition = nutrition
         )
     }
 }
 
-private fun suggestedAnswers(question: String): List<String> {
-    val normalized = question.lowercase()
-    return when {
-        listOf("כמה", "כמות", "משקל", "גרם", "גביע", "כוס", "מנה").any { it in normalized } ->
-            listOf("מנה מלאה", "חצי מנה", "יותר ממנה", "אחר")
-        listOf("האם", "אכלת", "צרכת", "השתמשת", "מלא").any { it in normalized } ->
-            listOf("כן", "לא", "לא בטוח", "אחר")
-        listOf("טעם", "סוג", "איזה").any { it in normalized } ->
-            listOf("כפי שמופיע בתמונה", "סוג אחר", "לא בטוח", "אחר")
-        else -> listOf("כן", "לא", "לא בטוח", "אחר")
-    }
-}
+private data class EditableItem(val name: String, val quantity: String)
+
+private operator fun NutritionEstimate.plus(other: NutritionEstimate) = NutritionEstimate(
+    caloriesKcal + other.caloriesKcal,
+    proteinG + other.proteinG,
+    carbohydratesG + other.carbohydratesG,
+    fatG + other.fatG
+)
 
 private fun MealAnalysis.localDate(): LocalDate =
-    Instant.ofEpochMilli(createdAtEpochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+    Instant.ofEpochMilli(createdAtEpochMillis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
 
 private fun MealAnalysis.formattedTime(): String =
     Instant.ofEpochMilli(createdAtEpochMillis)
