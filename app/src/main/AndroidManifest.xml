@@ -4,7 +4,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="Mosaic Fit"
+        android:label="Mosaic"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="true">
