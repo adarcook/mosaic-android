@@ -1,5 +1,7 @@
 package life.mosaic.feature.training
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
@@ -186,18 +188,14 @@ fun TrainingApp(modifier: Modifier = Modifier) {
 
             if (showSettings) {
                 item {
-                    GoalsSettingsCard(
-                        goals = goals,
-                        onGoalsChanged = {
-                            goals = it
-                            saveTrainingGoals(context, it)
-                        }
-                    )
+                    GoalsSettingsCard(goals) {
+                        goals = it
+                        saveTrainingGoals(context, it)
+                    }
                 }
             }
 
             item { WeeklyDashboard(sessions, goals) }
-
             item {
                 Button(
                     onClick = {
@@ -221,10 +219,7 @@ fun TrainingApp(modifier: Modifier = Modifier) {
                 error != null -> item { StatusCard(error.orEmpty()) }
             }
 
-            item {
-                Text("אימונים אחרונים", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
-
+            item { Text("אימונים אחרונים", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
             if (sessions.isEmpty()) {
                 item { StatusCard("עדיין לא נמצאו אימונים. אפשר להוסיף אימון ידני או לרענן לאחר סנכרון.") }
             } else {
@@ -265,14 +260,12 @@ fun TrainingApp(modifier: Modifier = Modifier) {
 
 @Composable
 private fun WeeklyDashboard(sessions: List<TrainingSession>, goals: TrainingGoals) {
-    val weekStart = startOfCurrentWeek()
-    val recent = sessions.filter { it.startTime >= weekStart }
+    val recent = sessions.filter { it.startTime >= startOfCurrentWeek() }
     val swims = recent.count(::isSwim)
     val push = recent.count { it.manualType == ManualTrainingType.PUSH }
     val pull = recent.count { it.manualType == ManualTrainingType.PULL }
     val genericStrength = recent.count { isStrength(it) && it.manualType == null }
     val strength = push + pull + genericStrength
-    val totalCompleted = swims + strength
     val totalGoal = goals.swimsPerWeek + goals.strengthPerWeek
     val lastSession = sessions.maxByOrNull { it.startTime }
 
@@ -288,7 +281,7 @@ private fun WeeklyDashboard(sessions: List<TrainingSession>, goals: TrainingGoal
             if (goals.pushPerWeek > 0) GoalProgressRow("דחיפה", push, goals.pushPerWeek)
             if (goals.pullPerWeek > 0) GoalProgressRow("משיכה", pull, goals.pullPerWeek)
             HorizontalDivider()
-            Text("$totalCompleted מתוך $totalGoal אימונים הושלמו", fontWeight = FontWeight.SemiBold)
+            Text("${swims + strength} מתוך $totalGoal אימונים הושלמו", fontWeight = FontWeight.SemiBold)
             Text(remainingGoalText(swims, strength, goals), color = MaterialTheme.colorScheme.onPrimaryContainer)
             lastSession?.let {
                 HorizontalDivider()
@@ -340,47 +333,100 @@ private fun GoalStepper(label: String, value: Int, onValueChanged: (Int) -> Unit
 }
 
 @Composable
-private fun SessionEditorDialog(session: TrainingSession?, onDismiss: () -> Unit, onSave: (TrainingSession) -> Unit) {
-    val initialDate = session?.startTime?.atZone(ZoneId.systemDefault())?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-        ?: LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+private fun SessionEditorDialog(
+    session: TrainingSession?,
+    onDismiss: () -> Unit,
+    onSave: (TrainingSession) -> Unit
+) {
+    val context = LocalContext.current
+    val initialDateTime = session?.startTime?.atZone(ZoneId.systemDefault())?.toLocalDateTime() ?: LocalDateTime.now()
     var type by remember(session) { mutableStateOf(session?.manualType ?: ManualTrainingType.SWIM) }
-    var dateTimeText by remember(session) { mutableStateOf(initialDate) }
+    var selectedDateTime by remember(session) { mutableStateOf(initialDateTime) }
     var durationText by remember(session) { mutableStateOf(session?.durationMinutes?.toString() ?: "34") }
     var notes by remember(session) { mutableStateOf(session?.notes.orEmpty()) }
-    var validationError by remember { mutableStateOf<String?>(null) }
+    var validationError by remember(session) { mutableStateOf<String?>(null) }
+
+    fun openDatePicker() {
+        DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                selectedDateTime = selectedDateTime.withYear(year).withMonth(month + 1).withDayOfMonth(day)
+            },
+            selectedDateTime.year,
+            selectedDateTime.monthValue - 1,
+            selectedDateTime.dayOfMonth
+        ).show()
+    }
+
+    fun openTimePicker() {
+        TimePickerDialog(
+            context,
+            { _, hour, minute -> selectedDateTime = selectedDateTime.withHour(hour).withMinute(minute) },
+            selectedDateTime.hour,
+            selectedDateTime.minute,
+            true
+        ).show()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (session == null) "הוספת אימון" else "עריכת אימון") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("סוג אימון", fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ManualTrainingType.entries.forEach { option ->
+                    listOf(ManualTrainingType.SWIM, ManualTrainingType.PUSH).forEach { option ->
                         OutlinedButton(onClick = { type = option }) {
                             Text(if (type == option) "✓ ${manualTypeTitle(option)}" else manualTypeTitle(option))
                         }
                     }
                 }
-                OutlinedTextField(value = dateTimeText, onValueChange = { dateTimeText = it }, label = { Text("תאריך ושעה (yyyy-MM-dd HH:mm)") }, singleLine = true)
-                OutlinedTextField(value = durationText, onValueChange = { durationText = it.filter(Char::isDigit) }, label = { Text("משך בדקות") }, singleLine = true)
-                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("הערות") })
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(ManualTrainingType.PULL, ManualTrainingType.OTHER).forEach { option ->
+                        OutlinedButton(onClick = { type = option }) {
+                            Text(if (type == option) "✓ ${manualTypeTitle(option)}" else manualTypeTitle(option))
+                        }
+                    }
+                }
+
+                Text("תאריך ושעה", fontWeight = FontWeight.Bold)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = ::openDatePicker, modifier = Modifier.weight(1f)) {
+                        Text(selectedDateTime.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                    }
+                    OutlinedButton(onClick = ::openTimePicker, modifier = Modifier.weight(1f)) {
+                        Text(selectedDateTime.format(DateTimeFormatter.ofPattern("HH:mm")))
+                    }
+                }
+
+                OutlinedTextField(
+                    value = durationText,
+                    onValueChange = { durationText = it.filter(Char::isDigit) },
+                    label = { Text("משך בדקות") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("הערות") },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 validationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val localDateTime = runCatching { LocalDateTime.parse(dateTimeText, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) }.getOrNull()
                 val duration = durationText.toLongOrNull()
-                if (localDateTime == null || duration == null || duration <= 0) {
-                    validationError = "יש להזין תאריך תקין ומשך גדול מאפס"
+                if (duration == null || duration <= 0) {
+                    validationError = "יש להזין משך גדול מאפס"
                 } else {
                     onSave(
                         TrainingSession(
                             id = session?.id ?: "manual:${UUID.randomUUID()}",
                             title = manualTypeTitle(type),
                             exerciseType = manualExerciseType(type),
-                            startTime = localDateTime.atZone(ZoneId.systemDefault()).toInstant(),
+                            startTime = selectedDateTime.atZone(ZoneId.systemDefault()).toInstant(),
                             durationMinutes = duration,
                             sourcePackage = "Mosaic",
                             source = SessionSource.MANUAL,
@@ -405,7 +451,10 @@ private fun TrainingCard(session: TrainingSession, onEdit: (() -> Unit)?, onDele
                 Text("מרחק, מספר בריכות, קצב ודופק יופיעו כאן כאשר מקור הנתונים יספק אותם.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (session.notes.isNotBlank()) Text(session.notes)
-            Text(if (session.source == SessionSource.MANUAL) "הוזן ידנית ב-Mosaic" else "מקור: ${friendlySource(session.sourcePackage)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (session.source == SessionSource.MANUAL) "הוזן ידנית ב-Mosaic" else "מקור: ${friendlySource(session.sourcePackage)}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (onEdit != null || onDelete != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     onEdit?.let { OutlinedButton(onClick = it) { Text("עריכה") } }
@@ -416,15 +465,31 @@ private fun TrainingCard(session: TrainingSession, onEdit: (() -> Unit)?, onDele
     }
 }
 
-private suspend fun readTrainingSessions(client: HealthConnectClient, grantedPermissions: Set<String>): TrainingReadResult {
+private suspend fun readTrainingSessions(
+    client: HealthConnectClient,
+    grantedPermissions: Set<String>
+): TrainingReadResult {
     val end = Instant.now().plus(Duration.ofMinutes(5))
     val start = end.minus(Duration.ofDays(365))
     val timeRange = TimeRangeFilter.between(start, end)
-    val allResponse = client.readRecords(ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = timeRange, ascendingOrder = false))
-    val samsungResponse = client.readRecords(
-        ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = timeRange, dataOriginFilter = setOf(DataOrigin(SamsungHealthPackage)), ascendingOrder = false)
+    val allResponse = client.readRecords(
+        ReadRecordsRequest(
+            recordType = ExerciseSessionRecord::class,
+            timeRangeFilter = timeRange,
+            ascendingOrder = false
+        )
     )
-    val visibleRecords = allResponse.records.filterNot { it.metadata.dataOrigin.packageName.contains("healthconnectlab", ignoreCase = true) }
+    val samsungResponse = client.readRecords(
+        ReadRecordsRequest(
+            recordType = ExerciseSessionRecord::class,
+            timeRangeFilter = timeRange,
+            dataOriginFilter = setOf(DataOrigin(SamsungHealthPackage)),
+            ascendingOrder = false
+        )
+    )
+    val visibleRecords = allResponse.records.filterNot {
+        it.metadata.dataOrigin.packageName.contains("healthconnectlab", ignoreCase = true)
+    }
     return TrainingReadResult(
         sessions = visibleRecords.map { record ->
             TrainingSession(
@@ -442,9 +507,17 @@ private suspend fun readTrainingSessions(client: HealthConnectClient, grantedPer
     )
 }
 
-private fun isSwim(session: TrainingSession): Boolean = session.manualType == ManualTrainingType.SWIM || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER
+private fun isSwim(session: TrainingSession): Boolean =
+    session.manualType == ManualTrainingType.SWIM ||
+        session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL ||
+        session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER
 
-private fun isStrength(session: TrainingSession): Boolean = session.manualType == ManualTrainingType.PUSH || session.manualType == ManualTrainingType.PULL || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
+private fun isStrength(session: TrainingSession): Boolean =
+    session.manualType == ManualTrainingType.PUSH ||
+        session.manualType == ManualTrainingType.PULL ||
+        session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS ||
+        session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
+        session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
 
 private fun exerciseTitle(type: Int): String = when (type) {
     ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "שחייה בבריכה"
@@ -475,23 +548,30 @@ private fun friendlySource(packageName: String): String = when (packageName) {
 
 private fun startOfCurrentWeek(): Instant {
     val now = ZonedDateTime.now()
-    return now.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)).toLocalDate().atStartOfDay(now.zone).toInstant()
+    return now.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
+        .toLocalDate()
+        .atStartOfDay(now.zone)
+        .toInstant()
 }
 
 private fun currentWeekLabel(): String {
-    val zone = ZoneId.systemDefault()
-    val start = startOfCurrentWeek().atZone(zone)
+    val start = startOfCurrentWeek().atZone(ZoneId.systemDefault())
     val end = start.plusDays(6)
     val formatter = DateTimeFormatter.ofPattern("dd/MM")
     return "${start.format(formatter)}–${end.format(formatter)}"
 }
 
-private fun formatSessionDate(instant: Instant): String = instant.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
+private fun formatSessionDate(instant: Instant): String =
+    instant.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
 
 private fun remainingGoalText(swims: Int, strength: Int, goals: TrainingGoals): String {
     val remainingSwims = (goals.swimsPerWeek - swims).coerceAtLeast(0)
     val remainingStrength = (goals.strengthPerWeek - strength).coerceAtLeast(0)
-    return if (remainingSwims == 0 && remainingStrength == 0) "כל הכבוד — השלמת את מטרות השבוע." else "נותרו השבוע: $remainingSwims שחייה · $remainingStrength כוח"
+    return if (remainingSwims == 0 && remainingStrength == 0) {
+        "כל הכבוד — השלמת את מטרות השבוע."
+    } else {
+        "נותרו השבוע: $remainingSwims שחייה · $remainingStrength כוח"
+    }
 }
 
 private fun loadTrainingGoals(context: Context): TrainingGoals {
@@ -514,7 +594,9 @@ private fun saveTrainingGoals(context: Context, goals: TrainingGoals) {
 }
 
 private fun loadManualSessions(context: Context): List<TrainingSession> {
-    val raw = context.getSharedPreferences(ManualPreferences, Context.MODE_PRIVATE).getString(ManualSessionsKey, "").orEmpty()
+    val raw = context.getSharedPreferences(ManualPreferences, Context.MODE_PRIVATE)
+        .getString(ManualSessionsKey, "")
+        .orEmpty()
     if (raw.isBlank()) return emptyList()
     return raw.split(RecordSeparator).mapNotNull { record ->
         val fields = record.split(FieldSeparator)
@@ -530,7 +612,7 @@ private fun loadManualSessions(context: Context): List<TrainingSession> {
                 sourcePackage = "Mosaic",
                 source = SessionSource.MANUAL,
                 manualType = type,
-                notes = fields[5].replace("\\n", "\n")
+                notes = fields[4].replace("\\n", "\n")
             )
         }.getOrNull()
     }.sortedByDescending { it.startTime }
@@ -543,11 +625,13 @@ private fun saveManualSessions(context: Context, sessions: List<TrainingSession>
             session.manualType?.name ?: ManualTrainingType.OTHER.name,
             session.startTime.toEpochMilli().toString(),
             session.durationMinutes.toString(),
-            session.sourcePackage,
-            session.notes.replace("\n", "\\n").replace(RecordSeparator, " ").replace(FieldSeparator, " ")
+            session.notes.replace("\n", "\\n"),
+            "1"
         ).joinToString(FieldSeparator)
     }
-    context.getSharedPreferences(ManualPreferences, Context.MODE_PRIVATE).edit().putString(ManualSessionsKey, raw).apply()
+    context.getSharedPreferences(ManualPreferences, Context.MODE_PRIVATE).edit()
+        .putString(ManualSessionsKey, raw)
+        .apply()
 }
 
 @Composable
