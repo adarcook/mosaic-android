@@ -18,6 +18,7 @@ rootProject.name = "MosaicAndroid"
 include(":app")
 include(":core:model")
 include(":core:database")
+include(":core:data")
 include(":core:settings")
 include(":feature:fit")
 include(":feature:photos")
