@@ -1,5 +1,6 @@
 package life.mosaic.feature.training
 
+import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,12 +41,18 @@ import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 
 private const val SamsungHealthPackage = "com.sec.android.app.shealth"
+private const val GoalsPreferences = "training_goals"
+private const val SwimGoalKey = "weekly_swim_goal"
+private const val StrengthGoalKey = "weekly_strength_goal"
 
 private val RequiredPermissions = setOf(
     HealthPermission.getReadPermission(ExerciseSessionRecord::class),
@@ -56,6 +66,11 @@ data class TrainingSession(
     val startTime: Instant,
     val durationMinutes: Long,
     val sourcePackage: String
+)
+
+private data class TrainingGoals(
+    val swimsPerWeek: Int = 3,
+    val strengthPerWeek: Int = 2
 )
 
 private data class TrainingReadResult(
@@ -76,6 +91,8 @@ fun TrainingApp(modifier: Modifier = Modifier) {
         } else null
     }
 
+    var goals by remember { mutableStateOf(loadTrainingGoals(context)) }
+    var showSettings by remember { mutableStateOf(false) }
     var hasPermissions by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -128,13 +145,41 @@ fun TrainingApp(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Text("אימונים", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text(
-                    "בדיקת Health Connect: כל האימונים וכל מקורות הנתונים",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                DiagnosticCard(diagnostic)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            "השבוע שלי",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            currentWeekLabel(),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    OutlinedButton(onClick = { showSettings = !showSettings }) {
+                        Text(if (showSettings) "סגירה" else "מטרות")
+                    }
+                }
+            }
+
+            if (showSettings) {
+                item {
+                    GoalsSettingsCard(
+                        goals = goals,
+                        onSwimGoalChanged = { value ->
+                            goals = goals.copy(swimsPerWeek = value)
+                            saveTrainingGoals(context, goals)
+                        },
+                        onStrengthGoalChanged = { value ->
+                            goals = goals.copy(strengthPerWeek = value)
+                            saveTrainingGoals(context, goals)
+                        }
+                    )
+                }
             }
 
             when {
@@ -143,33 +188,149 @@ fun TrainingApp(modifier: Modifier = Modifier) {
                 }
 
                 !hasPermissions -> item {
-                    StatusCard("כדי לייבא אימונים מהשעון, יש לאשר גישה ל-Health Connect")
-                    Spacer(Modifier.height(8.dp))
+                    StatusCard("כדי להציג אימונים, יש לאשר גישה ל-Health Connect")
                     Button(
                         onClick = { permissionLauncher.launch(RequiredPermissions) },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("אישור גישה לאימונים") }
                 }
 
-                loading -> item { StatusCard("טוען אימונים…") }
+                loading -> item { StatusCard("טוען את נתוני האימונים…") }
                 error != null -> item { StatusCard(error.orEmpty()) }
-                sessions.isEmpty() -> item {
-                    StatusCard("Health Connect החזיר אפס ExerciseSessionRecord גם ללא סינון")
-                    Button(
-                        onClick = { scope.launch { refresh() } },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("בדיקה מחדש") }
-                }
                 else -> {
+                    item { WeeklyDashboard(sessions, goals) }
+
                     item {
-                        WeeklySummary(sessions)
+                        Text(
+                            "אימונים אחרונים",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (sessions.isEmpty()) {
+                        item {
+                            StatusCard("עדיין לא נמצאו אימונים. אפשר לרענן לאחר סנכרון נתונים.")
+                        }
+                    } else {
+                        items(sessions.take(12), key = { it.id }) { session ->
+                            TrainingCard(session)
+                        }
+                    }
+
+                    item {
                         Button(
                             onClick = { scope.launch { refresh() } },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("רענון מ-Health Connect") }
+                        ) { Text("רענון נתונים") }
                     }
-                    items(sessions, key = { it.id }) { session -> TrainingCard(session) }
+
+                    item { DiagnosticCard(diagnostic) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeeklyDashboard(sessions: List<TrainingSession>, goals: TrainingGoals) {
+    val weekStart = startOfCurrentWeek()
+    val recent = sessions.filter { it.startTime >= weekStart }
+    val swims = recent.count { isSwim(it.exerciseType) }
+    val strength = recent.count { isStrength(it.exerciseType) }
+    val totalCompleted = swims + strength
+    val totalGoal = goals.swimsPerWeek + goals.strengthPerWeek
+    val lastSession = sessions.maxByOrNull { it.startTime }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("התקדמות שבועית", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            GoalProgressRow("🏊 שחייה", swims, goals.swimsPerWeek)
+            GoalProgressRow("💪 כוח", strength, goals.strengthPerWeek)
+            HorizontalDivider()
+            Text(
+                "$totalCompleted מתוך $totalGoal אימונים הושלמו",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                remainingGoalText(swims, strength, goals),
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            lastSession?.let {
+                HorizontalDivider()
+                Text("האימון האחרון", fontWeight = FontWeight.Bold)
+                Text("${it.title} · ${formatSessionDate(it.startTime)} · ${it.durationMinutes} דקות")
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoalProgressRow(label: String, completed: Int, goal: Int) {
+    val safeGoal = goal.coerceAtLeast(1)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, fontWeight = FontWeight.SemiBold)
+            Text("$completed / $goal")
+        }
+        LinearProgressIndicator(
+            progress = { (completed.toFloat() / safeGoal).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun GoalsSettingsCard(
+    goals: TrainingGoals,
+    onSwimGoalChanged: (Int) -> Unit,
+    onStrengthGoalChanged: (Int) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text("מטרות שבועיות", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            GoalStepper("אימוני שחייה", goals.swimsPerWeek, onSwimGoalChanged)
+            GoalStepper("אימוני כוח", goals.strengthPerWeek, onStrengthGoalChanged)
+            Text(
+                "המטרות נשמרות במכשיר ומתעדכנות מיד בלוח השבועי.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun GoalStepper(label: String, value: Int, onValueChanged: (Int) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, modifier = Modifier.padding(top = 10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { onValueChanged((value - 1).coerceAtLeast(0)) }) {
+                Text("−")
+            }
+            Text(
+                value.toString(),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 12.dp),
+                fontWeight = FontWeight.Bold
+            )
+            OutlinedButton(onClick = { onValueChanged((value + 1).coerceAtMost(14)) }) {
+                Text("+")
             }
         }
     }
@@ -200,11 +361,7 @@ private suspend fun readTrainingSessions(
         )
     )
 
-    val records = if (allResponse.records.isNotEmpty()) {
-        allResponse.records
-    } else {
-        samsungResponse.records
-    }
+    val records = if (allResponse.records.isNotEmpty()) allResponse.records else samsungResponse.records
 
     return TrainingReadResult(
         sessions = records.map { record ->
@@ -239,46 +396,58 @@ private fun isStrength(type: Int): Boolean = type == ExerciseSessionRecord.EXERC
     type == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
     type == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
 
-@Composable
-private fun WeeklySummary(sessions: List<TrainingSession>) {
-    val weekAgo = Instant.now().minus(Duration.ofDays(7))
-    val recent = sessions.filter { it.startTime >= weekAgo }
-    val swims = recent.count { isSwim(it.exerciseType) }
-    val strength = recent.count { isStrength(it.exerciseType) }
-    val uncategorized = recent.size - swims - strength
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-    ) {
-        Column(Modifier.padding(18.dp)) {
-            Text("השבוע", fontWeight = FontWeight.Bold)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("שחייה: $swims / 3")
-                Text("כוח: $strength / 2")
-            }
-            if (uncategorized > 0) {
-                Text(
-                    "אימונים שעדיין לא סווגו: $uncategorized",
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-        }
+private fun startOfCurrentWeek(): Instant = ZonedDateTime.now()
+    .with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY))
+    .toLocalDate()
+    .atStartOfDay(ZoneId.systemDefault())
+    .toInstant()
+
+private fun currentWeekLabel(): String {
+    val start = startOfCurrentWeek().atZone(ZoneId.systemDefault()).toLocalDate()
+    val end = start.plusDays(6)
+    val formatter = DateTimeFormatter.ofPattern("dd/MM")
+    return "${start.format(formatter)}–${end.format(formatter)}"
+}
+
+private fun remainingGoalText(swims: Int, strength: Int, goals: TrainingGoals): String {
+    val remainingSwims = (goals.swimsPerWeek - swims).coerceAtLeast(0)
+    val remainingStrength = (goals.strengthPerWeek - strength).coerceAtLeast(0)
+    return when {
+        remainingSwims == 0 && remainingStrength == 0 -> "כל הכבוד — השלמת את יעדי השבוע"
+        else -> "נותרו השבוע: $remainingSwims שחייה · $remainingStrength כוח"
     }
+}
+
+private fun loadTrainingGoals(context: Context): TrainingGoals {
+    val preferences = context.getSharedPreferences(GoalsPreferences, Context.MODE_PRIVATE)
+    return TrainingGoals(
+        swimsPerWeek = preferences.getInt(SwimGoalKey, 3),
+        strengthPerWeek = preferences.getInt(StrengthGoalKey, 2)
+    )
+}
+
+private fun saveTrainingGoals(context: Context, goals: TrainingGoals) {
+    context.getSharedPreferences(GoalsPreferences, Context.MODE_PRIVATE)
+        .edit()
+        .putInt(SwimGoalKey, goals.swimsPerWeek)
+        .putInt(StrengthGoalKey, goals.strengthPerWeek)
+        .apply()
 }
 
 @Composable
 private fun TrainingCard(session: TrainingSession) {
-    val formatter = remember { DateTimeFormatter.ofPattern("dd/MM HH:mm") }
-    val localTime = session.startTime.atZone(ZoneId.systemDefault()).format(formatter)
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(18.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(session.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("$localTime · ${session.durationMinutes} דקות")
-            Text("exerciseType = ${session.exerciseType}")
+            Text("${formatSessionDate(session.startTime)} · ${session.durationMinutes} דקות")
             Text(session.sourcePackage, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+private fun formatSessionDate(startTime: Instant): String {
+    val formatter = DateTimeFormatter.ofPattern("dd/MM HH:mm")
+    return startTime.atZone(ZoneId.systemDefault()).format(formatter)
 }
 
 @Composable
@@ -289,7 +458,7 @@ private fun DiagnosticCard(message: String) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
         Column(Modifier.padding(18.dp)) {
-            Text("אבחון", fontWeight = FontWeight.Bold)
+            Text("אבחון נתונים", fontWeight = FontWeight.Bold)
             Text(message)
         }
     }
