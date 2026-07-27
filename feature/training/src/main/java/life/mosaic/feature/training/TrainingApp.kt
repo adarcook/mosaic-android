@@ -5,10 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -71,7 +69,7 @@ private val RequiredPermissions = setOf(
 private enum class SessionSource { HEALTH_CONNECT, MANUAL }
 private enum class ManualTrainingType { SWIM, PUSH, PULL, OTHER }
 
-data class TrainingSession(
+private data class TrainingSession(
     val id: String,
     val title: String,
     val exerciseType: Int,
@@ -324,10 +322,7 @@ private fun GoalsSettingsCard(goals: TrainingGoals, onGoalsChanged: (TrainingGoa
             GoalStepper("אימוני שחייה", goals.swimsPerWeek) { onGoalsChanged(goals.copy(swimsPerWeek = it)) }
             GoalStepper("אימוני דחיפה", goals.pushPerWeek) { onGoalsChanged(goals.copy(pushPerWeek = it)) }
             GoalStepper("אימוני משיכה", goals.pullPerWeek) { onGoalsChanged(goals.copy(pullPerWeek = it)) }
-            Text(
-                "אפשר להגדיר יעד אפס כדי להסיר אותו מהתוכנית השבועית.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("אפשר להגדיר יעד אפס כדי להסיר אותו מהתוכנית השבועית.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -345,11 +340,7 @@ private fun GoalStepper(label: String, value: Int, onValueChanged: (Int) -> Unit
 }
 
 @Composable
-private fun SessionEditorDialog(
-    session: TrainingSession?,
-    onDismiss: () -> Unit,
-    onSave: (TrainingSession) -> Unit
-) {
+private fun SessionEditorDialog(session: TrainingSession?, onDismiss: () -> Unit, onSave: (TrainingSession) -> Unit) {
     val initialDate = session?.startTime?.atZone(ZoneId.systemDefault())?.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
         ?: LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
     var type by remember(session) { mutableStateOf(session?.manualType ?: ManualTrainingType.SWIM) }
@@ -371,38 +362,25 @@ private fun SessionEditorDialog(
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = dateTimeText,
-                    onValueChange = { dateTimeText = it },
-                    label = { Text("תאריך ושעה (yyyy-MM-dd HH:mm)") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = durationText,
-                    onValueChange = { durationText = it.filter(Char::isDigit) },
-                    label = { Text("משך בדקות") },
-                    singleLine = true
-                )
+                OutlinedTextField(value = dateTimeText, onValueChange = { dateTimeText = it }, label = { Text("תאריך ושעה (yyyy-MM-dd HH:mm)") }, singleLine = true)
+                OutlinedTextField(value = durationText, onValueChange = { durationText = it.filter(Char::isDigit) }, label = { Text("משך בדקות") }, singleLine = true)
                 OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("הערות") })
                 validationError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                val localDateTime = runCatching {
-                    LocalDateTime.parse(dateTimeText, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-                }.getOrNull()
+                val localDateTime = runCatching { LocalDateTime.parse(dateTimeText, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) }.getOrNull()
                 val duration = durationText.toLongOrNull()
                 if (localDateTime == null || duration == null || duration <= 0) {
                     validationError = "יש להזין תאריך תקין ומשך גדול מאפס"
                 } else {
-                    val start = localDateTime.atZone(ZoneId.systemDefault()).toInstant()
                     onSave(
                         TrainingSession(
                             id = session?.id ?: "manual:${UUID.randomUUID()}",
                             title = manualTypeTitle(type),
                             exerciseType = manualExerciseType(type),
-                            startTime = start,
+                            startTime = localDateTime.atZone(ZoneId.systemDefault()).toInstant(),
                             durationMinutes = duration,
                             sourcePackage = "Mosaic",
                             source = SessionSource.MANUAL,
@@ -427,10 +405,7 @@ private fun TrainingCard(session: TrainingSession, onEdit: (() -> Unit)?, onDele
                 Text("מרחק, מספר בריכות, קצב ודופק יופיעו כאן כאשר מקור הנתונים יספק אותם.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (session.notes.isNotBlank()) Text(session.notes)
-            Text(
-                if (session.source == SessionSource.MANUAL) "הוזן ידנית ב-Mosaic" else "מקור: ${friendlySource(session.sourcePackage)}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(if (session.source == SessionSource.MANUAL) "הוזן ידנית ב-Mosaic" else "מקור: ${friendlySource(session.sourcePackage)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (onEdit != null || onDelete != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     onEdit?.let { OutlinedButton(onClick = it) { Text("עריכה") } }
@@ -445,20 +420,11 @@ private suspend fun readTrainingSessions(client: HealthConnectClient, grantedPer
     val end = Instant.now().plus(Duration.ofMinutes(5))
     val start = end.minus(Duration.ofDays(365))
     val timeRange = TimeRangeFilter.between(start, end)
-    val allResponse = client.readRecords(
-        ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = timeRange, ascendingOrder = false)
-    )
+    val allResponse = client.readRecords(ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = timeRange, ascendingOrder = false))
     val samsungResponse = client.readRecords(
-        ReadRecordsRequest(
-            recordType = ExerciseSessionRecord::class,
-            timeRangeFilter = timeRange,
-            dataOriginFilter = setOf(DataOrigin(SamsungHealthPackage)),
-            ascendingOrder = false
-        )
+        ReadRecordsRequest(recordType = ExerciseSessionRecord::class, timeRangeFilter = timeRange, dataOriginFilter = setOf(DataOrigin(SamsungHealthPackage)), ascendingOrder = false)
     )
-    val visibleRecords = allResponse.records.filterNot {
-        it.metadata.dataOrigin.packageName.contains("healthconnectlab", ignoreCase = true)
-    }
+    val visibleRecords = allResponse.records.filterNot { it.metadata.dataOrigin.packageName.contains("healthconnectlab", ignoreCase = true) }
     return TrainingReadResult(
         sessions = visibleRecords.map { record ->
             TrainingSession(
@@ -476,15 +442,9 @@ private suspend fun readTrainingSessions(client: HealthConnectClient, grantedPer
     )
 }
 
-private fun isSwim(session: TrainingSession): Boolean = session.manualType == ManualTrainingType.SWIM ||
-    session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL ||
-    session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER
+private fun isSwim(session: TrainingSession): Boolean = session.manualType == ManualTrainingType.SWIM || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER
 
-private fun isStrength(session: TrainingSession): Boolean = session.manualType == ManualTrainingType.PUSH ||
-    session.manualType == ManualTrainingType.PULL ||
-    session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS ||
-    session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING ||
-    session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
+private fun isStrength(session: TrainingSession): Boolean = session.manualType == ManualTrainingType.PUSH || session.manualType == ManualTrainingType.PULL || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING || session.exerciseType == ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING
 
 private fun exerciseTitle(type: Int): String = when (type) {
     ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "שחייה בבריכה"
@@ -515,8 +475,7 @@ private fun friendlySource(packageName: String): String = when (packageName) {
 
 private fun startOfCurrentWeek(): Instant {
     val now = ZonedDateTime.now()
-    val sunday = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)).toLocalDate().atStartOfDay(now.zone)
-    return sunday.toInstant()
+    return now.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY)).toLocalDate().atStartOfDay(now.zone).toInstant()
 }
 
 private fun currentWeekLabel(): String {
@@ -527,16 +486,12 @@ private fun currentWeekLabel(): String {
     return "${start.format(formatter)}–${end.format(formatter)}"
 }
 
-private fun formatSessionDate(instant: Instant): String = instant.atZone(ZoneId.systemDefault())
-    .format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
+private fun formatSessionDate(instant: Instant): String = instant.atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))
 
 private fun remainingGoalText(swims: Int, strength: Int, goals: TrainingGoals): String {
     val remainingSwims = (goals.swimsPerWeek - swims).coerceAtLeast(0)
     val remainingStrength = (goals.strengthPerWeek - strength).coerceAtLeast(0)
-    return when {
-        remainingSwims == 0 && remainingStrength == 0 -> "כל הכבוד — השלמת את מטרות השבוע."
-        else -> "נותרו השבוע: $remainingSwims שחייה · $remainingStrength כוח"
-    }
+    return if (remainingSwims == 0 && remainingStrength == 0) "כל הכבוד — השלמת את מטרות השבוע." else "נותרו השבוע: $remainingSwims שחייה · $remainingStrength כוח"
 }
 
 private fun loadTrainingGoals(context: Context): TrainingGoals {
