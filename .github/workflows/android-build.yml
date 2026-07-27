@@ -1,0 +1,32 @@
+name: Android Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  assemble-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Compile Photos module
+        run: gradle :feature:photos:assembleDebug
+
+      - name: Compile app
+        run: gradle :app:assembleDebug
