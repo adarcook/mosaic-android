@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,33 +53,27 @@ import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import life.mosaic.core.database.MosaicDatabase
+import life.mosaic.core.database.photos.PhotoEntity
+import life.mosaic.core.database.photos.PhotoRepository
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-data class DevicePhoto(
-    val mediaId: Long,
-    val contentUri: String,
-    val displayName: String,
-    val relativePath: String,
-    val mimeType: String,
-    val width: Int,
-    val height: Int,
-    val sizeBytes: Long,
-    val dateAdded: Instant,
-    val category: PhotoCategory
-)
+private const val ImportantCategory = "IMPORTANT_CANDIDATE"
+private const val CleanupCategory = "CLEANUP_CANDIDATE"
 
-enum class PhotoCategory {
-    IMPORTANT_CANDIDATE,
-    CLEANUP_CANDIDATE
-}
+private enum class PhotoCategory { IMPORTANT_CANDIDATE, CLEANUP_CANDIDATE }
 
 @Composable
 fun PhotosApp(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val permission = photoReadPermission()
+    val repository = remember(context) {
+        PhotoRepository(MosaicDatabase.get(context).photoDao())
+    }
+    val photos by repository.observePhotos().collectAsState(initial = emptyList())
 
     var hasPermission by remember {
         mutableStateOf(
@@ -88,9 +83,8 @@ fun PhotosApp(modifier: Modifier = Modifier) {
     }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var photos by remember { mutableStateOf<List<DevicePhoto>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf(PhotoCategory.IMPORTANT_CANDIDATE) }
-    var selectedPhoto by remember { mutableStateOf<DevicePhoto?>(null) }
+    var selectedPhoto by remember { mutableStateOf<PhotoEntity?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -102,9 +96,11 @@ fun PhotosApp(modifier: Modifier = Modifier) {
     suspend fun refresh() {
         loading = true
         error = null
-        runCatching { scanDevicePhotos(context) }
-            .onSuccess { photos = it }
-            .onFailure { error = it.message ?: "סריקת התמונות נכשלה" }
+        runCatching {
+            repository.replaceMediaStoreSnapshot(scanDevicePhotos(context))
+        }.onFailure {
+            error = it.message ?: "סריקת התמונות נכשלה"
+        }
         loading = false
     }
 
@@ -112,8 +108,8 @@ fun PhotosApp(modifier: Modifier = Modifier) {
         if (hasPermission) refresh()
     }
 
-    val important = photos.filter { it.category == PhotoCategory.IMPORTANT_CANDIDATE }
-    val cleanup = photos.filter { it.category == PhotoCategory.CLEANUP_CANDIDATE }
+    val important = photos.filter { it.automaticCategory == ImportantCategory }
+    val cleanup = photos.filter { it.automaticCategory == CleanupCategory }
     val visible = if (selectedCategory == PhotoCategory.IMPORTANT_CANDIDATE) important else cleanup
 
     selectedPhoto?.let { photo ->
@@ -130,7 +126,7 @@ fun PhotosApp(modifier: Modifier = Modifier) {
             ) {
                 Text("Mosaic Photos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "גלריה מקומית שמכינה תמונות חשובות לסיווג, embeddings וסנכרון למחשב הביתי.",
+                    "הגלריה נטענת ממסד מקומי ומתעדכנת מול ספריית התמונות במכשיר.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
@@ -159,8 +155,8 @@ fun PhotosApp(modifier: Modifier = Modifier) {
                     }
 
                     when {
-                        loading -> StatusCard("סורק את התמונות במכשיר…")
                         error != null -> StatusCard(error.orEmpty())
+                        photos.isEmpty() && loading -> StatusCard("סורק את התמונות במכשיר…")
                         visible.isEmpty() -> StatusCard("לא נמצאו תמונות בקטגוריה הזאת.")
                         else -> PhotoGrid(
                             photos = visible,
@@ -171,8 +167,9 @@ fun PhotosApp(modifier: Modifier = Modifier) {
 
                     Button(
                         onClick = { scope.launch { refresh() } },
+                        enabled = !loading,
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("סריקה מחדש") }
+                    ) { Text(if (loading) "מסנכרן…" else "סריקה מחדש") }
                 }
             }
         }
@@ -181,8 +178,8 @@ fun PhotosApp(modifier: Modifier = Modifier) {
 
 @Composable
 private fun PhotoGrid(
-    photos: List<DevicePhoto>,
-    onPhotoClick: (DevicePhoto) -> Unit,
+    photos: List<PhotoEntity>,
+    onPhotoClick: (PhotoEntity) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyVerticalGrid(
@@ -198,7 +195,7 @@ private fun PhotoGrid(
 }
 
 @Composable
-private fun PhotoTile(photo: DevicePhoto, onClick: () -> Unit) {
+private fun PhotoTile(photo: PhotoEntity, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -218,7 +215,7 @@ private fun PhotoTile(photo: DevicePhoto, onClick: () -> Unit) {
             contentScale = ContentScale.Crop
         )
 
-        if (photo.category == PhotoCategory.CLEANUP_CANDIDATE) {
+        if (photo.automaticCategory == CleanupCategory) {
             Text(
                 text = "בדיקה",
                 modifier = Modifier
@@ -237,15 +234,14 @@ private fun PhotoTile(photo: DevicePhoto, onClick: () -> Unit) {
 }
 
 @Composable
-private fun PhotoPreviewDialog(photo: DevicePhoto, onDismiss: () -> Unit) {
+private fun PhotoPreviewDialog(photo: PhotoEntity, onDismiss: () -> Unit) {
     val formatter = remember { DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm") }
-    val localDate = photo.dateAdded.atZone(ZoneId.systemDefault()).format(formatter)
+    val localDate = Instant.ofEpochSecond(photo.dateAddedEpochSeconds)
+        .atZone(ZoneId.systemDefault())
+        .format(formatter)
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp)
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
@@ -278,7 +274,7 @@ private fun PhotoPreviewDialog(photo: DevicePhoto, onDismiss: () -> Unit) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        if (photo.category == PhotoCategory.CLEANUP_CANDIDATE) {
+                        if (photo.automaticCategory == CleanupCategory) {
                             "מועמדת לבדיקה לפני ניקוי"
                         } else {
                             "מועמדת לשמירה וסנכרון"
@@ -290,16 +286,14 @@ private fun PhotoPreviewDialog(photo: DevicePhoto, onDismiss: () -> Unit) {
 
                 TextButton(
                     onClick = onDismiss,
-                    modifier = Modifier
-                        .align(Alignment.End)
-                        .padding(end = 8.dp, bottom = 8.dp)
+                    modifier = Modifier.align(Alignment.End).padding(end = 8.dp, bottom = 8.dp)
                 ) { Text("סגירה") }
             }
         }
     }
 }
 
-private fun photoAspectRatio(photo: DevicePhoto): Float {
+private fun photoAspectRatio(photo: PhotoEntity): Float {
     if (photo.width <= 0 || photo.height <= 0) return 1f
     return (photo.width.toFloat() / photo.height.toFloat()).coerceIn(0.65f, 1.75f)
 }
@@ -312,10 +306,10 @@ private fun SummaryCard(total: Int, important: Int, cleanup: Int) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("$total תמונות במכשיר", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("$total תמונות באינדקס המקומי", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("$important לשמירה · $cleanup לבדיקת ניקוי")
             Text(
-                "שום תמונה אינה נמחקת אוטומטית.",
+                "פתיחה חוזרת נטענת מהמסד; סריקה מעדכנת תמונות חדשות ושינויים.",
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -325,11 +319,8 @@ private fun SummaryCard(total: Int, important: Int, cleanup: Int) {
 
 @Composable
 private fun CategoryButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    if (selected) {
-        Button(onClick = onClick, modifier = modifier) { Text(label) }
-    } else {
-        OutlinedButton(onClick = onClick, modifier = modifier) { Text(label) }
-    }
+    if (selected) Button(onClick = onClick, modifier = modifier) { Text(label) }
+    else OutlinedButton(onClick = onClick, modifier = modifier) { Text(label) }
 }
 
 @Composable
@@ -341,11 +332,10 @@ private fun StatusCard(message: String) {
 
 private fun photoReadPermission(): String? = when {
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> Manifest.permission.READ_MEDIA_IMAGES
-    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> Manifest.permission.READ_EXTERNAL_STORAGE
-    else -> null
+    else -> Manifest.permission.READ_EXTERNAL_STORAGE
 }
 
-private suspend fun scanDevicePhotos(context: Context): List<DevicePhoto> = withContext(Dispatchers.IO) {
+private suspend fun scanDevicePhotos(context: Context): List<PhotoEntity> = withContext(Dispatchers.IO) {
     val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
     val projection = mutableListOf(
         MediaStore.Images.Media._ID,
@@ -360,7 +350,8 @@ private suspend fun scanDevicePhotos(context: Context): List<DevicePhoto> = with
         else add(MediaStore.Images.Media.DATA)
     }.toTypedArray()
 
-    val result = mutableListOf<DevicePhoto>()
+    val scannedAt = System.currentTimeMillis()
+    val result = mutableListOf<PhotoEntity>()
     context.contentResolver.query(
         collection,
         projection,
@@ -385,45 +376,46 @@ private suspend fun scanDevicePhotos(context: Context): List<DevicePhoto> = with
             val id = cursor.getLong(idColumn)
             val displayName = cursor.getString(nameColumn).orEmpty()
             val path = cursor.getString(pathColumn).orEmpty()
-            val mimeType = cursor.getString(mimeColumn).orEmpty()
-            val width = cursor.getInt(widthColumn)
-            val height = cursor.getInt(heightColumn)
-            val size = cursor.getLong(sizeColumn)
-            val dateAdded = Instant.ofEpochSecond(cursor.getLong(dateColumn))
-            val uri = ContentUris.withAppendedId(collection, id).toString()
+            val category = classifyPhoto(displayName, path)
 
-            result += DevicePhoto(
+            result += PhotoEntity(
                 mediaId = id,
-                contentUri = uri,
+                contentUri = ContentUris.withAppendedId(collection, id).toString(),
                 displayName = displayName,
                 relativePath = path,
-                mimeType = mimeType,
-                width = width,
-                height = height,
-                sizeBytes = size,
-                dateAdded = dateAdded,
-                category = classifyPhoto(displayName, path)
+                mimeType = cursor.getString(mimeColumn).orEmpty(),
+                width = cursor.getInt(widthColumn),
+                height = cursor.getInt(heightColumn),
+                sizeBytes = cursor.getLong(sizeColumn),
+                dateAddedEpochSeconds = cursor.getLong(dateColumn),
+                automaticCategory = category,
+                importanceScore = if (category == CleanupCategory) 0.25 else 0.65,
+                classificationReasons = classificationReason(displayName, path),
+                scannedAtEpochMillis = scannedAt
             )
         }
     }
     result
 }
 
-private fun classifyPhoto(displayName: String, relativePath: String): PhotoCategory {
+private fun classifyPhoto(displayName: String, relativePath: String): String {
     val text = "$displayName $relativePath".lowercase()
-    val cleanupSignals = listOf(
-        "screenshot",
-        "screenshots",
-        "screen_record",
-        "screenrecord",
-        "download",
-        "downloads",
-        "whatsapp images/sent",
-        "telegram/telegram images"
-    )
-    return if (cleanupSignals.any(text::contains)) {
-        PhotoCategory.CLEANUP_CANDIDATE
-    } else {
-        PhotoCategory.IMPORTANT_CANDIDATE
-    }
+    return if (cleanupSignals.any(text::contains)) CleanupCategory else ImportantCategory
 }
+
+private fun classificationReason(displayName: String, relativePath: String): String {
+    val text = "$displayName $relativePath".lowercase()
+    val matched = cleanupSignals.firstOrNull(text::contains)
+    return matched?.let { "Matched cleanup signal: $it" } ?: "No cleanup signal found"
+}
+
+private val cleanupSignals = listOf(
+    "screenshot",
+    "screenshots",
+    "screen_record",
+    "screenrecord",
+    "download",
+    "downloads",
+    "whatsapp images/sent",
+    "telegram/telegram images"
+)
