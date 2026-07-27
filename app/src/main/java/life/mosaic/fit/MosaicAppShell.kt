@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,12 +37,9 @@ import androidx.compose.ui.unit.sp
 import life.mosaic.feature.fit.FitApp
 import life.mosaic.feature.fit.FitMealJournal
 import life.mosaic.feature.photos.PhotosApp
+import life.mosaic.feature.training.TrainingApp
 
-private enum class MosaicDestination {
-    Home,
-    Fit,
-    Photos
-}
+private enum class MosaicDestination { Home, Fit, Training, Photos }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +65,7 @@ fun MosaicAppShell(
                             Text(
                                 when (destination) {
                                     MosaicDestination.Fit -> "Mosaic Fit"
+                                    MosaicDestination.Training -> "Mosaic Training"
                                     MosaicDestination.Photos -> "Mosaic Photos"
                                     MosaicDestination.Home -> "Mosaic"
                                 }
@@ -80,17 +80,13 @@ fun MosaicAppShell(
                 }
             }
         ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
+            Box(Modifier.fillMaxSize().padding(innerPadding)) {
                 when (destination) {
                     MosaicDestination.Home -> MosaicHome(
                         onOpenFit = { destination = MosaicDestination.Fit },
+                        onOpenTraining = { destination = MosaicDestination.Training },
                         onOpenPhotos = { destination = MosaicDestination.Photos }
                     )
-
                     MosaicDestination.Fit -> FitApp(
                         journal = journal,
                         serverUrl = serverUrl,
@@ -98,7 +94,7 @@ fun MosaicAppShell(
                         selectedThemeId = selectedThemeId,
                         onThemeSelected = onThemeSelected
                     )
-
+                    MosaicDestination.Training -> TrainingApp()
                     MosaicDestination.Photos -> PhotosApp()
                 }
             }
@@ -109,12 +105,14 @@ fun MosaicAppShell(
 @Composable
 private fun MosaicHome(
     onOpenFit: () -> Unit,
+    onOpenTraining: () -> Unit,
     onOpenPhotos: () -> Unit
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -139,70 +137,34 @@ private fun MosaicHome(
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(36.dp))
-
-            FeatureCard(
-                symbol = "✦",
-                title = "תזונה וכושר",
-                description = "ניתוח ארוחות, מעקב יומי ומגמות",
-                onClick = onOpenFit
-            )
+            FeatureCard("✦", "תזונה", "ניתוח ארוחות, מעקב יומי ומגמות", onOpenFit)
             Spacer(Modifier.height(16.dp))
-            FeatureCard(
-                symbol = "▣",
-                title = "תמונות",
-                description = "ארכיון חכם, ניקוי וזיהוי מקומי",
-                onClick = onOpenPhotos
-            )
+            FeatureCard("◉", "אימונים", "שחייה, קליסטניקס ומעקב שבועי", onOpenTraining)
+            Spacer(Modifier.height(16.dp))
+            FeatureCard("▣", "תמונות", "ארכיון חכם, ניקוי וזיהוי מקומי", onOpenPhotos)
         }
     }
 }
 
 @Composable
-private fun FeatureCard(
-    symbol: String,
-    title: String,
-    description: String,
-    onClick: () -> Unit
-) {
+private fun FeatureCard(symbol: String, title: String, description: String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(22.dp),
+            modifier = Modifier.fillMaxWidth().padding(22.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text(
-                text = symbol,
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(symbol, color = MaterialTheme.colorScheme.primary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(
-                text = "←",
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 24.sp
-            )
+            Text("←", color = MaterialTheme.colorScheme.primary, fontSize = 24.sp)
         }
     }
 }
