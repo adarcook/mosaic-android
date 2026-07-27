@@ -26,6 +26,4 @@ interface SamsungHealthExerciseSource {
 }
 
 fun createSamsungHealthExerciseSource(context: Context): SamsungHealthExerciseSource =
-    createPlatformSamsungHealthExerciseSource(context.applicationContext)
-
-internal fun createPlatformSamsungHealthExerciseSource(context: Context): SamsungHealthExerciseSource
+    SamsungHealthExerciseSourceFactory.create(context.applicationContext)
