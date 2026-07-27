@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - "feature/**"
 
 jobs:
   assemble-debug:
@@ -24,6 +25,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+
+      - name: Compile Database module
+        run: gradle :core:database:assembleDebug
 
       - name: Compile Photos module
         run: gradle :feature:photos:assembleDebug
