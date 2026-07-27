@@ -8,11 +8,11 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
-import androidx.activity.result.contract.ActivityResultContract
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.lifecycle.lifecycleScope
@@ -26,8 +26,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var output: TextView
     private var client: HealthConnectClient? = null
 
-    private val exercisePermission = HealthPermission.getReadPermission(ExerciseSessionRecord::class)
-    private val requiredPermissions = setOf(exercisePermission)
+    private val readExercisePermission =
+        HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+    private val writeExercisePermission =
+        HealthPermission.getWritePermission(ExerciseSessionRecord::class)
+    private val requiredPermissions = setOf(readExercisePermission, writeExercisePermission)
 
     private val permissionLauncher = registerForActivityResult(
         PermissionController.createRequestPermissionResultContract()
@@ -45,27 +48,69 @@ class MainActivity : ComponentActivity() {
         }
 
         val requestButton = Button(this).apply {
-            text = "1. Request exercise permission"
+            text = "1. Request read + write permissions"
             setOnClickListener { permissionLauncher.launch(requiredPermissions) }
         }
+        val insertButton = Button(this).apply {
+            text = "2. Insert test exercise"
+            setOnClickListener { lifecycleScope.launch { insertTestExercise() } }
+        }
         val readButton = Button(this).apply {
-            text = "2. Read all exercise sessions"
+            text = "3. Read exercise sessions (last 7 days)"
             setOnClickListener { lifecycleScope.launch { inspectAndRead() } }
         }
         output = TextView(this).apply {
             textSize = 16f
             setPadding(24, 24, 24, 24)
-            text = "Health Connect Lab\nSDK status: $sdkStatus\n"
+            text = "Health Connect Lab v2\nSDK status: $sdkStatus\n"
         }
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(24, 48, 24, 24)
             addView(requestButton, matchWidth())
+            addView(insertButton, matchWidth())
             addView(readButton, matchWidth())
             addView(output, matchWidth())
         }
         setContentView(ScrollView(this).apply { addView(content) })
+    }
+
+    private suspend fun insertTestExercise() {
+        val healthClient = client
+        if (healthClient == null) {
+            append("Health Connect client unavailable")
+            return
+        }
+
+        runCatching {
+            val granted = healthClient.permissionController.getGrantedPermissions()
+            append("Granted permissions before insert (${granted.size}): $granted")
+            if (writeExercisePermission !in granted) {
+                append("STOP: write exercise permission is missing")
+                return
+            }
+
+            val end = Instant.now().minus(Duration.ofMinutes(1))
+            val start = end.minus(Duration.ofMinutes(20))
+            val zoneRules = ZoneId.systemDefault().rules
+            val record = ExerciseSessionRecord(
+                startTime = start,
+                startZoneOffset = zoneRules.getOffset(start),
+                endTime = end,
+                endZoneOffset = zoneRules.getOffset(end),
+                exerciseType = ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL,
+                title = "Health Connect Lab test swim",
+                metadata = Metadata.manualEntry()
+            )
+
+            val response = healthClient.insertRecords(listOf(record))
+            append("INSERT SUCCESS: recordIds=${response.recordIdsList}")
+            inspectAndRead()
+        }.onFailure { throwable ->
+            Log.e(TAG, "Health Connect insert failed", throwable)
+            append("INSERT ERROR: ${throwable::class.java.name}: ${throwable.message}")
+        }
     }
 
     private suspend fun inspectAndRead() {
@@ -78,15 +123,16 @@ class MainActivity : ComponentActivity() {
         runCatching {
             val granted = healthClient.permissionController.getGrantedPermissions()
             append("Granted permissions (${granted.size}): $granted")
-            append("Exercise permission granted: ${exercisePermission in granted}")
+            append("Read exercise granted: ${readExercisePermission in granted}")
+            append("Write exercise granted: ${writeExercisePermission in granted}")
 
-            if (exercisePermission !in granted) {
-                append("STOP: exercise permission is missing")
+            if (readExercisePermission !in granted) {
+                append("STOP: read exercise permission is missing")
                 return
             }
 
             val end = Instant.now().plus(Duration.ofMinutes(1))
-            val start = end.minus(Duration.ofDays(365))
+            val start = end.minus(Duration.ofDays(7))
             append("Reading ExerciseSessionRecord from $start to $end")
 
             val response = healthClient.readRecords(
@@ -108,6 +154,7 @@ class MainActivity : ComponentActivity() {
                 val line = buildString {
                     append("#${index + 1} ")
                     append("type=${record.exerciseType}, ")
+                    append("title=${record.title}, ")
                     append("start=${formatter.format(record.startTime)}, ")
                     append("end=${formatter.format(record.endTime)}, ")
                     append("source=${record.metadata.dataOrigin.packageName}, ")
@@ -117,7 +164,7 @@ class MainActivity : ComponentActivity() {
             }
         }.onFailure { throwable ->
             Log.e(TAG, "Health Connect read failed", throwable)
-            append("ERROR: ${throwable::class.java.name}: ${throwable.message}")
+            append("READ ERROR: ${throwable::class.java.name}: ${throwable.message}")
         }
     }
 
