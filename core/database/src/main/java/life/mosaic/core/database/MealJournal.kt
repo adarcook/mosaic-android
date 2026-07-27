@@ -12,6 +12,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import life.mosaic.core.database.photos.PhotoDao
+import life.mosaic.core.database.photos.PhotoEntity
 import life.mosaic.core.model.MealAnalysis
 import life.mosaic.core.model.MealItem
 import life.mosaic.core.model.NutritionEstimate
@@ -51,9 +53,14 @@ interface MealDao {
     suspend fun delete(analysisId: String)
 }
 
-@Database(entities = [MealEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [MealEntity::class, PhotoEntity::class],
+    version = 3,
+    exportSchema = false
+)
 abstract class MosaicDatabase : RoomDatabase() {
     abstract fun mealDao(): MealDao
+    abstract fun photoDao(): PhotoDao
 
     companion object {
         @Volatile private var instance: MosaicDatabase? = null
@@ -66,12 +73,40 @@ abstract class MosaicDatabase : RoomDatabase() {
             }
         }
 
+        private val migration2To3 = object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS photos (
+                        mediaId INTEGER NOT NULL PRIMARY KEY,
+                        contentUri TEXT NOT NULL,
+                        displayName TEXT NOT NULL,
+                        relativePath TEXT NOT NULL,
+                        mimeType TEXT NOT NULL,
+                        width INTEGER NOT NULL,
+                        height INTEGER NOT NULL,
+                        sizeBytes INTEGER NOT NULL,
+                        dateAddedEpochSeconds INTEGER NOT NULL,
+                        automaticCategory TEXT NOT NULL,
+                        userDecision TEXT,
+                        importanceScore REAL NOT NULL,
+                        classificationReasons TEXT NOT NULL,
+                        imageEmbeddingStatus TEXT NOT NULL,
+                        faceEmbeddingStatus TEXT NOT NULL,
+                        syncStatus TEXT NOT NULL,
+                        scannedAtEpochMillis INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun get(context: Context): MosaicDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 MosaicDatabase::class.java,
                 "mosaic-fit.db"
-            ).addMigrations(migration1To2).build().also { instance = it }
+            ).addMigrations(migration1To2, migration2To3).build().also { instance = it }
         }
     }
 }

@@ -1,11 +1,10 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
 }
 
 android {
-    namespace = "life.mosaic.core.database"
+    namespace = "life.mosaic.core.data"
     compileSdk = 35
 
     defaultConfig { minSdk = 26 }
@@ -18,11 +17,8 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 
-val roomVersion = "2.7.2"
-
 dependencies {
-    implementation(project(":core:model"))
-    implementation("androidx.room:room-runtime:$roomVersion")
-    implementation("androidx.room:room-ktx:$roomVersion")
-    ksp("androidx.room:room-compiler:$roomVersion")
+    implementation(project(":core:database"))
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
 }
