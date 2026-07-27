@@ -20,14 +20,13 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Set up Gradle
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x gradlew
+        with:
+          gradle-version: "8.9"
 
       - name: Compile Photos module
-        run: ./gradlew :feature:photos:assembleDebug
+        run: gradle :feature:photos:assembleDebug
 
       - name: Compile app
-        run: ./gradlew :app:assembleDebug
+        run: gradle :app:assembleDebug
