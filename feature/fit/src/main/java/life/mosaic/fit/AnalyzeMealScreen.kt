@@ -61,27 +61,29 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import life.mosaic.fit.analysis.HttpMealAnalyzer
+import life.mosaic.fit.analysis.MealAnalyzer
+import life.mosaic.fit.analysis.MealPhotoInput
 import life.mosaic.fit.data.MealAnalysis
 import life.mosaic.fit.data.MealItem
 import life.mosaic.fit.data.NutritionEstimate
-import org.json.JSONObject
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.UUID
 
 @Composable
 internal fun AnalyzeMealScreen(
     palette: ThemePalette,
     serverUrl: String,
     onServerUrlChanged: (String) -> Unit,
-    onSave: (MealAnalysis) -> Unit
+    onSave: (MealAnalysis) -> Unit,
+    mealAnalyzer: MealAnalyzer? = null
 ) {
     val context = LocalContext.current
+    val activeAnalyzer = remember(serverUrl, mealAnalyzer) {
+        mealAnalyzer ?: HttpMealAnalyzer(serverUrl)
+    }
     var selectedImage by remember { mutableStateOf<Uri?>(null) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
-    var message by remember { mutableStateOf("צלם את הארוחה כדי להתחיל") }
+    var message by remember { mutableStateOf("אפשר להזין ידנית מיד, גם כשהמחשב כבוי") }
     var analysis by remember { mutableStateOf<MealAnalysis?>(null) }
     var editing by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
@@ -102,16 +104,24 @@ internal fun AnalyzeMealScreen(
     ScreenColumn {
         Header(
             palette,
-            "AI MEAL SCAN",
-            "ניתוח ארוחה",
-            "צלם, סרוק, תקן במקרה הצורך ושמור ביומן"
+            "MEAL CAPTURE",
+            "הוספת ארוחה",
+            "הזנה ידנית עובדת תמיד. ניתוח תמונה בנוי כעת כך שניתן יהיה להעביר אותו למודל מקומי במכשיר."
         )
 
+        ManualMealEntryCard(palette = palette, onSave = onSave)
+
+        SectionTitle("צילום וניתוח")
         GlowCard(palette) {
+            Text(
+                "כרגע מסלול הצילום משתמש בשרת הפיתוח הקיים. הוא מבודד מאחורי MealAnalyzer כדי שנוכל להחליף אותו במודל on-device בלי לשנות את מסך הארוחה.",
+                color = palette.muted
+            )
+            Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = serverUrl,
                 onValueChange = onServerUrlChanged,
-                label = { Text("כתובת השרת") },
+                label = { Text("כתובת שרת legacy") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
@@ -156,7 +166,9 @@ internal fun AnalyzeMealScreen(
                         editing = false
                         message = "סורק ומנתח את הארוחה…"
                         scope.launch {
-                            runCatching { uploadMeal(context, serverUrl, uri) }
+                            runCatching {
+                                activeAnalyzer.analyze(readMealPhotoInput(context, uri))
+                            }
                                 .onSuccess {
                                     analysis = it
                                     message = "הניתוח הושלם"
@@ -438,77 +450,15 @@ private fun NumericField(label: String, value: String, onValueChange: (String) -
     )
 }
 
-private suspend fun uploadMeal(
-    context: Context,
-    serverUrl: String,
-    uri: Uri
-): MealAnalysis = withContext(Dispatchers.IO) {
-    val imageBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        ?: error("לא ניתן לקרוא את התמונה שצולמה")
-    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
-    val boundary = "MosaicBoundary-${UUID.randomUUID()}"
-    val endpoint = URL("${serverUrl.trimEnd('/')}/v1/meals/analyze")
-    val body = ByteArrayOutputStream().apply {
-        write("--$boundary\r\n".toByteArray())
-        write(
-            ("Content-Disposition: form-data; name=\"image\"; " +
-                "filename=\"meal.jpg\"\r\n").toByteArray()
+private suspend fun readMealPhotoInput(context: Context, uri: Uri): MealPhotoInput =
+    withContext(Dispatchers.IO) {
+        val imageBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: error("לא ניתן לקרוא את התמונה שצולמה")
+        MealPhotoInput(
+            bytes = imageBytes,
+            mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
         )
-        write("Content-Type: $mimeType\r\n\r\n".toByteArray())
-        write(imageBytes)
-        write("\r\n--$boundary--\r\n".toByteArray())
-    }.toByteArray()
-
-    val connection = (endpoint.openConnection() as HttpURLConnection).apply {
-        requestMethod = "POST"
-        doOutput = true
-        connectTimeout = 15_000
-        readTimeout = 120_000
-        setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-        setRequestProperty("Content-Length", body.size.toString())
     }
-    try {
-        connection.outputStream.use { it.write(body) }
-        val responseText = (
-            if (connection.responseCode in 200..299) connection.inputStream
-            else connection.errorStream
-            ).bufferedReader().use { it.readText() }
-        if (connection.responseCode !in 200..299) {
-            error("השרת החזיר ${connection.responseCode}: $responseText")
-        }
-        parseMealAnalysis(JSONObject(responseText))
-    } finally {
-        connection.disconnect()
-    }
-}
-
-private fun parseMealAnalysis(json: JSONObject): MealAnalysis {
-    val nutritionJson = json.getJSONObject("nutrition")
-    val itemsJson = json.getJSONArray("items")
-    val assumptionsJson = json.getJSONArray("assumptions")
-    val questionsJson = json.getJSONArray("confirmation_questions")
-    val items = List(itemsJson.length()) { index ->
-        itemsJson.getJSONObject(index).let {
-            MealItem(it.getString("name"), it.getString("estimated_quantity"), it.getDouble("confidence"))
-        }
-    }
-    val nutrition = NutritionEstimate(
-        nutritionJson.getInt("calories_kcal"),
-        nutritionJson.getDouble("protein_g"),
-        nutritionJson.getDouble("carbohydrates_g"),
-        nutritionJson.getDouble("fat_g")
-    )
-    return MealAnalysis(
-        analysisId = json.getString("analysis_id"),
-        status = json.getString("status"),
-        items = items,
-        nutrition = nutrition,
-        assumptions = List(assumptionsJson.length()) { assumptionsJson.getString(it) },
-        confirmationQuestions = List(questionsJson.length()) { questionsJson.getString(it) },
-        originalItems = items,
-        originalNutrition = nutrition
-    )
-}
 
 private fun createTemporaryMealPhotoUri(context: Context): Uri {
     val directory = File(context.cacheDir, "meal-photos").apply { mkdirs() }
