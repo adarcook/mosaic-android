@@ -17,12 +17,26 @@ class MosaicSettings(context: Context) {
         get() = preferences.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
         set(value) = preferences.edit().putString(KEY_SERVER_URL, value).apply()
 
+    var dailyCalorieGoal: Int
+        get() = preferences.getInt(KEY_DAILY_CALORIE_GOAL, DEFAULT_DAILY_CALORIE_GOAL)
+            .takeIf { it > 0 } ?: DEFAULT_DAILY_CALORIE_GOAL
+        set(value) = preferences.edit().putInt(KEY_DAILY_CALORIE_GOAL, value.coerceAtLeast(1)).apply()
+
+    var dailyProteinGoalG: Int
+        get() = preferences.getInt(KEY_DAILY_PROTEIN_GOAL_G, DEFAULT_DAILY_PROTEIN_GOAL_G)
+            .takeIf { it > 0 } ?: DEFAULT_DAILY_PROTEIN_GOAL_G
+        set(value) = preferences.edit().putInt(KEY_DAILY_PROTEIN_GOAL_G, value.coerceAtLeast(1)).apply()
+
     companion object {
         const val DEFAULT_THEME_ID = "ocean"
         const val DEFAULT_SERVER_URL = "http://192.168.1.200:8000"
+        const val DEFAULT_DAILY_CALORIE_GOAL = 2000
+        const val DEFAULT_DAILY_PROTEIN_GOAL_G = 120
 
         private const val PREFERENCES_NAME = "mosaic_fit_preferences"
         private const val KEY_SELECTED_THEME = "selected_theme"
         private const val KEY_SERVER_URL = "server_url"
+        private const val KEY_DAILY_CALORIE_GOAL = "daily_calorie_goal"
+        private const val KEY_DAILY_PROTEIN_GOAL_G = "daily_protein_goal_g"
     }
 }
