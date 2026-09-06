@@ -29,6 +29,9 @@ jobs:
       - name: Compile Database module
         run: gradle :core:database:assembleDebug
 
+      - name: Run Fit unit tests
+        run: gradle :feature:fit:testDebugUnitTest
+
       - name: Compile Photos module
         run: gradle :feature:photos:assembleDebug
 
