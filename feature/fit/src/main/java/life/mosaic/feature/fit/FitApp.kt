@@ -14,7 +14,11 @@ fun FitApp(
     serverUrl: String,
     onServerUrlChanged: (String) -> Unit,
     selectedThemeId: String,
-    onThemeSelected: (String) -> Unit
+    onThemeSelected: (String) -> Unit,
+    dailyCalorieGoal: Int,
+    onDailyCalorieGoalChanged: (Int) -> Unit,
+    dailyProteinGoalG: Int,
+    onDailyProteinGoalChanged: (Int) -> Unit
 ) {
     val palette = Themes.firstOrNull { it.id == selectedThemeId } ?: Themes.first()
 
@@ -26,7 +30,11 @@ fun FitApp(
                 serverUrl = serverUrl,
                 onServerUrlChanged = onServerUrlChanged,
                 selectedThemeId = selectedThemeId,
-                onThemeSelected = onThemeSelected
+                onThemeSelected = onThemeSelected,
+                dailyCalorieGoal = dailyCalorieGoal,
+                onDailyCalorieGoalChanged = onDailyCalorieGoalChanged,
+                dailyProteinGoalG = dailyProteinGoalG,
+                onDailyProteinGoalChanged = onDailyProteinGoalChanged
             )
         }
     }

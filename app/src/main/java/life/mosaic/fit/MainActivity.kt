@@ -20,6 +20,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             var themeId by remember { mutableStateOf(settings.selectedThemeId) }
             var serverUrl by remember { mutableStateOf(settings.serverUrl) }
+            var dailyCalorieGoal by remember { mutableStateOf(settings.dailyCalorieGoal) }
+            var dailyProteinGoalG by remember { mutableStateOf(settings.dailyProteinGoalG) }
 
             MosaicAppShell(
                 journal = journal,
@@ -32,6 +34,16 @@ class MainActivity : ComponentActivity() {
                 onThemeSelected = {
                     themeId = it
                     settings.selectedThemeId = it
+                },
+                dailyCalorieGoal = dailyCalorieGoal,
+                onDailyCalorieGoalChanged = {
+                    dailyCalorieGoal = it
+                    settings.dailyCalorieGoal = it
+                },
+                dailyProteinGoalG = dailyProteinGoalG,
+                onDailyProteinGoalChanged = {
+                    dailyProteinGoalG = it
+                    settings.dailyProteinGoalG = it
                 }
             )
         }

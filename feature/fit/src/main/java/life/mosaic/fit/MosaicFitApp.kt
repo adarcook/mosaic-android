@@ -17,16 +17,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +66,11 @@ internal fun MosaicFitRoot(
     serverUrl: String,
     onServerUrlChanged: (String) -> Unit,
     selectedThemeId: String,
-    onThemeSelected: (String) -> Unit
+    onThemeSelected: (String) -> Unit,
+    dailyCalorieGoal: Int,
+    onDailyCalorieGoalChanged: (Int) -> Unit,
+    dailyProteinGoalG: Int,
+    onDailyProteinGoalChanged: (Int) -> Unit
 ) {
     var destination by remember { mutableStateOf(AppDestination.Today) }
     val meals = remember { mutableStateListOf<MealAnalysis>() }
@@ -99,9 +107,14 @@ internal fun MosaicFitRoot(
                 .padding(paddingValues)
         ) {
             when (destination) {
-                AppDestination.Today -> TodayScreen(palette, meals, loadingHistory) {
-                    destination = AppDestination.Analyze
-                }
+                AppDestination.Today -> TodayScreen(
+                    palette = palette,
+                    allMeals = meals,
+                    loading = loadingHistory,
+                    dailyCalorieGoal = dailyCalorieGoal,
+                    dailyProteinGoalG = dailyProteinGoalG,
+                    onAddMeal = { destination = AppDestination.Analyze }
+                )
                 AppDestination.Analyze -> AnalyzeMealScreen(
                     palette = palette,
                     serverUrl = serverUrl,
@@ -109,7 +122,15 @@ internal fun MosaicFitRoot(
                     onSave = ::saveMeal
                 )
                 AppDestination.Insights -> InsightsScreen(palette, meals)
-                AppDestination.Settings -> SettingsScreen(palette, selectedThemeId, onThemeSelected)
+                AppDestination.Settings -> SettingsScreen(
+                    palette = palette,
+                    selectedThemeId = selectedThemeId,
+                    onThemeSelected = onThemeSelected,
+                    dailyCalorieGoal = dailyCalorieGoal,
+                    onDailyCalorieGoalChanged = onDailyCalorieGoalChanged,
+                    dailyProteinGoalG = dailyProteinGoalG,
+                    onDailyProteinGoalChanged = onDailyProteinGoalChanged
+                )
             }
         }
     }
@@ -145,6 +166,8 @@ private fun TodayScreen(
     palette: ThemePalette,
     allMeals: List<MealAnalysis>,
     loading: Boolean,
+    dailyCalorieGoal: Int,
+    dailyProteinGoalG: Int,
     onAddMeal: () -> Unit
 ) {
     val meals = allMeals.filter { it.localDate() == LocalDate.now() }
@@ -153,7 +176,7 @@ private fun TodayScreen(
     }
 
     ScreenColumn {
-        Header(palette, "MOSAIC FIT", "היום שלך", "הארוחות נשמרות במכשיר באופן מקומי")
+        Header(palette, "MOSAIC FIT", "היום שלך", "הארוחות והחישובים נשמרים במכשיר באופן מקומי")
         GlowCard(palette) {
             Text("סיכום יומי", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(14.dp))
@@ -163,6 +186,23 @@ private fun TodayScreen(
                 Metric(palette, "פחמימות", formatNumber(nutrition.carbohydratesG), "גרם")
                 Metric(palette, "שומן", formatNumber(nutrition.fatG), "גרם")
             }
+        }
+        GlowCard(palette) {
+            Text("התקדמות ליעדים", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(14.dp))
+            GoalProgressRow(
+                palette = palette,
+                label = "קלוריות",
+                progress = calculateGoalProgress(nutrition.caloriesKcal.toDouble(), dailyCalorieGoal.toDouble()),
+                unit = "קק״ל"
+            )
+            Spacer(Modifier.height(16.dp))
+            GoalProgressRow(
+                palette = palette,
+                label = "חלבון",
+                progress = calculateGoalProgress(nutrition.proteinG, dailyProteinGoalG.toDouble()),
+                unit = "גרם"
+            )
         }
         SectionTitle("הארוחות שלי")
         when {
@@ -174,6 +214,39 @@ private fun TodayScreen(
             }
         }
     }
+}
+
+@Composable
+private fun GoalProgressRow(
+    palette: ThemePalette,
+    label: String,
+    progress: GoalProgress,
+    unit: String
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, fontWeight = FontWeight.Bold)
+        Text(
+            "${formatNumber(progress.consumed)} / ${formatNumber(progress.goal)} $unit",
+            color = palette.muted
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+    LinearProgressIndicator(
+        progress = { progress.fraction },
+        modifier = Modifier.fillMaxWidth().height(8.dp),
+        color = palette.primary,
+        trackColor = palette.surfaceHighlight
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        if (progress.remaining > 0.0) {
+            "נשארו ${formatNumber(progress.remaining)} $unit"
+        } else {
+            "הגעת ליעד היומי"
+        },
+        color = if (progress.remaining > 0.0) palette.muted else palette.success,
+        fontWeight = FontWeight.Bold
+    )
 }
 
 @Composable
@@ -200,10 +273,61 @@ private fun InsightsScreen(palette: ThemePalette, meals: List<MealAnalysis>) {
 private fun SettingsScreen(
     palette: ThemePalette,
     selectedThemeId: String,
-    onThemeSelected: (String) -> Unit
+    onThemeSelected: (String) -> Unit,
+    dailyCalorieGoal: Int,
+    onDailyCalorieGoalChanged: (Int) -> Unit,
+    dailyProteinGoalG: Int,
+    onDailyProteinGoalChanged: (Int) -> Unit
 ) {
+    var calorieGoalText by remember(dailyCalorieGoal) { mutableStateOf(dailyCalorieGoal.toString()) }
+    var proteinGoalText by remember(dailyProteinGoalG) { mutableStateOf(dailyProteinGoalG.toString()) }
+    val calorieValue = calorieGoalText.toIntOrNull()
+    val proteinValue = proteinGoalText.toIntOrNull()
+    val validGoals = calorieValue != null && calorieValue > 0 && proteinValue != null && proteinValue > 0
+
     ScreenColumn {
-        Header(palette, "PERSONALIZE", "הגדרות", "התאם את Mosaic Fit לטעם שלך")
+        Header(palette, "PERSONALIZE", "הגדרות", "התאם את Mosaic Fit לטעם וליעדים שלך")
+        SectionTitle("יעדים יומיים")
+        GlowCard(palette) {
+            Text("היעדים נשמרים מקומית במכשיר ומשמשים לחישוב ההתקדמות במסך היום.", color = palette.muted)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = calorieGoalText,
+                onValueChange = { calorieGoalText = it.filter(Char::isDigit) },
+                label = { Text("יעד קלוריות יומי") },
+                suffix = { Text("קק״ל") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = proteinGoalText,
+                onValueChange = { proteinGoalText = it.filter(Char::isDigit) },
+                label = { Text("יעד חלבון יומי") },
+                suffix = { Text("גרם") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(14.dp))
+            Button(
+                enabled = validGoals,
+                onClick = {
+                    onDailyCalorieGoalChanged(requireNotNull(calorieValue))
+                    onDailyProteinGoalChanged(requireNotNull(proteinValue))
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = palette.primary,
+                    contentColor = palette.background
+                )
+            ) {
+                Text("שמירת יעדים", fontWeight = FontWeight.Bold)
+            }
+        }
+
         SectionTitle("ערכת צבעים")
         Themes.forEach { option ->
             Card(
@@ -362,6 +486,24 @@ private fun ThemeDot(color: Color) {
             .size(24.dp)
             .background(color, CircleShape)
             .border(1.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+    )
+}
+
+internal data class GoalProgress(
+    val consumed: Double,
+    val goal: Double,
+    val remaining: Double,
+    val fraction: Float
+)
+
+internal fun calculateGoalProgress(consumed: Double, goal: Double): GoalProgress {
+    val safeConsumed = consumed.coerceAtLeast(0.0)
+    val safeGoal = goal.coerceAtLeast(1.0)
+    return GoalProgress(
+        consumed = safeConsumed,
+        goal = safeGoal,
+        remaining = (safeGoal - safeConsumed).coerceAtLeast(0.0),
+        fraction = (safeConsumed / safeGoal).coerceIn(0.0, 1.0).toFloat()
     )
 }
 
