@@ -16,7 +16,7 @@ import java.time.ZoneId
 class FitMealJournal(context: Context) {
     private val localJournal = MealJournal(context)
 
-    suspend fun save(analysis: MealAnalysis) = localJournal.save(analysis)
+    suspend fun save(analysis: MealAnalysis): MealAnalysis = localJournal.save(analysis)
 
     suspend fun allMeals(): List<MealAnalysis> = localJournal.allMeals()
 
@@ -25,5 +25,8 @@ class FitMealJournal(context: Context) {
         zoneId: ZoneId = ZoneId.systemDefault()
     ): List<MealAnalysis> = localJournal.mealsFor(date, zoneId)
 
-    suspend fun delete(analysisId: String) = localJournal.delete(analysisId)
+    suspend fun revisionsFor(mealId: String): List<MealAnalysis> =
+        localJournal.revisionsFor(mealId)
+
+    suspend fun delete(analysis: MealAnalysis) = localJournal.delete(analysis)
 }

@@ -33,7 +33,8 @@ import life.mosaic.fit.data.NutritionEstimate
 
 internal data class SavedMealEditItem(
     val name: String,
-    val quantity: String
+    val quantity: String,
+    val componentId: String? = null
 )
 
 internal fun applySavedMealEdit(
@@ -43,7 +44,14 @@ internal fun applySavedMealEdit(
 ): MealAnalysis {
     val editedItems = items
         .filter { it.name.isNotBlank() }
-        .map { MealItem(it.name.trim(), it.quantity.trim(), 1.0) }
+        .map {
+            MealItem(
+                name = it.name.trim(),
+                estimatedQuantity = it.quantity.trim(),
+                confidence = 1.0,
+                componentId = it.componentId
+            )
+        }
 
     require(editedItems.isNotEmpty()) { "At least one meal item is required" }
 
@@ -146,7 +154,15 @@ private fun SavedMealEditor(
 ) {
     val items = remember(initial.analysisId) {
         mutableStateListOf<SavedMealEditItem>().apply {
-            addAll(initial.items.map { SavedMealEditItem(it.name, it.estimatedQuantity) })
+            addAll(
+                initial.items.map {
+                    SavedMealEditItem(
+                        name = it.name,
+                        quantity = it.estimatedQuantity,
+                        componentId = it.componentId
+                    )
+                }
+            )
             if (isEmpty()) add(SavedMealEditItem("", ""))
         }
     }

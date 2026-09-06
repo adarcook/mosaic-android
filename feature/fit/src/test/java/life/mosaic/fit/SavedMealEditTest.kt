@@ -9,11 +9,12 @@ import org.junit.Test
 
 class SavedMealEditTest {
     @Test
-    fun `editing keeps identity and timestamp while preserving original values`() {
+    fun `editing keeps identity timestamp component id and original values`() {
+        val componentId = "11111111-1111-1111-1111-111111111111"
         val original = MealAnalysis(
             analysisId = "meal-123",
             status = "confirmed",
-            items = listOf(MealItem("Chicken", "200 g", 0.72)),
+            items = listOf(MealItem("Chicken", "200 g", 0.72, componentId)),
             nutrition = NutritionEstimate(400, 45.0, 10.0, 18.0),
             assumptions = listOf("estimated portion"),
             confirmationQuestions = emptyList(),
@@ -22,7 +23,7 @@ class SavedMealEditTest {
 
         val edited = applySavedMealEdit(
             initial = original,
-            items = listOf(SavedMealEditItem("Chicken thigh", "220 g")),
+            items = listOf(SavedMealEditItem("Chicken thigh", "220 g", componentId)),
             nutrition = NutritionEstimate(520, 55.0, 8.0, 28.0)
         )
 
@@ -31,6 +32,7 @@ class SavedMealEditTest {
         assertEquals("confirmed", edited.status)
         assertEquals("Chicken thigh", edited.items.single().name)
         assertEquals("220 g", edited.items.single().estimatedQuantity)
+        assertEquals(componentId, edited.items.single().componentId)
         assertEquals(520, edited.nutrition.caloriesKcal)
         assertEquals(original.items, edited.originalItems)
         assertEquals(original.nutrition, edited.originalNutrition)

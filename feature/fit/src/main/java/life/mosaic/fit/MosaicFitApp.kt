@@ -84,9 +84,17 @@ internal fun MosaicFitRoot(
 
     fun saveMeal(meal: MealAnalysis) {
         scope.launch {
-            withContext(Dispatchers.IO) { journal.save(meal) }
-            val updatedMeals = (meals.filterNot { it.analysisId == meal.analysisId } + meal)
-                .sortedByDescending { it.createdAtEpochMillis }
+            val persisted = withContext(Dispatchers.IO) { journal.save(meal) }
+            val persistedMealId = persisted.localRecord?.mealId
+            val updatedMeals = (
+                meals.filterNot { existing ->
+                    if (persistedMealId != null) {
+                        existing.localRecord?.mealId == persistedMealId
+                    } else {
+                        existing.analysisId == persisted.analysisId
+                    }
+                } + persisted
+            ).sortedByDescending { it.createdAtEpochMillis }
             meals.clear()
             meals.addAll(updatedMeals)
             destination = AppDestination.Today
@@ -95,8 +103,15 @@ internal fun MosaicFitRoot(
 
     fun deleteMeal(meal: MealAnalysis) {
         scope.launch {
-            withContext(Dispatchers.IO) { journal.delete(meal.analysisId) }
-            meals.removeAll { it.analysisId == meal.analysisId }
+            withContext(Dispatchers.IO) { journal.delete(meal) }
+            val mealId = meal.localRecord?.mealId
+            meals.removeAll { existing ->
+                if (mealId != null) {
+                    existing.localRecord?.mealId == mealId
+                } else {
+                    existing.analysisId == meal.analysisId
+                }
+            }
         }
     }
 
