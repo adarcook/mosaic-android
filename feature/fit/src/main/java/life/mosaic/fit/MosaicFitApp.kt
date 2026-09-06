@@ -57,7 +57,6 @@ import life.mosaic.fit.data.NutritionEstimate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun MosaicFitRoot(
@@ -86,9 +85,18 @@ internal fun MosaicFitRoot(
     fun saveMeal(meal: MealAnalysis) {
         scope.launch {
             withContext(Dispatchers.IO) { journal.save(meal) }
-            meals.removeAll { it.analysisId == meal.analysisId }
-            meals.add(0, meal)
+            val updatedMeals = (meals.filterNot { it.analysisId == meal.analysisId } + meal)
+                .sortedByDescending { it.createdAtEpochMillis }
+            meals.clear()
+            meals.addAll(updatedMeals)
             destination = AppDestination.Today
+        }
+    }
+
+    fun deleteMeal(meal: MealAnalysis) {
+        scope.launch {
+            withContext(Dispatchers.IO) { journal.delete(meal.analysisId) }
+            meals.removeAll { it.analysisId == meal.analysisId }
         }
     }
 
@@ -113,7 +121,9 @@ internal fun MosaicFitRoot(
                     loading = loadingHistory,
                     dailyCalorieGoal = dailyCalorieGoal,
                     dailyProteinGoalG = dailyProteinGoalG,
-                    onAddMeal = { destination = AppDestination.Analyze }
+                    onAddMeal = { destination = AppDestination.Analyze },
+                    onSaveMeal = ::saveMeal,
+                    onDeleteMeal = ::deleteMeal
                 )
                 AppDestination.Analyze -> AnalyzeMealScreen(
                     palette = palette,
@@ -168,7 +178,9 @@ private fun TodayScreen(
     loading: Boolean,
     dailyCalorieGoal: Int,
     dailyProteinGoalG: Int,
-    onAddMeal: () -> Unit
+    onAddMeal: () -> Unit,
+    onSaveMeal: (MealAnalysis) -> Unit,
+    onDeleteMeal: (MealAnalysis) -> Unit
 ) {
     val meals = allMeals.filter { it.localDate() == LocalDate.now() }
     val nutrition = meals.fold(NutritionEstimate(0, 0.0, 0.0, 0.0)) { total, meal ->
@@ -209,7 +221,14 @@ private fun TodayScreen(
             loading -> CircularProgressIndicator(color = palette.primary)
             meals.isEmpty() -> EmptyMealCard(palette, onAddMeal)
             else -> {
-                meals.forEach { SavedMealCard(palette, it) }
+                meals.forEach { meal ->
+                    SavedMealCard(
+                        palette = palette,
+                        meal = meal,
+                        onSave = onSaveMeal,
+                        onDelete = onDeleteMeal
+                    )
+                }
                 PrimaryButton(palette, "הוספת ארוחה נוספת", onAddMeal)
             }
         }
@@ -366,28 +385,6 @@ private fun SettingsScreen(
 }
 
 @Composable
-private fun SavedMealCard(palette: ThemePalette, meal: MealAnalysis) {
-    GlowCard(palette) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.weight(1f)) {
-                Text(meal.items.firstOrNull()?.name ?: "ארוחה שנותחה", fontWeight = FontWeight.Bold)
-                Text(meal.formattedTime(), color = palette.muted)
-            }
-            Text("${meal.nutrition.caloriesKcal} קק״ל", fontWeight = FontWeight.Bold)
-        }
-        Text(
-            "חלבון ${formatNumber(meal.nutrition.proteinG)} ג׳  •  " +
-                "פחמימות ${formatNumber(meal.nutrition.carbohydratesG)} ג׳  •  " +
-                "שומן ${formatNumber(meal.nutrition.fatG)} ג׳",
-            color = palette.muted
-        )
-        if (meal.userEdited) {
-            Text("נערכה ידנית", color = palette.success, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
 internal fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier
@@ -474,8 +471,8 @@ private fun PrimaryButton(palette: ThemePalette, label: String, onClick: () -> U
 private fun EmptyMealCard(palette: ThemePalette, onAddMeal: () -> Unit) {
     GlowCard(palette) {
         Text("עדיין לא נוספה ארוחה היום", fontWeight = FontWeight.Bold)
-        Text("צלם ארוחה ראשונה כדי להתחיל לבנות את הסיכום היומי.", color = palette.muted)
-        PrimaryButton(palette, "צילום ארוחה", onAddMeal)
+        Text("הוסף ארוחה ידנית גם בלי רשת או מחשב ביתי.", color = palette.muted)
+        PrimaryButton(palette, "הוספת ארוחה", onAddMeal)
     }
 }
 
@@ -520,14 +517,9 @@ private operator fun NutritionEstimate.plus(other: NutritionEstimate) = Nutritio
 private fun MealAnalysis.localDate(): LocalDate =
     Instant.ofEpochMilli(createdAtEpochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
 
-private fun MealAnalysis.formattedTime(): String =
-    Instant.ofEpochMilli(createdAtEpochMillis)
-        .atZone(ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("HH:mm"))
-
 private enum class AppDestination(val label: String, val symbol: String) {
     Today("היום", "◉"),
-    Analyze("ניתוח", "✦"),
+    Analyze("הוספה", "✦"),
     Insights("מגמות", "⌁"),
     Settings("הגדרות", "⚙")
 }
