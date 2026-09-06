@@ -48,7 +48,11 @@ fun MosaicAppShell(
     serverUrl: String,
     onServerUrlChanged: (String) -> Unit,
     selectedThemeId: String,
-    onThemeSelected: (String) -> Unit
+    onThemeSelected: (String) -> Unit,
+    dailyCalorieGoal: Int,
+    onDailyCalorieGoalChanged: (Int) -> Unit,
+    dailyProteinGoalG: Int,
+    onDailyProteinGoalChanged: (Int) -> Unit
 ) {
     var destination by remember { mutableStateOf(MosaicDestination.Home) }
 
@@ -92,7 +96,11 @@ fun MosaicAppShell(
                         serverUrl = serverUrl,
                         onServerUrlChanged = onServerUrlChanged,
                         selectedThemeId = selectedThemeId,
-                        onThemeSelected = onThemeSelected
+                        onThemeSelected = onThemeSelected,
+                        dailyCalorieGoal = dailyCalorieGoal,
+                        onDailyCalorieGoalChanged = onDailyCalorieGoalChanged,
+                        dailyProteinGoalG = dailyProteinGoalG,
+                        onDailyProteinGoalChanged = onDailyProteinGoalChanged
                     )
                     MosaicDestination.Training -> TrainingApp()
                     MosaicDestination.Photos -> PhotosApp()
