@@ -31,6 +31,7 @@ class VoicePocActivity : Activity(), RecognitionListener {
     private var recognizer: SpeechRecognizer? = null
     private var foreground = false
     private var ready = false
+    private var pendingStart = true
     private var busy = false
     private var generation = 0
     private var started = 0L
@@ -96,7 +97,10 @@ class VoicePocActivity : Activity(), RecognitionListener {
         ready = true
         retry.isEnabled = foreground
         testVoice.isEnabled = foreground
-        if (foreground) requestConversation()
+        if (foreground && pendingStart) {
+            pendingStart = false
+            requestConversation()
+        }
     }
 
     private fun updateUtterance(id: String?, block: () -> Unit) {
@@ -115,8 +119,13 @@ class VoicePocActivity : Activity(), RecognitionListener {
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, permissions, results)
         if (code != 1) return
-        if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) requestConversation()
-        else fail("נדרשת הרשאת מיקרופון לניסוי. לחץ לניסיון נוסף לאחר אישור ההרשאה.")
+        if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            pendingStart = true
+            if (foreground) {
+                pendingStart = false
+                requestConversation()
+            }
+        } else fail("נדרשת הרשאת מיקרופון לניסוי. לחץ לניסיון נוסף לאחר אישור ההרשאה.")
     }
 
     private fun beginTurn() {
@@ -227,6 +236,10 @@ class VoicePocActivity : Activity(), RecognitionListener {
         super.onResume(); foreground = true
         retry.isEnabled = ready && !busy
         testVoice.isEnabled = ready && !busy
+        if (ready && pendingStart) {
+            pendingStart = false
+            requestConversation()
+        }
     }
     override fun onPause() {
         foreground = false; generation++
