@@ -26,6 +26,10 @@ this experiment. Existing application features retain their existing behavior.
 
 All code, microphone permission and launcher entry are under `app/src/debug`;
 release builds do not include the probe. No new library or model is bundled.
+On this experimental branch the debug application ID is
+`life.mosaic.fit.voicepoc`, so installation is separate from existing Mosaic and
+cannot downgrade its Room database (including an installed PR #21 v4 database).
+The usual Mosaic launcher activity is disabled in the probe's debug manifest.
 
 ## Build and install on Windows
 
@@ -44,7 +48,7 @@ If your local checkout has a Gradle wrapper, use `./gradlew.bat` in place of
 Launch **Mosaic Voice POC** from the phone launcher, or:
 
 ```powershell
-adb shell am start -n life.mosaic.fit/.voicepoc.VoicePocActivity
+adb shell am start -n life.mosaic.fit.voicepoc/life.mosaic.fit.voicepoc.VoicePocActivity
 ```
 
 If the installed TTS engine has no local Hebrew voice, use Android Settings →

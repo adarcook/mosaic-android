@@ -18,6 +18,12 @@ android {
 
     buildFeatures { compose = true }
 
+    // This experimental branch installs alongside Mosaic, avoiding any Room downgrade
+    // if the device already runs the unmerged v4 revision-persistence branch.
+    buildTypes {
+        getByName("debug") { applicationIdSuffix = ".voicepoc" }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
