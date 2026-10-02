@@ -6,6 +6,10 @@ Mosaic Android is designed as one installed app with independently maintained pr
 
 ## Current capabilities
 
+An experimental debug-only [Hebrew voice POC](docs/hebrew-voice-poc.md) checks
+on-device speech recognition and installed local TTS on Pixel before any
+architecture re-baseline. Device verification is pending.
+
 - Photograph and analyze meals
 - Review and correct detected foods and nutrition estimates
 - Store meal history locally with Room
