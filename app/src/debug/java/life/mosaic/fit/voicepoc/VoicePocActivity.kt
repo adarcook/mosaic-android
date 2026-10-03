@@ -132,7 +132,13 @@ class VoicePocActivity : Activity() {
                     val ticker = object : Runnable {
                         override fun run() {
                             if (foreground && turn.get() == id && transcribing) {
-                                status.text = "Whisper Small Q5\nSTT load: $loadMs ms\nמתמלל מקומית… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
+                                val phase = synchronized(nativeLock) { WhisperNative.phase(whisperHandle) }
+                                val stage = when (phase) {
+                                    1 -> "מחשב ייצוג שמע (encoder)"
+                                    2 -> "מפענח מילים (decoder)"
+                                    else -> "מכין שמע"
+                                }
+                                status.text = "ARM FP16 + dotprod\nWhisper Small Q5\nSTT load: $loadMs ms\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
                                 handler.postDelayed(this, 1000)
                             }
                         }
@@ -142,9 +148,10 @@ class VoicePocActivity : Activity() {
                         check(!cancelled()) { "Cancelled" }
                         WhisperNative.transcribe(whisperHandle, pcm).trim()
                     } finally { transcribing = false; handler.removeCallbacks(ticker) }
+                    val nativeTimings = WhisperNative.timings(whisperHandle)
                     val inferenceMs = SystemClock.elapsedRealtime() - start
                     require(text.isNotEmpty()) { "לא התקבל תמלול" }
-                    post(id) { status.append("\nתמלול: $text\nSTT inference: $inferenceMs ms; audio: ${pcm.size / 16000f} s") }
+                    post(id) { status.append("\nתמלול: $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
                 }
                 check(!cancelled()) { "Cancelled" }
                 post(id) { status.append("\nמסנתז תשובת בדיקה ב־BlueTTS…") }

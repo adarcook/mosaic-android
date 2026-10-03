@@ -11,6 +11,11 @@ set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+# Pixel voice POC: enable ARM FP16 vector arithmetic and integer dot products.
+# This debug-only POC requires ARMv8.2 FP16 + dotprod (Pixel 7 and Pixel 10).
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    set(GGML_CPU_ARM_ARCH "armv8.2-a+fp16+dotprod" CACHE STRING "" FORCE)
+endif()
 set(GGML_CPU_KLEIDIAI OFF CACHE BOOL "" FORCE)
 # Reviewed v1.8.3. Fetch build source only; model weights are never bundled.
 FetchContent_Declare(whisper

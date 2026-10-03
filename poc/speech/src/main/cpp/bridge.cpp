@@ -10,12 +10,21 @@ using Clock = std::chrono::steady_clock;
 struct Session {
     std::unique_ptr<whisper_context, decltype(&whisper_free)> ctx{nullptr, whisper_free};
     std::atomic_bool cancelled{false};
+    std::atomic_int phase{0};
     Clock::time_point deadline;
 };
 static Session * session(jlong handle) { return reinterpret_cast<Session *>(handle); }
 static bool should_abort(void *data) {
     auto *s = static_cast<Session *>(data);
     return s->cancelled.load() || Clock::now() >= s->deadline;
+}
+static bool encoder_begin(whisper_context *, whisper_state *, void *data) {
+    auto *s = static_cast<Session *>(data);
+    s->phase = 1;
+    return !should_abort(s);
+}
+static void decoding(whisper_context *, whisper_state *, const whisper_token_data *, int, float *, void *data) {
+    static_cast<Session *>(data)->phase = 2;
 }
 static void no_log(ggml_log_level, const char *, void *) {}
 static void fail(JNIEnv *env, const char *message) {
@@ -38,7 +47,7 @@ Java_life_mosaic_voice_WhisperNative_create(JNIEnv *env, jobject, jstring path) 
 }
 extern "C" JNIEXPORT void JNICALL
 Java_life_mosaic_voice_WhisperNative_prepare(JNIEnv *, jobject, jlong handle) {
-    if (handle) session(handle)->cancelled = false;
+    if (handle) { session(handle)->cancelled = false; session(handle)->phase = 0; }
 }
 extern "C" JNIEXPORT void JNICALL
 Java_life_mosaic_voice_WhisperNative_cancel(JNIEnv *, jobject, jlong handle) {
@@ -70,6 +79,11 @@ Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong hand
     p.print_realtime = false;
     p.print_progress = false;
     p.print_timestamps = false;
+    whisper_reset_timings(s->ctx.get());
+    p.encoder_begin_callback = encoder_begin;
+    p.encoder_begin_callback_user_data = s;
+    p.logits_filter_callback = decoding;
+    p.logits_filter_callback_user_data = s;
     p.abort_callback = should_abort;
     p.abort_callback_user_data = s;
     if (whisper_full(s->ctx.get(), p, audio.data(), audio.size()) != 0 || should_abort(s)) {
@@ -80,4 +94,18 @@ Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong hand
     for (int i = 0; i < whisper_full_n_segments(s->ctx.get()); ++i)
         text += whisper_full_get_segment_text(s->ctx.get(), i);
     return env->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_life_mosaic_voice_WhisperNative_phase(JNIEnv *, jobject, jlong handle) {
+    return handle ? session(handle)->phase.load() : 0;
+}
+extern "C" JNIEXPORT jstring JNICALL
+Java_life_mosaic_voice_WhisperNative_timings(JNIEnv *env, jobject, jlong handle) {
+    if (!handle) return env->NewStringUTF("");
+    const auto *t = whisper_get_timings(session(handle)->ctx.get());
+    std::string result = "encode: " + std::to_string(t->encode_ms) +
+        " ms; decode: " + std::to_string(t->decode_ms + t->batchd_ms + t->prompt_ms) +
+        " ms; sample: " + std::to_string(t->sample_ms) + " ms";
+    return env->NewStringUTF(result.c_str());
 }
