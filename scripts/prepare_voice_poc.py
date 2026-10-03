@@ -83,6 +83,7 @@ def main():
     parser.add_argument('--output', type=Path, default=Path('voice-models'))
     parser.add_argument('--stt-only', action='store_true', help='Upgrade only Whisper in an existing BlueTTS pack')
     parser.add_argument('--stt-profile', choices=['small-q5_1', 'small-fp16', 'ivrit-turbo-q5_0'], default='small-q5_1')
+    parser.add_argument('--skip-reference', action='store_true', help='Prepare the Android fixture without host waveform synthesis')
     args = parser.parse_args()
     root = args.output.resolve()
     if args.stt_only:
@@ -130,16 +131,17 @@ def main():
               'mean': tensor(mean), 'std': tensor(std), 'noise': tensor(noise),
               'latent_mask': tensor(latent_mask)}
     (root / 'reply.json').write_text(json.dumps(bundle, ensure_ascii=False), encoding='utf-8')
-    # A deterministic host reference enables waveform/quality comparison to the Android port.
-    np.random.seed(123)
-    reference, _ = tts._infer([phonemes], ['he'], style, total_step=5, speed=1.0, cfg_scale=4.0)
-    reference = np.asarray(reference, dtype=np.float32).reshape(-1)
-    peak = np.max(np.abs(reference))
-    if peak > 0.95:
-        reference *= 0.95 / peak
-    sr = tts.sample_rate
-    import soundfile as sf
-    sf.write(root / 'reference.wav', reference, sr)
+    if not args.skip_reference:
+        # A deterministic host reference enables waveform/quality comparison to the Android port.
+        np.random.seed(123)
+        reference, _ = tts._infer([phonemes], ['he'], style, total_step=5, speed=1.0, cfg_scale=4.0)
+        reference = np.asarray(reference, dtype=np.float32).reshape(-1)
+        peak = np.max(np.abs(reference))
+        if peak > 0.95:
+            reference *= 0.95 / peak
+        sr = tts.sample_rate
+        import soundfile as sf
+        sf.write(root / 'reference.wav', reference, sr)
     files = [Path(whisper), root / 'reply.json'] + list(blue.glob('*.onnx')) + list(blue.glob('*.onnx.data'))
     manifest = {'blue_revision': BLUE_REV, 'whisper_revision': WHISPER_REV,
                 'host_renikud_revision': RENIKUD_REV,

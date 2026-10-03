@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.WindowManager
 import android.widget.CheckBox
 import android.widget.Button
 import android.widget.LinearLayout
@@ -31,6 +32,8 @@ class VoicePocActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val turn = AtomicInteger()
+    private lateinit var download: Button
+    private var bootstrapAvailable = false
     private lateinit var gpu: CheckBox
     private var gpuBuild = false
     private var loadedGpu = false
@@ -54,6 +57,12 @@ class VoicePocActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         models = File(requireNotNull(getExternalFilesDir(null)), "voice-models")
+        bootstrapAvailable = try { assets.open("voice-bootstrap/index.json").close(); true } catch (_: java.io.IOException) { false }
+        download = Button(this).apply {
+            text = "הורדת מודלים למכשיר (כ־2GB)"
+            isEnabled = bootstrapAvailable
+            setOnClickListener { installModels() }
+        }
         status = TextView(this).apply { textSize = 17f }
         gpuBuild = try { WhisperNative.gpuBuild() } catch (_: LinkageError) { false }
         gpu = CheckBox(this).apply {
@@ -74,7 +83,7 @@ class VoicePocActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
             setPadding(dp(16), dp(48), dp(16), dp(24))
-            addView(talk); addView(stop); addView(accuracy); addView(gpu); addView(voice); addView(status)
+            addView(download); addView(talk); addView(stop); addView(accuracy); addView(gpu); addView(voice); addView(status)
         }
         val scroll = ScrollView(this).apply { addView(layout) }
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
@@ -84,7 +93,7 @@ class VoicePocActivity : Activity() {
         }
         setContentView(scroll)
         ViewCompat.requestApplyInsets(scroll)
-        status.text = "Whisper Small Q5 → BlueTTS 2.5\nתשובה קבועה; ללא LLM.\nמודלים: ${models.path}\nהכן והעתק את חבילת המודלים לפי המסמך ב־PR."
+        status.text = if (bootstrapAvailable) "להתקנה עצמאית: לחץ ‘הורדת מודלים למכשיר’. השאר את המסך פתוח בזמן ההורדה. לאחר ההורדה ניתן לעבוד במצב טיסה." else "Whisper Small Q5 → BlueTTS 2.5\nתשובה קבועה; ללא LLM.\nמודלים: ${models.path}\nהכן והעתק את חבילת המודלים לפי המסמך ב־PR."
     }
 
     private fun requestRecording() {
@@ -101,6 +110,7 @@ class VoicePocActivity : Activity() {
     }
 
     private fun updateButtons() {
+        download.isEnabled = bootstrapAvailable && foreground && !busy
         gpu.isEnabled = gpuBuild && foreground && !busy
         accuracy.isEnabled = foreground && !busy
         talk.isEnabled = foreground && !busy
@@ -208,12 +218,74 @@ class VoicePocActivity : Activity() {
         }
     }
 
+    private fun installModels() {
+        if (busy || !foreground || !bootstrapAvailable) return
+        val id = turn.incrementAndGet()
+        busy = true; updateButtons()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        status.text = "מכין הורדת מודלים… השאר את האפליקציה פתוחה."
+        worker.execute {
+            fun cancelled() = !foreground || turn.get() != id
+            try {
+                val index = JSONObject(assets.open("voice-bootstrap/index.json").bufferedReader().use { it.readText() })
+                val manifest = index.getJSONObject("manifest")
+                val entries = index.getJSONArray("downloads")
+                val specs = (0 until entries.length()).map { i ->
+                    val item = entries.getJSONObject(i)
+                    ModelDownload(item.getString("path"), item.getString("url"), item.getString("sha256"), item.getLong("size"))
+                }
+                val total = specs.sumOf { it.size }
+                models.mkdirs()
+                val needed = specs.sumOf {
+                    val target = VoiceModelInstaller.target(models, it.path)
+                    maxOf(0L, it.size - maxOf(target.length(), File(target.path + ".download").length()))
+                }
+                require(models.usableSpace > needed + 64L * 1024 * 1024) { "אין מספיק מקום פנוי להורדת המודלים" }
+                synchronized(nativeLock) {
+                    if (whisperHandle != 0L) { WhisperNative.release(whisperHandle); whisperHandle = 0L }
+                }
+                verified = false
+                val installer = VoiceModelInstaller(models)
+                var completed = 0L
+                var lastUpdate = 0L
+                for (spec in specs) {
+                    check(!cancelled()) { "Cancelled" }
+                    post(id) { status.text = "מוריד/בודק ${spec.path}…" }
+                    installer.installFile(spec, ::cancelled) { bytes ->
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - lastUpdate >= 500 || bytes == spec.size) {
+                            lastUpdate = now
+                            val percent = (100 * (completed + bytes) / total).toInt()
+                            val mb = (completed + bytes) / (1024 * 1024)
+                            post(id) { status.text = "הורדת מודלים: $percent% ($mb / ${total / (1024 * 1024)} MB)\n${spec.path}\nהשאר את המסך פתוח. ניתן לבטל ולהמשיך בהמשך." }
+                        }
+                    }
+                    completed += spec.size
+                }
+                check(!cancelled()) { "Cancelled" }
+                val reply = assets.open("voice-bootstrap/reply.json").use { it.readBytes() }
+                installer.commitFixture(reply, manifest.getJSONObject("files").getString("reply.json"), manifest.toString().toByteArray(Charsets.UTF_8))
+                verifyModels()
+                post(id) { status.text = "המודלים מוכנים. לחץ ‘דבר בעברית’.\nלתמלול המואץ סמן GPU; מצב דיוק נשאר מסומן.\nמכאן ניתן לעבוד גם במצב טיסה." }
+            } catch (e: Exception) {
+                post(id) { status.text = "ההתקנה נעצרה: ${e.message}\nלחץ על הורדת מודלים כדי להמשיך. קבצים שהושלמו נשמרו." }
+            } finally {
+                busy = false
+                handler.post { if (!isDestroyed) {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    updateButtons()
+                    if (foreground && turn.get() != id) status.text = "ההורדה בוטלה. לחץ ‘הורדת מודלים’ כדי להמשיך."
+                } }
+            }
+        }
+    }
+
     private fun checkModelFiles(): Boolean {
         val missing = VoiceModelFiles.missing(models)
         if (missing.isEmpty()) return true
         status.text = "חבילת המודלים טרם הותקנה או שההעתקה לא הושלמה.\n" +
             "התקנת ה־APK אינה כוללת את המודלים.\n" +
-            "במחשב: הפעל scripts/prepare_voice_poc.py, ואז העתק את voice-models דרך adb לפי docs/hebrew-voice-poc.md.\n" +
+            (if (bootstrapAvailable) "לחץ ‘הורדת מודלים למכשיר’. אין צורך במחשב.\n" else "במחשב: הפעל scripts/prepare_voice_poc.py והעתק דרך adb.\n") +
             "יעד: ${models.path}\nקבצים חסרים:\n${missing.joinToString("\n")}"
         return false
     }

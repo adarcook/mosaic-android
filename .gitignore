@@ -23,3 +23,6 @@ keystore.properties
 Thumbs.db
 
 __pycache__/
+
+# Generated bootstrap fixture/index are CI artifacts, not model weights in Git.
+app/src/debug/assets/voice-bootstrap/

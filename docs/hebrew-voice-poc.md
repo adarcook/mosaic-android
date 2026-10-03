@@ -256,3 +256,29 @@ GPU graph submissions; the inference budget is cooperative, not a hard timeout.
 Return to CPU by unchecking GPU, or run the normal Android Studio debug build.
 Pixel Vulkan compatibility and acceleration remain unverified until the device
 trial. Neither TPU nor NPU execution is implemented by this experiment.
+
+## Standalone installation from the Pixel
+
+CI now builds `voice-mobile-vulkan-apk`, a separately installed debug application
+`life.mosaic.fit.voicepoc.mobile`, labeled **Mosaic Voice Mobile**. Its APK includes
+only the fixed BlueTTS reply fixture and a checksum-pinned HTTPS model download
+index. Tap the model download button to install approximately 2 GB of public
+weights directly from Hugging Face. Keep the app foreground; the screen stays
+awake while downloading. Cancellation/network interruption preserves partial
+files; tapping again resumes validated ranges and skips verified complete files.
+After each complete model passes size/SHA-256 validation, the reply and manifest
+are committed. Thereafter speech stays local and works offline.
+
+The same ivrit.ai Turbo Q5 weights and BlueTTS versions are used. CI prepares the
+fixture on Linux with the pinned BlueTTS package; it does not package model
+weights or run user audio. `emit_mobile_bootstrap.py` verifies host-pack hashes
+before generating the APK assets. Normal Studio builds still use manual packs.
+
+Download and extract the artifact on the phone, then tap `app-debug.apk`. Allow
+installation from the file app if Android requests it. This new package installs
+alongside the existing POC; no computer, ADB, or APK re-signing is needed. Updates
+of the mobile package use the same deliberately PUBLIC debug test key stored as
+`scripts/voice-mobile-test-key.base64`. This key has no production trust and must
+never be used for release signing, accounts, or privileged integrations. The
+mobile package is debug-only. Uninstalling it still removes its models; use APK
+updates rather than uninstalling for subsequent versions.
