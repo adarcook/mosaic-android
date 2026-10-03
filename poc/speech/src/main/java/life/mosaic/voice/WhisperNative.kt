@@ -5,7 +5,7 @@ object WhisperNative {
     fun ensureLoaded() = Unit
     external fun create(modelPath: String): Long
     external fun prepare(handle: Long)
-    external fun transcribe(handle: Long, samples: FloatArray): String
+    external fun transcribe(handle: Long, samples: FloatArray, accurate: Boolean): String
     external fun phase(handle: Long): Int
     external fun timings(handle: Long): String
     external fun cancel(handle: Long)

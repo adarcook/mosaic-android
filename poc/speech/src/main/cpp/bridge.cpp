@@ -58,14 +58,14 @@ Java_life_mosaic_voice_WhisperNative_release(JNIEnv *, jobject, jlong handle) {
     delete session(handle);
 }
 extern "C" JNIEXPORT jstring JNICALL
-Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle, jfloatArray pcm) {
+Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle, jfloatArray pcm, jboolean accurate) {
     auto *s = session(handle);
     if (!s || !s->ctx) { fail(env, "Whisper session is not loaded"); return nullptr; }
     s->deadline = Clock::now() + std::chrono::seconds(30);
     if (should_abort(s)) { fail(env, "Cancelled"); return nullptr; }
     std::vector<float> audio(env->GetArrayLength(pcm));
     env->GetFloatArrayRegion(pcm, 0, audio.size(), audio.data());
-    auto p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    auto p = whisper_full_default_params(accurate ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
     p.n_threads = 4;
     p.language = "he";
     p.detect_language = false;
@@ -75,6 +75,8 @@ Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong hand
     p.single_segment = true;
     p.max_tokens = 96;
     p.greedy.best_of = 1;
+    p.beam_search.beam_size = accurate ? 5 : 1;
+    p.temperature = 0.0f;
     p.temperature_inc = 0.0f; // No repeated decoding retries in the short-command POC.
     p.print_realtime = false;
     p.print_progress = false;

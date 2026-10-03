@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.widget.CheckBox
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -30,6 +31,7 @@ class VoicePocActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val turn = AtomicInteger()
+    private lateinit var accuracy: CheckBox
     private lateinit var status: TextView
     private lateinit var talk: Button
     private lateinit var voice: Button
@@ -50,6 +52,10 @@ class VoicePocActivity : Activity() {
         super.onCreate(savedInstanceState)
         models = File(requireNotNull(getExternalFilesDir(null)), "voice-models")
         status = TextView(this).apply { textSize = 17f }
+        accuracy = CheckBox(this).apply {
+            text = "מצב דיוק (Beam 5) — עשוי לקחת יותר זמן"
+            isChecked = true
+        }
         talk = Button(this).apply { text = "דבר בעברית"; setOnClickListener { requestRecording() } }
         voice = Button(this).apply { text = "בדיקת BlueTTS בלבד"; setOnClickListener { begin(false) } }
         stop = Button(this).apply { text = "סיום משפט"; isEnabled = false; setOnClickListener {
@@ -59,7 +65,7 @@ class VoicePocActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
             setPadding(dp(16), dp(48), dp(16), dp(24))
-            addView(talk); addView(stop); addView(voice); addView(status)
+            addView(talk); addView(stop); addView(accuracy); addView(voice); addView(status)
         }
         val scroll = ScrollView(this).apply { addView(layout) }
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
@@ -86,6 +92,7 @@ class VoicePocActivity : Activity() {
     }
 
     private fun updateButtons() {
+        accuracy.isEnabled = foreground && !busy
         talk.isEnabled = foreground && !busy
         voice.isEnabled = foreground && !busy
         stop.isEnabled = foreground && busy
@@ -97,6 +104,8 @@ class VoicePocActivity : Activity() {
     private fun begin(withMic: Boolean) {
         if (busy || !foreground) return
         if (!checkModelFiles()) return
+        val accurate = accuracy.isChecked
+        val mode = if (accurate) "דיוק (Beam 5)" else "מהיר (Greedy)"
         val id = turn.incrementAndGet()
         busy = true; updateButtons()
         status.text = "בודק חבילת מודלים מקומית…"
@@ -138,7 +147,7 @@ class VoicePocActivity : Activity() {
                                     2 -> "מפענח מילים (decoder)"
                                     else -> "מכין שמע"
                                 }
-                                status.text = "ARM FP16 + dotprod\nWhisper Small Q5\nSTT load: $loadMs ms\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
+                                status.text = "ARM FP16 + dotprod\nWhisper Small Q5 — $mode\nSTT load: $loadMs ms\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
                                 handler.postDelayed(this, 1000)
                             }
                         }
@@ -146,12 +155,12 @@ class VoicePocActivity : Activity() {
                     handler.post(ticker)
                     val text = try {
                         check(!cancelled()) { "Cancelled" }
-                        WhisperNative.transcribe(whisperHandle, pcm).trim()
+                        WhisperNative.transcribe(whisperHandle, pcm, accurate).trim()
                     } finally { transcribing = false; handler.removeCallbacks(ticker) }
                     val nativeTimings = WhisperNative.timings(whisperHandle)
                     val inferenceMs = SystemClock.elapsedRealtime() - start
                     require(text.isNotEmpty()) { "לא התקבל תמלול" }
-                    post(id) { status.append("\nתמלול: $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
+                    post(id) { status.append("\nתמלול ($mode): $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
                 }
                 check(!cancelled()) { "Cancelled" }
                 post(id) { status.append("\nמסנתז תשובת בדיקה ב־BlueTTS…") }
