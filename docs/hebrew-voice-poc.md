@@ -95,6 +95,13 @@ channel/time denormalization math. Device ABI/loading, voice quality, transcript
 accuracy, waveform parity, offline performance and thermal behavior remain pending
 until tested on the Pixel. No successful device result is claimed in this PR.
 
+Host validation: the full model preparation script completed with the pinned
+weights. A separate NumPy/ONNX replay of the Android inference sequence produced
+304,128 finite samples at 44,100 Hz (about 6.9 seconds). Its maximum absolute
+error against the upstream reference WAV was 0.000031, within 16-bit WAV rounding.
+This validates the fixture and inference sequence on the host; it does not
+establish Android runtime or device waveform parity.
+
 ## Sources and license notices
 
 - whisper.cpp v1.8.3: `2eeeba56e9edd762b4b38467bab96c2517163158` (MIT)
@@ -110,6 +117,10 @@ until tested on the Pixel. No successful device result is claimed in this PR.
 - Public voice `libri_male_6209`: source LibriTTS-R (CC BY 4.0, Google LLC),
   documented in the model card. This is not the model card's in-house female voice.
 - ONNX Runtime for Android: https://onnxruntime.ai/docs/tutorials/mobile/
+- Host-only RenikudPlus G2P model: `679c56ca449d41873fb8ff7711ddf7563d28198f`
+  https://huggingface.co/notmax123/RenikudPlus
+  The pinned repository has no optional datastore sidecar, so setup passes the
+  model path explicitly and uses the model's own pronunciation predictions.
 
 Production redistribution and arbitrary-text G2P require reviewing all model,
 frontend and voice terms, plus device validation. This PR remains a personal

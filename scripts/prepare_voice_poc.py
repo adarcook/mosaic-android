@@ -8,10 +8,11 @@ from pathlib import Path
 
 import numpy as np
 from huggingface_hub import hf_hub_download, snapshot_download
-from blue_onnx import BlueTTS, load_voice_style
+from blue_onnx import BlueTTS
 
 BLUE_REV = '468da64b4a51795a7594a3637727dbaf876b6df2'
 WHISPER_REV = '2130c78e4a9cb4914cc4df91a1c3031407789705'  # Resolved and recorded as a full commit in manifest below.
+RENIKUD_REV = '679c56ca449d41873fb8ff7711ddf7563d28198f'
 REPLY = 'שמעתי אותך. זו תשובת הבדיקה של מוזאיק בעברית. נשארו לך ארבעים ושניים גרם חלבון. זה נתון לדוגמה בלבד.'
 
 
@@ -32,7 +33,11 @@ def main():
     whisper = hf_hub_download('ivrit-ai/whisper-large-v3-turbo-ggml', 'ggml-model.bin',
                              revision=WHISPER_REV, local_dir=root / 'whisper')
     print('Preparing fixed Hebrew pronunciation on the host; synthesis will run on Android.')
-    engine = BlueTTS(onnx_dir=str(blue), style_json=str(blue / 'voices/libri_male_6209.json'))
+    # Host-only G2P: this revision has no optional datastore.json. Pass an
+    # explicit model path so RenikudPlus does not request that absent sidecar.
+    renikud = hf_hub_download('notmax123/RenikudPlus', 'model.onnx', revision=RENIKUD_REV)
+    engine = BlueTTS(onnx_dir=str(blue), style_json=str(blue / 'voices/libri_male_6209.json'),
+                     renikud_path=renikud)
     tts = engine.tts
     phonemes = tts.g2p.phonemize(REPLY, lang='he')
     ids, mask = tts.text_processor([phonemes], ['he'])
@@ -63,6 +68,7 @@ def main():
     sf.write(root / 'reference.wav', reference, sr)
     files = [Path(whisper), root / 'reply.json'] + list(blue.glob('*.onnx')) + list(blue.glob('*.onnx.data'))
     manifest = {'blue_revision': BLUE_REV, 'whisper_revision': WHISPER_REV,
+                'host_renikud_revision': RENIKUD_REV,
                 'files': {p.relative_to(root).as_posix(): hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
                           for p in files}}
     (root / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
