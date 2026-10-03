@@ -37,3 +37,6 @@ jobs:
 
       - name: Compile app
         run: gradle :app:assembleDebug
+
+      - name: Run voice tensor math tests
+        run: gradle :app:testDebugUnitTest

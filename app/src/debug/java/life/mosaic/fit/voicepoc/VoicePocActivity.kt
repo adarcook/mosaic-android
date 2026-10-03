@@ -2,253 +2,209 @@ package life.mosaic.fit.voicepoc
 
 import android.Manifest
 import android.app.Activity
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.AudioTrack
+import android.media.MediaRecorder
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.speech.RecognitionListener
-import android.speech.RecognitionSupport
-import android.speech.RecognitionSupportCallback
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
-import java.util.Locale
+import life.mosaic.voice.WhisperNative
+import org.json.JSONObject
+import java.io.File
+import java.security.MessageDigest
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
-/** Disposable debug probe. No domain writes, transcript logs, network fallback or background mic. */
-class VoicePocActivity : Activity(), RecognitionListener {
+/** Experimental one-turn, fully local STT -> fixed-reply neural synthesis. No domain writes. */
+class VoicePocActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
-    private lateinit var diagnostics: TextView
-    private lateinit var retry: Button
-    private lateinit var testVoice: Button
-    private var tts: TextToSpeech? = null
-    private var recognizer: SpeechRecognizer? = null
-    private var foreground = false
-    private var ready = false
-    private var pendingStart = true
-    private var busy = false
-    private var generation = 0
-    private var started = 0L
-    private var ended = 0L
-    private var speakRequested = 0L
-    private var voiceInfo = ""
-    private val timeout = Runnable { fail("תם זמן הניסוי. אפשר לנסות שוב.") }
+    private val worker = Executors.newSingleThreadExecutor()
+    private val turn = AtomicInteger()
+    private lateinit var status: TextView
+    private lateinit var talk: Button
+    private lateinit var voice: Button
+    private lateinit var stop: Button
+    private lateinit var models: File
+    @Volatile private var foreground = false
+    @Volatile private var busy = false
+    @Volatile private var recording = false
+    @Volatile private var mic: AudioRecord? = null
+    @Volatile private var speaker: AudioTrack? = null
+    private var verified = false
+    private val autoStop = Runnable { stopRecording() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        diagnostics = TextView(this).apply { textSize = 18f; text = "בודק קול עברי מקומי…" }
-        retry = Button(this).apply {
-            text = "ניסיון נוסף"; isEnabled = false
-            setOnClickListener { requestConversation() }
-        }
-        testVoice = Button(this).apply {
-            text = "בדיקת קול בלבד"; isEnabled = false
-            setOnClickListener {
-                generation++; busy = true
-                retry.isEnabled = false; isEnabled = false
-                diagnostics.text = "$voiceInfo\nבדיקת קול עברי ללא תמלול"
-                speakReply()
-            }
-        }
+        models = File(requireNotNull(getExternalFilesDir(null)), "voice-models")
+        status = TextView(this).apply { textSize = 17f }
+        talk = Button(this).apply { text = "דבר בעברית"; setOnClickListener { requestRecording() } }
+        voice = Button(this).apply { text = "בדיקת BlueTTS בלבד"; setOnClickListener { begin(false) } }
+        stop = Button(this).apply { text = "סיום משפט"; isEnabled = false; setOnClickListener { stopRecording() } }
         val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(32, 64, 32, 32)
-            addView(diagnostics); addView(retry); addView(testVoice)
+            orientation = LinearLayout.VERTICAL; setPadding(32, 64, 32, 32)
+            addView(talk); addView(stop); addView(voice); addView(status)
         }
-        setContentView(layout)
-        tts = TextToSpeech(this) { status ->
-            // Post because the constructor callback can precede assignment of tts.
-            handler.post { initializeVoice(status) }
-        }
+        setContentView(ScrollView(this).apply { addView(layout) })
+        status.text = "ivrit.ai + whisper.cpp → BlueTTS 2.5\nתשובה קבועה; ללא LLM.\nמודלים: ${models.path}\nהכן והעתק את חבילת המודלים לפי המסמך ב־PR."
     }
 
-    private fun initializeVoice(status: Int) {
-        if (isDestroyed) return
-        val engine = tts
-        if (status != TextToSpeech.SUCCESS || engine == null) {
-            fail("מנוע ההקראה לא זמין."); return
-        }
-        val voice = engine.voices.orEmpty().filter {
-            it.locale.language in setOf("he", "iw") && !it.isNetworkConnectionRequired &&
-                TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features.orEmpty()
-        }.sortedBy { it.name }.firstOrNull()
-        if (voice == null || engine.setVoice(voice) != TextToSpeech.SUCCESS) {
-            fail("אין קול עברי מקומי מותקן. התקן נתוני קול עברי בהגדרות ההקראה ופתח מחדש."); return
-        }
-        voiceInfo = "TTS: ${voice.name}, network=false"
-        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = updateUtterance(utteranceId) {
-                diagnostics.append("\nTTS start: ${SystemClock.elapsedRealtime() - speakRequested} ms")
-            }
-            override fun onDone(utteranceId: String?) = updateUtterance(utteranceId) {
-                finishTurn(); diagnostics.append("\nהניסוי הסתיים. איכות התמלול והקול דורשת בדיקה שלך.")
-            }
-            @Deprecated("Android callback")
-            override fun onError(utteranceId: String?) = updateUtterance(utteranceId) {
-                fail("ההקראה נכשלה. $voiceInfo")
-            }
-        })
-        ready = true
-        retry.isEnabled = foreground
-        testVoice.isEnabled = foreground
-        if (foreground && pendingStart) {
-            pendingStart = false
-            requestConversation()
-        }
-    }
-
-    private fun updateUtterance(id: String?, block: () -> Unit) {
-        handler.post { if (foreground && busy && id == generation.toString()) block() }
-    }
-
-    private fun requestConversation() {
-        if (!ready || !foreground || busy) return
+    private fun requestRecording() {
+        if (busy || !foreground) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
-            return
-        }
-        beginTurn()
+        } else begin(true)
     }
-
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, permissions, results)
-        if (code != 1) return
-        if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            pendingStart = true
-            if (foreground) {
-                pendingStart = false
-                requestConversation()
-            }
-        } else fail("נדרשת הרשאת מיקרופון לניסוי. לחץ לניסיון נוסף לאחר אישור ההרשאה.")
+        if (code == 1) status.text = if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+            "הרשאה אושרה. לחץ ‘דבר בעברית’." else "לא אושרה הרשאת מיקרופון. ניתן לבדוק קול בנפרד."
     }
 
-    private fun beginTurn() {
-        if (Build.VERSION.SDK_INT < 33 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
-            fail("אין שירות תמלול מקומי מתאים. הניסוי דורש Android 13 ומעלה."); return
+    private fun updateButtons() {
+        talk.isEnabled = foreground && !busy
+        voice.isEnabled = foreground && !busy
+        stop.isEnabled = foreground && recording
+    }
+    private fun post(id: Int, action: () -> Unit) {
+        handler.post { if (foreground && turn.get() == id) action() }
+    }
+    private fun begin(withMic: Boolean) {
+        if (busy || !foreground) return
+        val id = turn.incrementAndGet()
+        busy = true; updateButtons()
+        status.text = "בודק חבילת מודלים מקומית…"
+        worker.execute {
+            fun cancelled() = !foreground || turn.get() != id
+            try {
+                verifyModels()
+                check(!cancelled()) { "Cancelled" }
+                if (withMic) {
+                    val pcm = capture(id)
+                    check(!cancelled()) { "Cancelled" }
+                    require(pcm.size >= 8000) { "המשפט קצר מדי. נסה לפחות חצי שנייה." }
+                    post(id) { status.append("\nמתמלל מקומית…") }
+                    val start = SystemClock.elapsedRealtime()
+                    val text = WhisperNative.transcribe(File(models, "whisper/ggml-model.bin").path, pcm).trim()
+                    require(text.isNotEmpty()) { "לא התקבל תמלול" }
+                    post(id) { status.append("\nתמלול: $text\nSTT load+inference: ${SystemClock.elapsedRealtime() - start} ms") }
+                }
+                check(!cancelled()) { "Cancelled" }
+                post(id) { status.append("\nמסנתז תשובת בדיקה ב־BlueTTS…") }
+                val start = SystemClock.elapsedRealtime()
+                val (audio, rate) = BlueSynthesizer(models).synthesize(::cancelled)
+                check(!cancelled()) { "Cancelled" }
+                post(id) { status.append("\nTTS load+synthesis: ${SystemClock.elapsedRealtime() - start} ms\nמשמיע תשובה קבועה (נתוני דוגמה).") }
+                play(audio, rate, ::cancelled)
+                post(id) { status.append("\nהסתיים. בדוק דיוק, קול ומהירות גם במצב טיסה.") }
+            } catch (e: Exception) {
+                post(id) { status.append("\nשגיאה: ${e.message ?: e.javaClass.simpleName}") }
+            } finally {
+                busy = false; recording = false
+                handler.post { if (!isDestroyed) updateButtons() }
+            }
         }
-        generation++
-        val turn = generation
-        busy = true; retry.isEnabled = false; testVoice.isEnabled = false
-        started = 0L; ended = 0L
-        diagnostics.text = "$voiceInfo\nבודק תמיכה מקומית בעברית…"
-        handler.postDelayed(timeout, 30_000)
+    }
+
+    private fun verifyModels() {
+        if (verified) return
+        val file = File(models, "manifest.json")
+        require(file.isFile) { "חבילת המודלים חסרה. הפעל prepare_voice_poc.py והעתק לפי המסמך." }
+        val entries = JSONObject(file.readText()).getJSONObject("files")
+        val required = setOf("reply.json", "whisper/ggml-model.bin", "blue/duration_predictor_style.onnx",
+            "blue/text_encoder.onnx", "blue/vector_estimator.onnx", "blue/vocoder.onnx")
+        require(required.all { entries.has(it) }) { "Manifest incomplete" }
+        for (name in entries.keys()) {
+            val target = File(models, name).canonicalFile
+            require(target.path.startsWith(models.canonicalPath + File.separator) && target.isFile) { "Missing model: $name" }
+            val digest = MessageDigest.getInstance("SHA-256")
+            target.inputStream().use { input ->
+                val buffer = ByteArray(1024 * 1024)
+                while (true) { val n = input.read(buffer); if (n < 0) break; digest.update(buffer, 0, n) }
+            }
+            val hex = digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
+            require(hex == entries.getString(name)) { "Model checksum mismatch: $name" }
+        }
+        verified = true
+    }
+
+    @Suppress("MissingPermission")
+    private fun capture(id: Int): FloatArray {
+        val size = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+        require(size > 0) { "Microphone format unavailable" }
+        val recorder = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
+            AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(size, 8192))
+        val samples = FloatArray(16000 * 12)
+        var count = 0
         try {
-            recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-            recognizer!!.setRecognitionListener(object : RecognitionListener {
-                private fun current() = foreground && busy && generation == turn
-                override fun onReadyForSpeech(params: Bundle?) {
-                    if (current()) this@VoicePocActivity.onReadyForSpeech(params)
-                }
-                override fun onEndOfSpeech() { if (current()) this@VoicePocActivity.onEndOfSpeech() }
-                override fun onResults(results: Bundle?) {
-                    if (current()) this@VoicePocActivity.onResults(results)
-                }
-                override fun onError(error: Int) { if (current()) this@VoicePocActivity.onError(error) }
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "he-IL")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            require(recorder.state == AudioRecord.STATE_INITIALIZED) { "Microphone unavailable" }
+            mic = recorder; recording = true
+            if (!foreground || turn.get() != id) return floatArrayOf()
+            recorder.startRecording()
+            post(id) {
+                status.append("\nדבר עכשיו; לחץ ‘סיום משפט’. עד 12 שניות.")
+                updateButtons(); handler.postDelayed(autoStop, 12_000)
             }
-            recognizer!!.checkRecognitionSupport(intent, mainExecutor, object : RecognitionSupportCallback {
-                override fun onSupportResult(support: RecognitionSupport) {
-                    if (!foreground || !busy || generation != turn) return
-                    val installed = support.installedOnDeviceLanguages
-                    val hebrewInstalled = installed.any {
-                        Locale.forLanguageTag(it.replace('_', '-')).language in setOf("he", "iw")
-                    }
-                    if (!hebrewInstalled) {
-                        fail("עברית אינה מותקנת לתמלול מקומי. installed=$installed\n$voiceInfo")
-                        return
-                    }
-                    diagnostics.append("\nSTT: on-device; installed=$installed")
-                    try { recognizer?.startListening(intent) }
-                    catch (e: RuntimeException) { fail("לא ניתן להתחיל תמלול: ${e.javaClass.simpleName}") }
-                }
-                override fun onError(error: Int) {
-                    if (foreground && busy && generation == turn) fail("בדיקת תמיכת STT נכשלה: $error")
-                }
-            })
-        } catch (e: RuntimeException) {
-            fail("שירות התמלול נכשל: ${e.javaClass.simpleName}")
+            val chunk = ShortArray(1024)
+            while (recording && foreground && turn.get() == id && count < samples.size) {
+                val n = recorder.read(chunk, 0, minOf(chunk.size, samples.size - count), AudioRecord.READ_BLOCKING)
+                if (n < 0) { if (!recording) break else error("Microphone read failed: $n") }
+                for (i in 0 until n) samples[count++] = chunk[i] / 32768f
+            }
+            return samples.copyOf(count)
+        } finally {
+            recording = false; mic = null
+            try { recorder.stop() } catch (_: IllegalStateException) {}
+            recorder.release(); handler.removeCallbacks(autoStop)
+            post(id) { updateButtons() }
         }
     }
-
-    override fun onReadyForSpeech(params: Bundle?) {
-        if (!busy || !foreground) return
-        started = SystemClock.elapsedRealtime()
-        diagnostics.append("\nדבר עכשיו בעברית.")
+    private fun stopRecording() {
+        recording = false; handler.removeCallbacks(autoStop)
+        try { mic?.stop() } catch (_: IllegalStateException) {}
+        updateButtons()
     }
-    override fun onEndOfSpeech() { ended = SystemClock.elapsedRealtime() }
-    override fun onResults(results: Bundle?) {
-        if (!busy || !foreground) return
-        val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-        if (text.isNullOrBlank()) { fail("לא התקבל תמלול."); return }
-        val now = SystemClock.elapsedRealtime()
-        diagnostics.append("\nתמלול: $text\nSTT ready→result: ${now - started} ms")
-        if (ended > 0) diagnostics.append("\nSTT end→result: ${now - ended} ms")
-        recognizer?.destroy(); recognizer = null
-        speakReply()
-    }
-
-    private fun speakReply() {
-        speakRequested = SystemClock.elapsedRealtime()
-        handler.removeCallbacks(timeout)
-        handler.postDelayed(timeout, 30_000)
-        val reply = "שמעתי אותך. זו תשובת הבדיקה של מוזאיק בעברית. נשארו לך ארבעים ושניים גרם חלבון. זה נתון לדוגמה בלבד."
-        if (tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, generation.toString()) != TextToSpeech.SUCCESS) {
-            fail("מנוע ההקראה דחה את הבקשה.")
+    private fun play(audio: FloatArray, rate: Int, cancelled: () -> Boolean) {
+        val track = AudioTrack.Builder()
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            .setAudioFormat(AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .setEncoding(AudioFormat.ENCODING_PCM_FLOAT).build())
+            .setBufferSizeInBytes(maxOf(16384, AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_FLOAT)))
+            .setTransferMode(AudioTrack.MODE_STREAM).build()
+        try {
+            speaker = track
+            if (cancelled()) return
+            track.play()
+            var written = 0
+            while (!cancelled() && written < audio.size) {
+                val n = track.write(audio, written, minOf(2048, audio.size - written), AudioTrack.WRITE_BLOCKING)
+                check(n > 0) { "Playback failed: $n" }; written += n
+            }
+            while (!cancelled() && track.playbackHeadPosition < written) Thread.sleep(20)
+        } finally {
+            speaker = null
+            try { track.stop() } catch (_: IllegalStateException) {}
+            track.release()
         }
     }
-    override fun onError(error: Int) {
-        if (busy && foreground) fail("תמלול נכשל: $error. שגיאות שפה 12/13 מצביעות על תמיכה או מודל חסרים.")
-    }
-    override fun onBeginningOfSpeech() {}
-    override fun onRmsChanged(rmsdB: Float) {}
-    override fun onBufferReceived(buffer: ByteArray?) {}
-    override fun onPartialResults(partialResults: Bundle?) {}
-    override fun onEvent(eventType: Int, params: Bundle?) {}
-
-    private fun finishTurn() {
-        busy = false
-        handler.removeCallbacks(timeout)
-        recognizer?.destroy(); recognizer = null
-        retry.isEnabled = ready && foreground
-        testVoice.isEnabled = ready && foreground
-    }
-    private fun fail(message: String) {
-        finishTurn(); tts?.stop()
-        diagnostics.text = message
-    }
-    override fun onResume() {
-        super.onResume(); foreground = true
-        retry.isEnabled = ready && !busy
-        testVoice.isEnabled = ready && !busy
-        if (ready && pendingStart) {
-            pendingStart = false
-            requestConversation()
-        }
-    }
+    override fun onResume() { super.onResume(); foreground = true; updateButtons() }
     override fun onPause() {
-        foreground = false; generation++
-        finishTurn(); tts?.stop()
+        foreground = false; turn.incrementAndGet(); stopRecording()
+        // Cancel native inference if loaded; no model download or initialization here.
+        if (busy) WhisperNative.cancel()
+        try { speaker?.pause(); speaker?.flush() } catch (_: IllegalStateException) {}
         super.onPause()
     }
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
-        recognizer?.destroy(); tts?.shutdown(); tts = null
+        handler.removeCallbacksAndMessages(null); worker.shutdown()
         super.onDestroy()
     }
 }

@@ -1,98 +1,116 @@
-# Hebrew voice feasibility probe (Pixel 10 Pro)
+# Local Hebrew voice POC — ivrit.ai and BlueTTS
 
-Experimental, debug-only work authorized on 2026-10-02. This is a feasibility
-checkpoint before an architecture re-baseline, not a completed roadmap stage.
-The current architecture remains in force until device results are reviewed.
+User-authorized feasibility checkpoint on the existing `feature/hebrew-voice-poc`
+branch / Draft PR #22. No architecture re-baseline or completed roadmap stage.
+The first device probe found only English installed in Android's on-device STT
+service, and the user judged the built-in Hebrew TTS voice too robotic.
 
-## Scope
+## New behavior
 
-Open **Mosaic Voice POC**, grant microphone permission, say one Hebrew sentence,
-inspect the transient transcript and hear a fixed Hebrew reply. The protein value
-in the reply is explicitly sample data; no meal or memory is created.
+The debug app installs separately as `life.mosaic.fit.voicepoc`. Open **Mosaic
+Voice POC**, tap **דבר בעברית**, grant mic access and tap again. Record up to 12
+seconds and press **סיום משפט**. The app transcribes the microphone's 16 kHz mono
+PCM using the Hebrew-tuned ivrit.ai Whisper Large v3 Turbo model through a pinned
+whisper.cpp JNI bridge, with language `he` explicitly selected. Then BlueTTS 2.5
+runs its acoustic ONNX graphs on-device and plays a fixed Hebrew reply.
 
-The small diagnostics screen is test equipment, not the proposed product UI.
-The experiment uses the installed default Android TTS engine and explicitly
-selects an installed Hebrew voice with `network=false`. Recognition uses
-`createOnDeviceSpeechRecognizer`, checks installed Hebrew language support,
-and fails visibly rather than switching to a cloud recognizer. An available
-on-device service does **not** imply that Hebrew is installed or supported.
+**בדיקת BlueTTS בלבד** tests synthesis without the microphone or transcription.
+Diagnostics show cold model-load plus inference/synthesis times. Every turn loads
+and frees the models; this POC intentionally measures cold behavior, not an
+optimized warm conversational service. CPU inference uses four threads. GPU/NPU
+acceleration, free-form TTS, wake words, barge-in and background activation are
+not implemented. The usual Mosaic launcher is disabled only in this debug probe.
 
-The separate **בדיקת קול בלבד** button tests TTS even when Hebrew STT fails.
-Leaving the activity stops recognition and playback. Transcripts exist only in
-the screen's memory; the probe does not log or persist them. There is no LLM,
-background service, wake word, conversational loop, barge-in or domain write.
-Neither background/locked-phone activation nor Hebrew LLM quality is proven by
-this experiment. Existing application features retain their existing behavior.
+### Important fixed-reply boundary
 
-All code, microphone permission and launcher entry are under `app/src/debug`;
-release builds do not include the probe. No new library or model is bundled.
-On this experimental branch the debug application ID is
-`life.mosaic.fit.voicepoc`, so installation is separate from existing Mosaic and
-cannot downgrade its Room database (including an installed PR #21 v4 database).
-The usual Mosaic launcher activity is disabled in the probe's debug manifest.
+This is real acoustic synthesis on the phone, not playback of a pre-rendered WAV.
+However, the fixed reply's Hebrew pronunciation/token IDs are prepared on the
+host using BlueTTS's G2P frontend. The phone does **not** yet accept arbitrary
+Hebrew text for speech. Preparing G2P input on the host keeps this one-turn probe
+small and lets us assess voice quality and phone synthesis latency before porting
+Renikud and text normalization. The reply explicitly marks protein values as
+sample data. No nutrition, memory or other domain record is written.
 
-## Build and install on Windows
+The model preparation script also generates a host reference WAV using the same
+fixed random noise. This reference is for quality/parity comparison only; the
+phone never reads it. User audio/transcripts are neither persisted nor logged.
+Home stops capture/playback and requests cancellation of native transcription;
+BlueTTS checks cancellation between inference steps. An ONNX call already running
+may finish in the worker before its resources can be freed, but its result is not
+played after the activity is left. Keep the app foreground during the probe.
 
-From the existing checkout (do not uninstall Mosaic or clear its data):
+## Prepare models once on Windows (network required only for setup)
+
+Use Python **3.12**, Git and ADB. The public model download is several GB; leave
+ample disk space. Do not add weights or generated packs to Git. Run from the
+repository root in PowerShell:
 
 ```powershell
 git fetch origin
 git switch feature/hebrew-voice-poc
-gradle :app:assembleDebug
-gradle :app:installDebug
+git pull --ff-only
+py -3.12 -m venv .voice-poc-venv
+.\.voice-poc-venv\Scripts\python.exe -m pip install "git+https://github.com/maxmelichov/BlueTTS.git@0e38dbf08ed53f85863d1eab092bd9572c53a503" huggingface-hub
+.\.voice-poc-venv\Scripts\python.exe scripts\prepare_voice_poc.py
+.\gradlew.bat :app:installDebug
 ```
 
-If your local checkout has a Gradle wrapper, use `./gradlew.bat` in place of
-`gradle`. The repository CI uses Gradle 8.9 / Java 17 / Android SDK 35.
+Without a local Gradle wrapper, use Gradle 8.9. Android Studio may request NDK
+27.0.12077973 and CMake 3.22.1. The first native build fetches whisper.cpp v1.8.3
+at an exact commit. Only the debug app links this native module / ONNX dependency;
+release APKs exclude the probe and its mic permission.
 
-Launch **Mosaic Voice POC** from the phone launcher, or:
+Launch the probe once to create its app-specific external directory. Copy the
+pack (app must be stopped during replacement):
 
 ```powershell
+adb shell am force-stop life.mosaic.fit.voicepoc
+adb shell mkdir -p /sdcard/Android/data/life.mosaic.fit.voicepoc/files
+adb push voice-models /sdcard/Android/data/life.mosaic.fit.voicepoc/files/
 adb shell am start -n life.mosaic.fit.voicepoc/life.mosaic.fit.voicepoc.VoicePocActivity
 ```
 
-If the installed TTS engine has no local Hebrew voice, use Android Settings →
-Text-to-speech output → engine settings → install voice data, where supported,
-then reopen the probe. Downloading voice data is setup, not evidence that
-synthesis subsequently works offline. If Hebrew STT is missing, record the
-reported installed languages/error; keyboard dictation availability alone is
-not evidence for this API. Model provisioning or a bundled STT is a follow-up.
+The app verifies SHA-256 hashes from the generated manifest once per process,
+then uses only local files. It never fetches speech models or sends audio to a
+server. The setup pack uses exact upstream model revisions, a public LibriTTS
+reference voice, a fixed reply, and matched stats/vocabulary. Model integrity
+checks detect interrupted copies; they are not a security signature against an
+attacker able to modify both the pack and manifest.
 
-## Device acceptance gate
+## Acceptance / validation
 
-First prepare any voice data with connectivity. Then enable airplane mode and
-explicitly disable Wi-Fi and mobile data. Keep media volume audible.
+1. Try `כמה חלבון נשאר לי היום?`, `אכלתי מאתיים גרם עוף ושתי ביצים`,
+   and `מחר אני רוצה לשחות`. Compare actual transcripts to what was spoken.
+2. Test BlueTTS by itself and compare its Hebrew reply against `voice-models/reference.wav`.
+3. Enable airplane mode, explicitly turn off Wi-Fi, and repeat both tests.
+4. Record cold load/inference timings, voice quality, transcript errors and any
+   heat. A 16 GB phone is not evidence of acceptable latency.
+5. Deny microphone permission; TTS-only must still work. Press Home during
+   capture, transcription, synthesis and playback; no delayed speech should occur.
+6. Reopen and retry; rotate the device and ensure the old activity does not play
+   audio. The UI is temporary test equipment, not the proposed product UI.
 
-1. Open the probe, allow mic access and speak: `כמה חלבון נשאר לי היום?`
-2. Repeat with `אכלתי מאתיים גרם עוף ושתי ביצים` and `מחר אני רוצה לשחות`.
-3. Compare each transcript to what was said and rate the Hebrew reply for
-   pronunciation and intelligibility, especially the number 42.
-4. Record `STT ready→result`, `STT end→result` where present, `TTS start`, selected
-   voice name and any error. TTS start is a service callback, not a measurement
-   of acoustic speaker latency. No language support is claimed before this run.
-5. Press Home while listening and while speaking; both must stop. Reopen and
-   press retry. Deny microphone permission once and verify a clear error.
-6. Test **בדיקת קול בלבד** independently, including if recognition is unavailable.
+CI compiles the native bridge and APK, runs existing Fit tests, and tests CFG and
+channel/time denormalization math. Device ABI/loading, voice quality, transcription
+accuracy, waveform parity, offline performance and thermal behavior remain pending
+until tested on the Pixel. No successful device result is claimed in this PR.
 
-Record results locally; do not commit personal transcripts:
+## Sources and license notices
 
-| Check | Result |
-|---|---|
-| Android version / speech-engine version | Pending device test |
-| Local Hebrew STT available | Pending device test |
-| Three phrase accuracy | Pending device test |
-| Local Hebrew voice / quality | Pending device test |
-| Latency measurements | Pending device test |
-| Fully offline run | Pending device test |
-| Home / permission / retry behavior | Pending device test |
+- whisper.cpp v1.8.3: `2eeeba56e9edd762b4b38467bab96c2517163158` (MIT)
+  https://github.com/ggml-org/whisper.cpp
+- ivrit.ai GGML weights: `2130c78e4a9cb4914cc4df91a1c3031407789705` (Apache-2.0)
+  https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml
+- BlueTTS ONNX bundle: `468da64b4a51795a7594a3637727dbaf876b6df2`
+  https://huggingface.co/notmax123/BlueTTS2.5-onnx
+- Acoustic inference port derived from BlueTTS (MIT), copyright its contributors:
+  https://github.com/maxmelichov/BlueTTS
+  Keep its license notice with redistributed implementations; see
+  `app/src/debug/assets/blue-tts-license.txt`.
+- Public voice `libri_male_6209`: source LibriTTS-R (CC BY 4.0, Google LLC),
+  documented in the model card. This is not the model card's in-house female voice.
+- ONNX Runtime for Android: https://onnxruntime.ai/docs/tutorials/mobile/
 
-A positive result supports trying an on-device conversational slice. A negative
-result identifies which speech component needs an alternative; it does not
-decide the entire Mosaic architecture.
-
-## API references
-
-- https://developer.android.com/reference/android/speech/SpeechRecognizer
-- https://developer.android.com/reference/android/speech/RecognitionSupport
-- https://developer.android.com/reference/android/speech/tts/Voice
-- https://developer.android.com/reference/android/speech/tts/TextToSpeech
+Production redistribution and arbitrary-text G2P require reviewing all model,
+frontend and voice terms, plus device validation. This PR remains a personal
+feasibility experiment.

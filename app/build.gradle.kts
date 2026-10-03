@@ -33,6 +33,9 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    debugImplementation(project(":poc:speech"))
+    debugImplementation("com.microsoft.onnxruntime:onnxruntime-android:1.24.3")
     implementation(project(":core:model"))
     implementation(project(":core:settings"))
     implementation(project(":feature:fit"))

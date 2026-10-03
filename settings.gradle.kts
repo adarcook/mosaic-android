@@ -16,6 +16,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "MosaicAndroid"
 include(":app")
+include(":poc:speech")
 include(":core:model")
 include(":core:database")
 include(":core:data")
