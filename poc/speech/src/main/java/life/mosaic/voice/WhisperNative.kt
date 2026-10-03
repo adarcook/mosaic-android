@@ -3,7 +3,8 @@ package life.mosaic.voice
 object WhisperNative {
     init { System.loadLibrary("mosaic_whisper") }
     fun ensureLoaded() = Unit
-    external fun create(modelPath: String): Long
+    external fun create(modelPath: String, useGpu: Boolean): Long
+    external fun gpuBuild(): Boolean
     external fun prepare(handle: Long)
     external fun transcribe(handle: Long, samples: FloatArray, accurate: Boolean, budgetSeconds: Int): String
     external fun phase(handle: Long): Int

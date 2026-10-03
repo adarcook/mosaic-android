@@ -17,6 +17,28 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
     set(GGML_CPU_ARM_ARCH "armv8.2-a+fp16+dotprod" CACHE STRING "" FORCE)
 endif()
 set(GGML_CPU_KLEIDIAI OFF CACHE BOOL "" FORCE)
+# Optional GPU experiment. Android uses the NDK loader and shader compiler;
+# pin current C++ Vulkan headers separately from the NDK's older headers.
+if(GGML_VULKAN)
+    FetchContent_Declare(vulkan_headers
+        GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+        GIT_TAG 1d9bcc9af77d93ba355b15994b9f82a130e9df3a)
+    FetchContent_MakeAvailable(vulkan_headers)
+    set(Vulkan_INCLUDE_DIR "${vulkan_headers_SOURCE_DIR}/include" CACHE PATH "" FORCE)
+    find_library(ANDROID_VULKAN_LOADER vulkan REQUIRED)
+    set(Vulkan_LIBRARY "${ANDROID_VULKAN_LOADER}" CACHE FILEPATH "" FORCE)
+    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+        set(SHADER_HOST "windows-x86_64")
+        set(SHADER_SUFFIX ".exe")
+    elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
+        set(SHADER_HOST "darwin-x86_64")
+        set(SHADER_SUFFIX "")
+    else()
+        set(SHADER_HOST "linux-x86_64")
+        set(SHADER_SUFFIX "")
+    endif()
+    set(Vulkan_GLSLC_EXECUTABLE "${ANDROID_NDK}/shader-tools/${SHADER_HOST}/glslc${SHADER_SUFFIX}" CACHE FILEPATH "" FORCE)
+endif()
 # Reviewed v1.8.3. Fetch build source only; model weights are never bundled.
 FetchContent_Declare(whisper
     GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
@@ -39,3 +61,6 @@ endif()
 add_library(mosaic_whisper SHARED bridge.cpp)
 target_compile_features(mosaic_whisper PRIVATE cxx_std_17)
 target_link_libraries(mosaic_whisper PRIVATE whisper)
+if(GGML_VULKAN)
+    target_compile_definitions(mosaic_whisper PRIVATE MOSAIC_VULKAN=1)
+endif()

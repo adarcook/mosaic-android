@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "whisper.h"
+#include "ggml-backend.h"
 
 using Clock = std::chrono::steady_clock;
 struct Session {
@@ -32,14 +33,21 @@ static void fail(JNIEnv *env, const char *message) {
 }
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_life_mosaic_voice_WhisperNative_create(JNIEnv *env, jobject, jstring path) {
+Java_life_mosaic_voice_WhisperNative_create(JNIEnv *env, jobject, jstring path, jboolean use_gpu) {
     whisper_log_set(no_log, nullptr);
     const char *chars = env->GetStringUTFChars(path, nullptr);
     if (!chars) return 0;
     std::string model(chars);
     env->ReleaseStringUTFChars(path, chars);
     auto cp = whisper_context_default_params();
-    cp.use_gpu = false;
+#ifndef MOSAIC_VULKAN
+    if (use_gpu) { fail(env, "This APK has no Vulkan backend"); return 0; }
+#endif
+    if (use_gpu && !ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU)) {
+        fail(env, "No compatible Vulkan GPU found; switch off GPU to use CPU"); return 0;
+    }
+    cp.use_gpu = use_gpu;
+    cp.flash_attn = true;
     auto s = std::make_unique<Session>();
     s->ctx.reset(whisper_init_from_file_with_params(model.c_str(), cp));
     if (!s->ctx) { fail(env, "Could not load the local Whisper model"); return 0; }
@@ -113,4 +121,13 @@ Java_life_mosaic_voice_WhisperNative_timings(JNIEnv *env, jobject, jlong handle)
         " ms; decode: " + std::to_string(t->decode_ms + t->batchd_ms + t->prompt_ms) +
         " ms; sample: " + std::to_string(t->sample_ms) + " ms";
     return env->NewStringUTF(result.c_str());
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_life_mosaic_voice_WhisperNative_gpuBuild(JNIEnv *, jobject) {
+#ifdef MOSAIC_VULKAN
+    return JNI_TRUE;
+#else
+    return JNI_FALSE;
+#endif
 }

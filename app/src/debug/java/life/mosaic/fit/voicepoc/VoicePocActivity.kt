@@ -31,6 +31,9 @@ class VoicePocActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val turn = AtomicInteger()
+    private lateinit var gpu: CheckBox
+    private var gpuBuild = false
+    private var loadedGpu = false
     private lateinit var accuracy: CheckBox
     private lateinit var status: TextView
     private lateinit var talk: Button
@@ -52,6 +55,12 @@ class VoicePocActivity : Activity() {
         super.onCreate(savedInstanceState)
         models = File(requireNotNull(getExternalFilesDir(null)), "voice-models")
         status = TextView(this).apply { textSize = 17f }
+        gpuBuild = try { WhisperNative.gpuBuild() } catch (_: LinkageError) { false }
+        gpu = CheckBox(this).apply {
+            text = if (gpuBuild) "ניסוי האצת GPU (Vulkan)" else "GPU זמין ב־APK הניסיוני בלבד"
+            isChecked = false
+            isEnabled = gpuBuild
+        }
         accuracy = CheckBox(this).apply {
             text = "מצב דיוק (Beam 5) — עשוי לקחת יותר זמן"
             isChecked = true
@@ -65,7 +74,7 @@ class VoicePocActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
             setPadding(dp(16), dp(48), dp(16), dp(24))
-            addView(talk); addView(stop); addView(accuracy); addView(voice); addView(status)
+            addView(talk); addView(stop); addView(accuracy); addView(gpu); addView(voice); addView(status)
         }
         val scroll = ScrollView(this).apply { addView(layout) }
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
@@ -92,6 +101,7 @@ class VoicePocActivity : Activity() {
     }
 
     private fun updateButtons() {
+        gpu.isEnabled = gpuBuild && foreground && !busy
         accuracy.isEnabled = foreground && !busy
         talk.isEnabled = foreground && !busy
         voice.isEnabled = foreground && !busy
@@ -104,6 +114,8 @@ class VoicePocActivity : Activity() {
     private fun begin(withMic: Boolean) {
         if (busy || !foreground) return
         if (!checkModelFiles()) return
+        val useGpu = gpu.isChecked
+        val backendLabel = if (useGpu) "Vulkan GPU" else "ARM CPU FP16 + dotprod"
         val accurate = accuracy.isChecked
         val mode = if (accurate) "דיוק (Beam 5)" else "מהיר (Greedy)"
         val id = turn.incrementAndGet()
@@ -126,13 +138,19 @@ class VoicePocActivity : Activity() {
                     }
                     val budgetSeconds = if (profile == "ivrit-turbo-q5_0") 60 else 30
                     val loadStart = SystemClock.elapsedRealtime()
+                    if (whisperHandle != 0L && loadedGpu != useGpu) {
+                        synchronized(nativeLock) {
+                            WhisperNative.release(whisperHandle)
+                            whisperHandle = 0L
+                        }
+                    }
                     val cached = whisperHandle != 0L
                     if (!cached) {
                         post(id) { status.append("\nטוען $modelLabel לזיכרון…") }
                         WhisperNative.ensureLoaded()
-                        val handle = WhisperNative.create(File(models, "whisper/ggml-model.bin").path)
+                        val handle = WhisperNative.create(File(models, "whisper/ggml-model.bin").path, useGpu)
                         check(handle != 0L) { "Whisper load failed" }
-                        synchronized(nativeLock) { whisperHandle = handle }
+                        synchronized(nativeLock) { whisperHandle = handle; loadedGpu = useGpu }
                     }
                     check(!cancelled()) { "Cancelled" }
                     val loadMs = SystemClock.elapsedRealtime() - loadStart
@@ -153,7 +171,7 @@ class VoicePocActivity : Activity() {
                                     2 -> "מפענח מילים (decoder)"
                                     else -> "מכין שמע"
                                 }
-                                status.text = "ARM FP16 + dotprod\n$modelLabel — $mode\nSTT load: $loadMs ms\nמגבלת ניסוי: $budgetSeconds שניות\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
+                                status.text = "$backendLabel\n$modelLabel — $mode\nSTT load: $loadMs ms\nמגבלת ניסוי: $budgetSeconds שניות\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
                                 handler.postDelayed(this, 1000)
                             }
                         }
@@ -166,7 +184,7 @@ class VoicePocActivity : Activity() {
                     val nativeTimings = WhisperNative.timings(whisperHandle)
                     val inferenceMs = SystemClock.elapsedRealtime() - start
                     require(text.isNotEmpty()) { "לא התקבל תמלול" }
-                    post(id) { status.append("\nתמלול ($modelLabel; $mode): $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
+                    post(id) { status.append("\nתמלול ($backendLabel; $modelLabel; $mode): $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
                 }
                 check(!cancelled()) { "Cancelled" }
                 post(id) { status.append("\nמסנתז תשובת בדיקה ב־BlueTTS…") }

@@ -219,3 +219,40 @@ not a production architecture change. If it times out, record that as a failed
 latency result rather than raising the budget repeatedly.
 To revert, prepare `--stt-profile small-fp16` and push the same two files.
 BlueTTS is preserved, and user audio remains local and is not persisted.
+
+## Optional Vulkan GPU experiment
+
+The default Android Studio build remains CPU-only. CI separately builds
+`:app:assembleDebug -PvoiceVulkan=true` on Linux and publishes the
+`voice-poc-vulkan-apk` artifact. This avoids requiring a Windows host C++ compiler
+for the Vulkan shader generator. Native Vulkan headers are pinned, and the shader
+compiler/loader come from the pinned Android NDK. No model conversion/download
+is needed: the experiment uses the existing ivrit.ai Q5 weights and Beam 5.
+
+Download and extract that artifact from the branch's successful Android Build
+run. From the repository root, run:
+
+```powershell
+.\scripts\install_gpu_poc.ps1 -Apk "C:\path\to\app-debug.apk"
+```
+
+The script signs the CI APK with the existing local Android debug key, verifies
+it, and updates the app with `adb install -r`. It never uninstalls the app or
+copies/deletes model files. If PowerShell blocks scripts, use
+`powershell -ExecutionPolicy Bypass -File scripts/install_gpu_poc.ps1 -Apk ...`
+for this invocation. A custom signing configuration requires signing the APK
+with the matching key instead; the script supports the standard debug key only.
+
+GPU is off by default. Enable `ניסוי האצת GPU (Vulkan)` for a measured trial,
+keeping the same model and Beam 5. Switching GPU/CPU recreates the native context
+so cached CPU sessions cannot masquerade as GPU sessions. An unavailable GPU
+returns an error instead of silently selecting CPU. Some unsupported operations
+may still be scheduled on CPU. Shader/driver initialization can increase first
+load time; compare warm encode/inference times and exact transcripts on the same
+speech. GPU numerical differences can affect decoding, so equal accuracy must
+be measured, not assumed. The GPU backend may only observe cancellation between
+GPU graph submissions; the inference budget is cooperative, not a hard timeout.
+
+Return to CPU by unchecking GPU, or run the normal Android Studio debug build.
+Pixel Vulkan compatibility and acceleration remain unverified until the device
+trial. Neither TPU nor NPU execution is implemented by this experiment.
