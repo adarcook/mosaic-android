@@ -174,3 +174,21 @@ establish Android runtime or device waveform parity.
 Production redistribution and arbitrary-text G2P require reviewing all model,
 frontend and voice terms, plus device validation. This PR remains a personal
 feasibility experiment.
+
+## Accuracy comparison: Small FP16 vs Q5
+
+Beam 5 stays selected by default. To test the same multilingual Small model in
+FP16 (487,601,967 bytes), preserving the BlueTTS fixture:
+
+```powershell
+.\.voice-poc-venv\Scripts\python.exe -X utf8 scripts\prepare_voice_poc.py --stt-only --stt-profile small-fp16
+```
+
+Then force-stop the app and push only `whisper/ggml-model.bin` and `manifest.json`
+using the upgrade commands above. The app displays the installed profile and
+per-stage timings. Compare the same Hebrew sentences in a quiet room. Accuracy
+and speed improvement are unverified until measured on the Pixel.
+
+To return to Q5, repeat preparation with `--stt-profile small-q5_1`, then push
+those same two files. Hugging Face caches both downloads on the host.
+FP16 SHA-256: `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`.

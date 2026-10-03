@@ -116,13 +116,14 @@ class VoicePocActivity : Activity() {
                 check(!cancelled()) { "Cancelled" }
                 if (withMic) {
                     val profile = JSONObject(File(models, "manifest.json").readText()).optString("stt_profile")
-                    require(profile == "small-q5_1") {
+                    require(profile in setOf("small-q5_1", "small-fp16")) {
                         "יש לעדכן למודל התמלול הקטן: python -X utf8 scripts/prepare_voice_poc.py --stt-only, ואז להעתיק whisper ו־manifest.json לפיקסל."
                     }
+                    val modelLabel = if (profile == "small-fp16") "Whisper Small FP16" else "Whisper Small Q5"
                     val loadStart = SystemClock.elapsedRealtime()
                     val cached = whisperHandle != 0L
                     if (!cached) {
-                        post(id) { status.append("\nטוען Whisper Small Q5 לזיכרון…") }
+                        post(id) { status.append("\nטוען $modelLabel לזיכרון…") }
                         WhisperNative.ensureLoaded()
                         val handle = WhisperNative.create(File(models, "whisper/ggml-model.bin").path)
                         check(handle != 0L) { "Whisper load failed" }
@@ -147,7 +148,7 @@ class VoicePocActivity : Activity() {
                                     2 -> "מפענח מילים (decoder)"
                                     else -> "מכין שמע"
                                 }
-                                status.text = "ARM FP16 + dotprod\nWhisper Small Q5 — $mode\nSTT load: $loadMs ms\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
+                                status.text = "ARM FP16 + dotprod\n$modelLabel — $mode\nSTT load: $loadMs ms\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
                                 handler.postDelayed(this, 1000)
                             }
                         }
@@ -160,7 +161,7 @@ class VoicePocActivity : Activity() {
                     val nativeTimings = WhisperNative.timings(whisperHandle)
                     val inferenceMs = SystemClock.elapsedRealtime() - start
                     require(text.isNotEmpty()) { "לא התקבל תמלול" }
-                    post(id) { status.append("\nתמלול ($mode): $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
+                    post(id) { status.append("\nתמלול ($modelLabel; $mode): $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
                 }
                 check(!cancelled()) { "Cancelled" }
                 post(id) { status.append("\nמסנתז תשובת בדיקה ב־BlueTTS…") }

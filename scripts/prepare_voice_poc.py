@@ -13,6 +13,8 @@ WHISPER_REV = 'c521a4b02f422512d734391fdf08bb08c0862f68'
 WHISPER_REPO = 'ggerganov/whisper.cpp'
 WHISPER_FILE = 'ggml-small-q5_1.bin'
 WHISPER_SHA256 = 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb'
+WHISPER_FP16_FILE = 'ggml-small.bin'
+WHISPER_FP16_SHA256 = '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b'
 RENIKUD_REV = '679c56ca449d41873fb8ff7711ddf7563d28198f'
 REPLY = 'שמעתי אותך. זו תשובת הבדיקה של מוזאיק בעברית. נשארו לך ארבעים ושניים גרם חלבון. זה נתון לדוגמה בלבד.'
 
@@ -28,11 +30,13 @@ def sha256(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def download_stt(root):
+def download_stt(root, profile="small-q5_1"):
+    filename = WHISPER_FP16_FILE if profile == "small-fp16" else WHISPER_FILE
+    expected = WHISPER_FP16_SHA256 if profile == "small-fp16" else WHISPER_SHA256
     from huggingface_hub import hf_hub_download
-    source = Path(hf_hub_download(WHISPER_REPO, WHISPER_FILE, revision=WHISPER_REV))
-    if sha256(source) != WHISPER_SHA256:
-        raise ValueError('Whisper Small Q5 download checksum mismatch')
+    source = Path(hf_hub_download(WHISPER_REPO, filename, revision=WHISPER_REV))
+    if sha256(source) != expected:
+        raise ValueError('Whisper Small download checksum mismatch')
     target = root / 'whisper' / 'ggml-model.bin'
     target.parent.mkdir(parents=True, exist_ok=True)
     pending = target.with_suffix('.pending')
@@ -41,10 +45,10 @@ def download_stt(root):
     return target
 
 
-def stt_manifest(manifest, whisper):
+def stt_manifest(manifest, whisper, profile="small-q5_1"):
     updated = dict(manifest)
-    updated.update(stt_profile='small-q5_1', whisper_repo=WHISPER_REPO,
-                   whisper_revision=WHISPER_REV, whisper_source_file=WHISPER_FILE)
+    updated.update(stt_profile=profile, whisper_repo=WHISPER_REPO,
+                   whisper_revision=WHISPER_REV, whisper_source_file=WHISPER_FP16_FILE if profile == "small-fp16" else WHISPER_FILE)
     updated['files'] = dict(manifest['files'])
     updated['files']['whisper/ggml-model.bin'] = sha256(whisper)
     return updated
@@ -60,6 +64,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, default=Path('voice-models'))
     parser.add_argument('--stt-only', action='store_true', help='Upgrade only Whisper in an existing BlueTTS pack')
+    parser.add_argument('--stt-profile', choices=['small-q5_1', 'small-fp16'], default='small-q5_1')
     args = parser.parse_args()
     root = args.output.resolve()
     if args.stt_only:
@@ -71,8 +76,8 @@ def main():
         for name in manifest['files']:
             if name != 'whisper/ggml-model.bin' and not (root / name).is_file():
                 parser.error(f'Existing pack is incomplete: {name}')
-        whisper = download_stt(root)
-        write_manifest(root, stt_manifest(manifest, whisper))
+        whisper = download_stt(root, args.stt_profile)
+        write_manifest(root, stt_manifest(manifest, whisper, args.stt_profile))
         print(f'Ready: {root}. Copy whisper/ggml-model.bin and manifest.json to the stopped app.')
         return
     import numpy as np
@@ -82,7 +87,7 @@ def main():
     blue.mkdir(parents=True, exist_ok=True)
     snapshot_download('notmax123/BlueTTS2.5-onnx', revision=BLUE_REV, local_dir=blue,
                       allow_patterns=['*.onnx', '*.onnx.data', '*.npz', '*.json', 'voices/libri_male_6209.json'])
-    whisper = download_stt(root)
+    whisper = download_stt(root, args.stt_profile)
     print('Preparing fixed Hebrew pronunciation on the host; synthesis will run on Android.')
     # Host-only G2P: this revision has no optional datastore.json. Pass an
     # explicit model path so RenikudPlus does not request that absent sidecar.
@@ -122,7 +127,7 @@ def main():
                 'host_renikud_revision': RENIKUD_REV,
                 'files': {p.relative_to(root).as_posix(): sha256(p)
                           for p in files}}
-    write_manifest(root, stt_manifest(manifest, Path(whisper)))
+    write_manifest(root, stt_manifest(manifest, Path(whisper), args.stt_profile))
     print(f'Ready: {root}. Model files remain outside Git. See docs/hebrew-voice-poc.md for adb push.')
 
 

@@ -33,6 +33,21 @@ class SttUpgradeTest(unittest.TestCase):
             self.assertEqual(b'new small model', (root / 'whisper/ggml-model.bin').read_bytes())
             self.assertFalse((root / 'manifest.pending').exists())
 
+    def test_fp16_download_and_manifest_use_matching_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'download.bin'
+            source.write_bytes(b'FP16 model')
+            hub = types.SimpleNamespace(hf_hub_download=lambda *a, **k: str(source))
+            with patch.dict(sys.modules, huggingface_hub=hub), \
+                 patch.object(prep, 'WHISPER_FP16_SHA256', prep.sha256(source)):
+                target = prep.download_stt(root, 'small-fp16')
+            manifest = prep.stt_manifest({'files': {'reply.json': 'preserved'}}, target, 'small-fp16')
+            self.assertEqual('small-fp16', manifest['stt_profile'])
+            self.assertEqual('ggml-small.bin', manifest['whisper_source_file'])
+            self.assertEqual('preserved', manifest['files']['reply.json'])
+            self.assertEqual(prep.sha256(source), manifest['files']['whisper/ggml-model.bin'])
+
     def test_bad_download_keeps_old_model(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
