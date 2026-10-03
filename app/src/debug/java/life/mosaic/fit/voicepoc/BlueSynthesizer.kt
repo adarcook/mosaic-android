@@ -27,7 +27,7 @@ internal class BlueSynthesizer(private val root: File) {
             if (ids != null) tensors["text_ids"] = OnnxTensor.createTensor(env, LongBuffer.wrap(ids), longArrayOf(1, ids.size.toLong()))
             session.run(tensors).use { result ->
                 val out = result[0] as OnnxTensor
-                val buffer = out.floatBuffer.get()
+                val buffer = out.floatBuffer
                 val floats = FloatArray(buffer.remaining()); buffer.get(floats)
                 return Tensor(floats, (out.info as TensorInfo).shape)
             }

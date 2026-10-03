@@ -53,7 +53,12 @@ def main():
     (root / 'reply.json').write_text(json.dumps(bundle, ensure_ascii=False), encoding='utf-8')
     # A deterministic host reference enables waveform/quality comparison to the Android port.
     np.random.seed(123)
-    reference, sr = engine.synthesize(phonemes, text_is_phonemes=True, speed=1.0)
+    reference, _ = tts._infer([phonemes], ['he'], style, total_step=5, speed=1.0, cfg_scale=4.0)
+    reference = np.asarray(reference, dtype=np.float32).reshape(-1)
+    peak = np.max(np.abs(reference))
+    if peak > 0.95:
+        reference *= 0.95 / peak
+    sr = tts.sample_rate
     import soundfile as sf
     sf.write(root / 'reference.wav', reference, sr)
     files = [Path(whisper), root / 'reply.json'] + list(blue.glob('*.onnx')) + list(blue.glob('*.onnx.data'))
