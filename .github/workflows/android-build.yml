@@ -27,13 +27,69 @@ jobs:
           gradle-version: "8.9"
 
       - name: Compile Database module
-        run: gradle :core:database:assembleDebug
+        run: ./gradlew :core:database:assembleDebug
 
       - name: Run Fit unit tests
-        run: gradle :feature:fit:testDebugUnitTest
+        run: ./gradlew :feature:fit:testDebugUnitTest
 
       - name: Compile Photos module
-        run: gradle :feature:photos:assembleDebug
+        run: ./gradlew :feature:photos:assembleDebug
 
       - name: Compile app
-        run: gradle :app:assembleDebug
+        run: ./gradlew :app:assembleDebug
+
+      - name: Test STT model-pack upgrade
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+      - name: Run voice tensor math tests
+        run: ./gradlew :app:testDebugUnitTest
+
+  assemble-vulkan-poc:
+    needs: prepare-mobile-bootstrap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Download bootstrap fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: voice-mobile-bootstrap
+          path: app/src/debug/assets/voice-bootstrap
+      - name: Build standalone mobile Vulkan APK
+        run: ./gradlew :app:assembleDebug -PvoiceVulkan=true -PvoiceMobile=true
+      - name: Test model installer
+        run: ./gradlew :app:testDebugUnitTest -PvoiceVulkan=true -PvoiceMobile=true
+      - name: Upload experimental APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-mobile-vulkan-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  prepare-mobile-bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install host fixture dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "git+https://github.com/maxmelichov/BlueTTS.git@0e38dbf08ed53f85863d1eab092bd9572c53a503" huggingface-hub onnxruntime==1.24.3
+      - name: Prepare pinned mobile model fixture
+        env:
+          HF_HUB_DISABLE_XET: "1"
+        run: |
+          python -X utf8 scripts/prepare_voice_poc.py --stt-profile ivrit-turbo-q5_0 --skip-reference
+          python scripts/emit_mobile_bootstrap.py
+      - name: Upload fixture and download index only
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-mobile-bootstrap
+          path: app/src/debug/assets/voice-bootstrap
+          if-no-files-found: error

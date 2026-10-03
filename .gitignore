@@ -9,6 +9,9 @@ build/
 
 # Local configuration
 local.properties
+voice-models/
+.voice-poc-venv/
+**/.cxx/
 
 # Signing and secrets
 *.jks
@@ -18,3 +21,8 @@ keystore.properties
 # OS files
 .DS_Store
 Thumbs.db
+
+__pycache__/
+
+# Generated bootstrap fixture/index are CI artifacts, not model weights in Git.
+app/src/debug/assets/voice-bootstrap/
