@@ -55,7 +55,11 @@ py -3.12 -m venv .voice-poc-venv
 .\gradlew.bat :app:installDebug
 ```
 
-Without a local Gradle wrapper, use Gradle 8.9. Android Studio may request NDK
+The checked-in wrapper pins Gradle 8.9, matching AGP 8.7.3 and CI. In Android
+Studio's Gradle settings select the wrapper (`gradle-wrapper.properties`) and
+JDK 17. Gradle 9 removes `Project.exec`, which this AGP native-build path needs;
+using a locally generated Gradle 9 wrapper fails with `NoSuchMethodError`.
+Android Studio may request NDK
 27.0.12077973 and CMake 3.22.1. The first native build fetches whisper.cpp v1.8.3
 at an exact commit. Only the debug app links this native module / ONNX dependency;
 release APKs exclude the probe and its mic permission.

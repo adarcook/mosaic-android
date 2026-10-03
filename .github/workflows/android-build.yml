@@ -27,16 +27,16 @@ jobs:
           gradle-version: "8.9"
 
       - name: Compile Database module
-        run: gradle :core:database:assembleDebug
+        run: ./gradlew :core:database:assembleDebug
 
       - name: Run Fit unit tests
-        run: gradle :feature:fit:testDebugUnitTest
+        run: ./gradlew :feature:fit:testDebugUnitTest
 
       - name: Compile Photos module
-        run: gradle :feature:photos:assembleDebug
+        run: ./gradlew :feature:photos:assembleDebug
 
       - name: Compile app
-        run: gradle :app:assembleDebug
+        run: ./gradlew :app:assembleDebug
 
       - name: Run voice tensor math tests
-        run: gradle :app:testDebugUnitTest
+        run: ./gradlew :app:testDebugUnitTest
