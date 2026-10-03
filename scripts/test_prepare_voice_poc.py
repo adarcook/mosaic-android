@@ -48,6 +48,28 @@ class SttUpgradeTest(unittest.TestCase):
             self.assertEqual('preserved', manifest['files']['reply.json'])
             self.assertEqual(prep.sha256(source), manifest['files']['whisper/ggml-model.bin'])
 
+    def test_hebrew_profile_pins_source_and_preserves_tts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'download.bin'
+            source.write_bytes(b'Hebrew model')
+            calls = []
+            def download(repo, filename, **kwargs):
+                calls.append((repo, filename, kwargs['revision']))
+                return str(source)
+            hub = types.SimpleNamespace(hf_hub_download=download)
+            with patch.dict(sys.modules, huggingface_hub=hub), \
+                 patch.object(prep, 'IVRIT_SHA256', prep.sha256(source)):
+                target = prep.download_stt(root, 'ivrit-turbo-q5_0')
+            self.assertEqual([(prep.IVRIT_REPO, prep.IVRIT_FILE, prep.IVRIT_REV)], calls)
+            manifest = prep.stt_manifest({'files': {'reply.json': 'preserved'}}, target, 'ivrit-turbo-q5_0')
+            self.assertEqual(prep.IVRIT_REPO, manifest['whisper_repo'])
+            self.assertEqual('ivrit-turbo-q5_0', manifest['stt_profile'])
+            self.assertEqual('preserved', manifest['files']['reply.json'])
+            reverted = prep.stt_manifest(manifest, target, 'small-fp16')
+            self.assertNotIn('whisper_upstream', reverted)
+            self.assertEqual(prep.WHISPER_REPO, reverted['whisper_repo'])
+
     def test_bad_download_keeps_old_model(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

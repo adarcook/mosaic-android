@@ -116,10 +116,15 @@ class VoicePocActivity : Activity() {
                 check(!cancelled()) { "Cancelled" }
                 if (withMic) {
                     val profile = JSONObject(File(models, "manifest.json").readText()).optString("stt_profile")
-                    require(profile in setOf("small-q5_1", "small-fp16")) {
+                    require(profile in setOf("small-q5_1", "small-fp16", "ivrit-turbo-q5_0")) {
                         "יש לעדכן למודל התמלול הקטן: python -X utf8 scripts/prepare_voice_poc.py --stt-only, ואז להעתיק whisper ו־manifest.json לפיקסל."
                     }
-                    val modelLabel = if (profile == "small-fp16") "Whisper Small FP16" else "Whisper Small Q5"
+                    val modelLabel = when (profile) {
+                        "ivrit-turbo-q5_0" -> "ivrit.ai Turbo Q5 (עברית)"
+                        "small-fp16" -> "Whisper Small FP16"
+                        else -> "Whisper Small Q5"
+                    }
+                    val budgetSeconds = if (profile == "ivrit-turbo-q5_0") 60 else 30
                     val loadStart = SystemClock.elapsedRealtime()
                     val cached = whisperHandle != 0L
                     if (!cached) {
@@ -148,7 +153,7 @@ class VoicePocActivity : Activity() {
                                     2 -> "מפענח מילים (decoder)"
                                     else -> "מכין שמע"
                                 }
-                                status.text = "ARM FP16 + dotprod\n$modelLabel — $mode\nSTT load: $loadMs ms\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
+                                status.text = "ARM FP16 + dotprod\n$modelLabel — $mode\nSTT load: $loadMs ms\nמגבלת ניסוי: $budgetSeconds שניות\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
                                 handler.postDelayed(this, 1000)
                             }
                         }
@@ -156,7 +161,7 @@ class VoicePocActivity : Activity() {
                     handler.post(ticker)
                     val text = try {
                         check(!cancelled()) { "Cancelled" }
-                        WhisperNative.transcribe(whisperHandle, pcm, accurate).trim()
+                        WhisperNative.transcribe(whisperHandle, pcm, accurate, budgetSeconds).trim()
                     } finally { transcribing = false; handler.removeCallbacks(ticker) }
                     val nativeTimings = WhisperNative.timings(whisperHandle)
                     val inferenceMs = SystemClock.elapsedRealtime() - start

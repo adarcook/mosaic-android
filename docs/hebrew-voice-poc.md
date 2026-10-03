@@ -192,3 +192,30 @@ and speed improvement are unverified until measured on the Pixel.
 To return to Q5, repeat preparation with `--stt-profile small-q5_1`, then push
 those same two files. Hugging Face caches both downloads on the host.
 FP16 SHA-256: `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`.
+
+## Hebrew fine-tune trial
+
+`ivrit-turbo-q5_0` uses the Hebrew fine-tuned ivrit.ai Large v3 Turbo model,
+quantized by JoaoZaokk using whisper.cpp's quantizer. This is the family tried
+before CPU optimizations, now Q5_0 rather than the original 1.62 GB FP16 file.
+Source: https://huggingface.co/ivrit-ai/whisper-large-v3-turbo
+Quantized artifact: https://huggingface.co/JoaoZaokk/ivrit-whisper-large-v3-turbo-ggml
+Pinned revision: `7caf56da903afb6adf616b56ac4bbe59485e15aa`.
+SHA-256: `6c1da92e8e41dd64b8cc402eee7eb7a433d2152567e1a4d9cf181fefcc67a572`.
+Size: 574,041,195 bytes. This community quantization has no published Hebrew
+Pixel benchmark; neither latency nor accuracy is guaranteed. It uses the same
+ARM CPU backend and Hebrew language token, not GPU/TPU acceleration.
+
+```powershell
+.\.voice-poc-venv\Scripts\python.exe -X utf8 scripts\prepare_voice_poc.py --stt-only --stt-profile ivrit-turbo-q5_0
+```
+
+Push the same model and manifest files using the STT-only upgrade commands above.
+Keep Beam 5 selected. The UI displays `ivrit.ai Turbo Q5 (עברית)` and a 60-second
+cooperative inference budget (Small keeps 30 seconds). Cancellation stays enabled.
+Compare natural speech, including the existing problematic Hebrew sentences,
+recording both transcript and warm inference time. This is an accuracy trial,
+not a production architecture change. If it times out, record that as a failed
+latency result rather than raising the budget repeatedly.
+To revert, prepare `--stt-profile small-fp16` and push the same two files.
+BlueTTS is preserved, and user audio remains local and is not persisted.

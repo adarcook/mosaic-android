@@ -58,10 +58,13 @@ Java_life_mosaic_voice_WhisperNative_release(JNIEnv *, jobject, jlong handle) {
     delete session(handle);
 }
 extern "C" JNIEXPORT jstring JNICALL
-Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle, jfloatArray pcm, jboolean accurate) {
+Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle, jfloatArray pcm, jboolean accurate, jint budget_seconds) {
     auto *s = session(handle);
     if (!s || !s->ctx) { fail(env, "Whisper session is not loaded"); return nullptr; }
-    s->deadline = Clock::now() + std::chrono::seconds(30);
+    if (budget_seconds != 30 && budget_seconds != 60) {
+        fail(env, "Invalid inference budget"); return nullptr;
+    }
+    s->deadline = Clock::now() + std::chrono::seconds(budget_seconds);
     if (should_abort(s)) { fail(env, "Cancelled"); return nullptr; }
     std::vector<float> audio(env->GetArrayLength(pcm));
     env->GetFloatArrayRegion(pcm, 0, audio.size(), audio.data());
@@ -89,7 +92,7 @@ Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong hand
     p.abort_callback = should_abort;
     p.abort_callback_user_data = s;
     if (whisper_full(s->ctx.get(), p, audio.data(), audio.size()) != 0 || should_abort(s)) {
-        fail(env, s->cancelled ? "Cancelled" : "Transcription failed or exceeded the 30-second inference budget");
+        fail(env, s->cancelled ? "Cancelled" : "Transcription failed or exceeded the selected inference budget");
         return nullptr;
     }
     std::string text;
