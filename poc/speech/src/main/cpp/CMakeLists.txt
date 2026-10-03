@@ -22,6 +22,20 @@ FetchContent_Declare(whisper
     GIT_REPOSITORY https://github.com/ggml-org/whisper.cpp.git
     GIT_TAG 2eeeba56e9edd762b4b38467bab96c2517163158)
 FetchContent_MakeAvailable(whisper)
+# v1.8.3 drops abort callbacks in scheduled encoder/decoder graphs.
+# Apply an idempotent, version-pinned patch so cancellation reaches CPU kernels.
+find_package(Git REQUIRED)
+set(WHISPER_ABORT_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/whisper-abort.patch")
+execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${WHISPER_ABORT_PATCH}"
+    WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE PATCH_ALREADY_APPLIED
+    OUTPUT_QUIET ERROR_QUIET)
+if(NOT PATCH_ALREADY_APPLIED EQUAL 0)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${WHISPER_ABORT_PATCH}"
+        WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE PATCH_RESULT)
+    if(NOT PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "Cannot apply pinned Whisper cancellation fix")
+    endif()
+endif()
 add_library(mosaic_whisper SHARED bridge.cpp)
 target_compile_features(mosaic_whisper PRIVATE cxx_std_17)
 target_link_libraries(mosaic_whisper PRIVATE whisper)
