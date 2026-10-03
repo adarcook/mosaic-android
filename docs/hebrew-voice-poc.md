@@ -1,4 +1,4 @@
-# Local Hebrew voice POC — ivrit.ai and BlueTTS
+# Local Hebrew voice POC — Whisper Small Q5 and BlueTTS
 
 User-authorized feasibility checkpoint on the existing `feature/hebrew-voice-poc`
 branch / Draft PR #22. No architecture re-baseline or completed roadmap stage.
@@ -10,8 +10,10 @@ service, and the user judged the built-in Hebrew TTS voice too robotic.
 The debug app installs separately as `life.mosaic.fit.voicepoc`. Open **Mosaic
 Voice POC**, tap **דבר בעברית**, grant mic access and tap again. Record up to 12
 seconds and press **סיום משפט**. The app transcribes the microphone's 16 kHz mono
-PCM using the Hebrew-tuned ivrit.ai Whisper Large v3 Turbo model through a pinned
-whisper.cpp JNI bridge, with language `he` explicitly selected. Then BlueTTS 2.5
+PCM using multilingual Whisper Small Q5_1 through a pinned whisper.cpp JNI
+bridge, with language `he` explicitly selected. This replaces the original
+ivrit.ai Large v3 Turbo probe, which the user found unusably slow on the Pixel.
+The smaller model is not Hebrew fine-tuned; its accuracy must be measured. Then BlueTTS 2.5
 runs its acoustic ONNX graphs on-device and plays a fixed Hebrew reply.
 
 **בדיקת BlueTTS בלבד** tests synthesis without the microphone or transcription.
@@ -22,9 +24,15 @@ library linkage failures are shown in the screen rather than escaping the
 worker; pausing only cancels Whisper after its library was successfully loaded
 and transcription began. Native process crashes still require Android crash logs.
 The controls respect system-bar/cutout insets and have 48 dp extra top spacing.
-Diagnostics show cold model-load plus inference/synthesis times. Every turn loads
-and frees the models; this POC intentionally measures cold behavior, not an
-optimized warm conversational service. CPU inference uses four threads. GPU/NPU
+Whisper loads before microphone capture and is reused while this Activity exists;
+it is freed after pending work completes when the Activity is destroyed. Diagnostics
+separate STT load (including cache reuse), inference, and captured audio duration.
+BlueTTS continues to load/free its sessions per turn. CPU inference uses four
+threads. Native Debug builds now optimize inference with `-O3` while retaining
+debug symbols. The stop control ends recording or cancels active processing;
+inference displays elapsed seconds and uses a cooperative 30-second abort budget,
+not a guaranteed hard timeout for every backend operation. Decoder fallback retries
+are disabled, with one segment and at most 96 tokens for short commands. GPU/NPU
 acceleration, free-form TTS, wake words, barge-in and background activation are
 not implemented. The usual Mosaic launcher is disabled only in this debug probe.
 
@@ -41,10 +49,36 @@ sample data. No nutrition, memory or other domain record is written.
 The model preparation script also generates a host reference WAV using the same
 fixed random noise. This reference is for quality/parity comparison only; the
 phone never reads it. User audio/transcripts are neither persisted nor logged.
-Home stops capture/playback and requests cancellation of native transcription;
+Home stops capture/playback and requests cancellation of that Activity's native transcription;
 BlueTTS checks cancellation between inference steps. An ONNX call already running
 may finish in the worker before its resources can be freed, but its result is not
 played after the activity is left. Keep the app foreground during the probe.
+
+## Upgrade an existing pack (STT only)
+
+User's device result: BlueTTS sounded very good; the original transcription was
+unusably slow. Keep the installed TTS model files and fixture unchanged. From the
+repository root, after pulling the branch and installing the updated debug APK:
+
+```powershell
+.\.voice-poc-venv\Scripts\python.exe -X utf8 scripts\prepare_voice_poc.py --stt-only
+$adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+& $adb shell am force-stop life.mosaic.fit.voicepoc
+& $adb push voice-models/whisper/ggml-model.bin /sdcard/Android/data/life.mosaic.fit.voicepoc/files/voice-models/whisper/ggml-model.bin
+& $adb push voice-models/manifest.json /sdcard/Android/data/life.mosaic.fit.voicepoc/files/voice-models/manifest.json
+& $adb shell am start -n life.mosaic.fit.voicepoc/life.mosaic.fit.voicepoc.VoicePocActivity
+```
+
+This downloads approximately 190 MB and replaces only the STT weights and manifest.
+It does not import NumPy/BlueTTS, rerun G2P, synthesize a reference, or alter TTS
+hashes. The app explicitly rejects legacy STT packs for transcription so it cannot
+silently continue loading the slow 1.6 GB model. TTS-only remains available with
+an intact old pack. A full preparation below defaults to the small model too.
+
+Test a short sentence twice in one Activity session: the second should report
+`cached` for STT load. Compare transcript accuracy and inference time; a smaller
+model and optimized native code are not proof of acceptable Hebrew performance.
+Test cancel while transcribing, Home, and rotation; no delayed response should play.
 
 ## Prepare models once on Windows (network required only for setup)
 
@@ -58,7 +92,7 @@ git switch feature/hebrew-voice-poc
 git pull --ff-only
 py -3.12 -m venv .voice-poc-venv
 .\.voice-poc-venv\Scripts\python.exe -m pip install "git+https://github.com/maxmelichov/BlueTTS.git@0e38dbf08ed53f85863d1eab092bd9572c53a503" huggingface-hub
-.\.voice-poc-venv\Scripts\python.exe scripts\prepare_voice_poc.py
+.\.voice-poc-venv\Scripts\python.exe -X utf8 scripts\prepare_voice_poc.py
 .\gradlew.bat :app:installDebug
 ```
 
@@ -102,11 +136,13 @@ attacker able to modify both the pack and manifest.
    audio. The UI is temporary test equipment, not the proposed product UI.
 
 CI compiles the native bridge and APK, runs existing Fit tests, and tests CFG and
-channel/time denormalization math. Device ABI/loading, voice quality, transcription
-accuracy, waveform parity, offline performance and thermal behavior remain pending
-until tested on the Pixel. No successful device result is claimed in this PR.
+channel/time denormalization math. The user has run the APK and judged the fixed-reply TTS voice very good.
+The original large-model STT was unusably slow. Smaller-model Hebrew accuracy,
+latency, cancellation, cache lifetime, offline operation and thermal behavior
+remain to be verified on the Pixel. No small-model device speedup is claimed.
 
-Host validation: the full model preparation script completed with the pinned
+Historical host validation for the original STT pack: the full model preparation
+script completed with the pinned
 weights. A separate NumPy/ONNX replay of the Android inference sequence produced
 304,128 finite samples at 44,100 Hz (about 6.9 seconds). Its maximum absolute
 error against the upstream reference WAV was 0.000031, within 16-bit WAV rounding.
@@ -117,8 +153,10 @@ establish Android runtime or device waveform parity.
 
 - whisper.cpp v1.8.3: `2eeeba56e9edd762b4b38467bab96c2517163158` (MIT)
   https://github.com/ggml-org/whisper.cpp
-- ivrit.ai GGML weights: `2130c78e4a9cb4914cc4df91a1c3031407789705` (Apache-2.0)
-  https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml
+- Multilingual Whisper Small Q5_1 GGML: `c521a4b02f422512d734391fdf08bb08c0862f68` (MIT)
+  https://huggingface.co/ggerganov/whisper.cpp
+  `ggml-small-q5_1.bin`, SHA-256:
+  `ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb`
 - BlueTTS ONNX bundle: `468da64b4a51795a7594a3637727dbaf876b6df2`
   https://huggingface.co/notmax123/BlueTTS2.5-onnx
 - Acoustic inference port derived from BlueTTS (MIT), copyright its contributors:

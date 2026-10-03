@@ -38,5 +38,8 @@ jobs:
       - name: Compile app
         run: ./gradlew :app:assembleDebug
 
+      - name: Test STT model-pack upgrade
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: Run voice tensor math tests
         run: ./gradlew :app:testDebugUnitTest

@@ -4,34 +4,85 @@ Python 3.12+: pip install "git+https://github.com/maxmelichov/BlueTTS.git@0e38db
 import argparse
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
-import numpy as np
-from huggingface_hub import hf_hub_download, snapshot_download
-from blue_onnx import BlueTTS
 
 BLUE_REV = '468da64b4a51795a7594a3637727dbaf876b6df2'
-WHISPER_REV = '2130c78e4a9cb4914cc4df91a1c3031407789705'  # Resolved and recorded as a full commit in manifest below.
+WHISPER_REV = 'c521a4b02f422512d734391fdf08bb08c0862f68'
+WHISPER_REPO = 'ggerganov/whisper.cpp'
+WHISPER_FILE = 'ggml-small-q5_1.bin'
+WHISPER_SHA256 = 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb'
 RENIKUD_REV = '679c56ca449d41873fb8ff7711ddf7563d28198f'
 REPLY = 'שמעתי אותך. זו תשובת הבדיקה של מוזאיק בעברית. נשארו לך ארבעים ושניים גרם חלבון. זה נתון לדוגמה בלבד.'
 
 
 def tensor(a):
+    import numpy as np
     a = np.asarray(a)
     return {'shape': list(a.shape), 'data': a.reshape(-1).tolist()}
+
+
+def sha256(path):
+    with path.open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def download_stt(root):
+    from huggingface_hub import hf_hub_download
+    source = Path(hf_hub_download(WHISPER_REPO, WHISPER_FILE, revision=WHISPER_REV))
+    if sha256(source) != WHISPER_SHA256:
+        raise ValueError('Whisper Small Q5 download checksum mismatch')
+    target = root / 'whisper' / 'ggml-model.bin'
+    target.parent.mkdir(parents=True, exist_ok=True)
+    pending = target.with_suffix('.pending')
+    shutil.copyfile(source, pending)
+    pending.replace(target)
+    return target
+
+
+def stt_manifest(manifest, whisper):
+    updated = dict(manifest)
+    updated.update(stt_profile='small-q5_1', whisper_repo=WHISPER_REPO,
+                   whisper_revision=WHISPER_REV, whisper_source_file=WHISPER_FILE)
+    updated['files'] = dict(manifest['files'])
+    updated['files']['whisper/ggml-model.bin'] = sha256(whisper)
+    return updated
+
+
+def write_manifest(root, manifest):
+    pending = root / 'manifest.pending'
+    pending.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    pending.replace(root / 'manifest.json')
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, default=Path('voice-models'))
+    parser.add_argument('--stt-only', action='store_true', help='Upgrade only Whisper in an existing BlueTTS pack')
     args = parser.parse_args()
     root = args.output.resolve()
+    if args.stt_only:
+        manifest_path = root / 'manifest.json'
+        if not manifest_path.is_file():
+            parser.error('--stt-only requires an existing prepared voice-models pack')
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        # Preserve the known-good TTS fixture and all its hashes.
+        for name in manifest['files']:
+            if name != 'whisper/ggml-model.bin' and not (root / name).is_file():
+                parser.error(f'Existing pack is incomplete: {name}')
+        whisper = download_stt(root)
+        write_manifest(root, stt_manifest(manifest, whisper))
+        print(f'Ready: {root}. Copy whisper/ggml-model.bin and manifest.json to the stopped app.')
+        return
+    import numpy as np
+    from huggingface_hub import hf_hub_download, snapshot_download
+    from blue_onnx import BlueTTS
     blue = root / 'blue'
     blue.mkdir(parents=True, exist_ok=True)
     snapshot_download('notmax123/BlueTTS2.5-onnx', revision=BLUE_REV, local_dir=blue,
                       allow_patterns=['*.onnx', '*.onnx.data', '*.npz', '*.json', 'voices/libri_male_6209.json'])
-    whisper = hf_hub_download('ivrit-ai/whisper-large-v3-turbo-ggml', 'ggml-model.bin',
-                             revision=WHISPER_REV, local_dir=root / 'whisper')
+    whisper = download_stt(root)
     print('Preparing fixed Hebrew pronunciation on the host; synthesis will run on Android.')
     # Host-only G2P: this revision has no optional datastore.json. Pass an
     # explicit model path so RenikudPlus does not request that absent sidecar.
@@ -69,9 +120,9 @@ def main():
     files = [Path(whisper), root / 'reply.json'] + list(blue.glob('*.onnx')) + list(blue.glob('*.onnx.data'))
     manifest = {'blue_revision': BLUE_REV, 'whisper_revision': WHISPER_REV,
                 'host_renikud_revision': RENIKUD_REV,
-                'files': {p.relative_to(root).as_posix(): hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
+                'files': {p.relative_to(root).as_posix(): sha256(p)
                           for p in files}}
-    (root / 'manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    write_manifest(root, stt_manifest(manifest, Path(whisper)))
     print(f'Ready: {root}. Model files remain outside Git. See docs/hebrew-voice-poc.md for adb push.')
 
 

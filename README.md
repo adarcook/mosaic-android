@@ -7,8 +7,9 @@ Mosaic Android is designed as one installed app with independently maintained pr
 ## Current capabilities
 
 An experimental debug-only [Hebrew voice POC](docs/hebrew-voice-poc.md) checks
-local ivrit.ai transcription and BlueTTS fixed-reply synthesis on Pixel before any
-architecture re-baseline. Device verification is pending.
+local Whisper Small Q5 transcription and BlueTTS fixed-reply synthesis on Pixel before any
+architecture re-baseline. BlueTTS sounded good in the device probe; the smaller
+STT model is pending device verification after the large-model probe was too slow.
 
 - Photograph and analyze meals
 - Review and correct detected foods and nutrition estimates

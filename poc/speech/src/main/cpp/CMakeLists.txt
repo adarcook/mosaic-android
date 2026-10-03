@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.22)
 project(mosaic_whisper LANGUAGES C CXX)
 include(FetchContent)
+# Native Debug builds must still optimize the inference hot path.
+set(CMAKE_C_FLAGS_DEBUG "-O3 -g" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_DEBUG "-O3 -g" CACHE STRING "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
