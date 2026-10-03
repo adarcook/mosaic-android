@@ -43,7 +43,9 @@ Java_life_mosaic_voice_WhisperNative_create(JNIEnv *env, jobject, jstring path, 
 #ifndef MOSAIC_VULKAN
     if (use_gpu) { fail(env, "This APK has no Vulkan backend"); return 0; }
 #endif
-    if (use_gpu && !ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU)) {
+    // Match whisper.cpp's selection: phone GPUs may be registered as IGPU.
+    if (use_gpu && !ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_GPU) &&
+        !ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_IGPU)) {
         fail(env, "No compatible Vulkan GPU found; switch off GPU to use CPU"); return 0;
     }
     cp.use_gpu = use_gpu;
