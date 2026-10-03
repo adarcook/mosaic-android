@@ -15,6 +15,13 @@ whisper.cpp JNI bridge, with language `he` explicitly selected. Then BlueTTS 2.5
 runs its acoustic ONNX graphs on-device and plays a fixed Hebrew reply.
 
 **בדיקת BlueTTS בלבד** tests synthesis without the microphone or transcription.
+Both start buttons first check for missing/empty model files. An absent pack
+shows setup instructions and does not request the microphone or load native
+engines. APK installation alone does not install these model files. Native
+library linkage failures are shown in the screen rather than escaping the
+worker; pausing only cancels Whisper after its library was successfully loaded
+and transcription began. Native process crashes still require Android crash logs.
+The controls respect system-bar/cutout insets and have 48 dp extra top spacing.
 Diagnostics show cold model-load plus inference/synthesis times. Every turn loads
 and frees the models; this POC intentionally measures cold behavior, not an
 optimized warm conversational service. CPU inference uses four threads. GPU/NPU

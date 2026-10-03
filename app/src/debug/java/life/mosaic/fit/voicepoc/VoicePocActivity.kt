@@ -16,6 +16,8 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import life.mosaic.voice.WhisperNative
 import org.json.JSONObject
 import java.io.File
@@ -36,6 +38,7 @@ class VoicePocActivity : Activity() {
     @Volatile private var foreground = false
     @Volatile private var busy = false
     @Volatile private var recording = false
+    @Volatile private var transcribing = false
     @Volatile private var mic: AudioRecord? = null
     @Volatile private var speaker: AudioTrack? = null
     private var verified = false
@@ -49,15 +52,25 @@ class VoicePocActivity : Activity() {
         voice = Button(this).apply { text = "בדיקת BlueTTS בלבד"; setOnClickListener { begin(false) } }
         stop = Button(this).apply { text = "סיום משפט"; isEnabled = false; setOnClickListener { stopRecording() } }
         val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(32, 64, 32, 32)
+            orientation = LinearLayout.VERTICAL
+            fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+            setPadding(dp(16), dp(48), dp(16), dp(24))
             addView(talk); addView(stop); addView(voice); addView(status)
         }
-        setContentView(ScrollView(this).apply { addView(layout) })
+        val scroll = ScrollView(this).apply { addView(layout) }
+        ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
+            val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            insets
+        }
+        setContentView(scroll)
+        ViewCompat.requestApplyInsets(scroll)
         status.text = "ivrit.ai + whisper.cpp → BlueTTS 2.5\nתשובה קבועה; ללא LLM.\nמודלים: ${models.path}\nהכן והעתק את חבילת המודלים לפי המסמך ב־PR."
     }
 
     private fun requestRecording() {
         if (busy || !foreground) return
+        if (!checkModelFiles()) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         } else begin(true)
@@ -78,6 +91,7 @@ class VoicePocActivity : Activity() {
     }
     private fun begin(withMic: Boolean) {
         if (busy || !foreground) return
+        if (!checkModelFiles()) return
         val id = turn.incrementAndGet()
         busy = true; updateButtons()
         status.text = "בודק חבילת מודלים מקומית…"
@@ -92,7 +106,13 @@ class VoicePocActivity : Activity() {
                     require(pcm.size >= 8000) { "המשפט קצר מדי. נסה לפחות חצי שנייה." }
                     post(id) { status.append("\nמתמלל מקומית…") }
                     val start = SystemClock.elapsedRealtime()
-                    val text = WhisperNative.transcribe(File(models, "whisper/ggml-model.bin").path, pcm).trim()
+                    // Initialize inside the worker's error boundary, never from onPause.
+                    WhisperNative.ensureLoaded()
+                    check(!cancelled()) { "Cancelled" }
+                    transcribing = true
+                    val text = try {
+                        WhisperNative.transcribe(File(models, "whisper/ggml-model.bin").path, pcm).trim()
+                    } finally { transcribing = false }
                     require(text.isNotEmpty()) { "לא התקבל תמלול" }
                     post(id) { status.append("\nתמלול: $text\nSTT load+inference: ${SystemClock.elapsedRealtime() - start} ms") }
                 }
@@ -106,11 +126,23 @@ class VoicePocActivity : Activity() {
                 post(id) { status.append("\nהסתיים. בדוק דיוק, קול ומהירות גם במצב טיסה.") }
             } catch (e: Exception) {
                 post(id) { status.append("\nשגיאה: ${e.message ?: e.javaClass.simpleName}") }
+            } catch (e: LinkageError) {
+                post(id) { status.append("\nלא ניתן לטעון את ספריית מנוע הקול: ${e.message ?: e.javaClass.simpleName}\nיש לעדכן את התקנת ה־APK ולשלוח את ההודעה הזו לבדיקה.") }
             } finally {
                 busy = false; recording = false
                 handler.post { if (!isDestroyed) updateButtons() }
             }
         }
+    }
+
+    private fun checkModelFiles(): Boolean {
+        val missing = VoiceModelFiles.missing(models)
+        if (missing.isEmpty()) return true
+        status.text = "חבילת המודלים טרם הותקנה או שההעתקה לא הושלמה.\n" +
+            "התקנת ה־APK אינה כוללת את המודלים.\n" +
+            "במחשב: הפעל scripts/prepare_voice_poc.py, ואז העתק את voice-models דרך adb לפי docs/hebrew-voice-poc.md.\n" +
+            "יעד: ${models.path}\nקבצים חסרים:\n${missing.joinToString("\n")}"
+        return false
     }
 
     private fun verifyModels() {
@@ -199,7 +231,9 @@ class VoicePocActivity : Activity() {
     override fun onPause() {
         foreground = false; turn.incrementAndGet(); stopRecording()
         // Cancel native inference if loaded; no model download or initialization here.
-        if (busy) WhisperNative.cancel()
+        if (transcribing) {
+            try { WhisperNative.cancel() } catch (_: LinkageError) {}
+        }
         try { speaker?.pause(); speaker?.flush() } catch (_: IllegalStateException) {}
         super.onPause()
     }
