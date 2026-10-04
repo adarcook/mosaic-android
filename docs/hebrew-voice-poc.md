@@ -1,5 +1,10 @@
 # Local Hebrew voice POC — Whisper Small Q5 and BlueTTS
 
+> Current diagnostic branch: CPU only; Vulkan instructions below describe the
+> historical PR #22 experiment and are superseded by the 2026-10-04 section.
+> Do not run the older Vulkan-capable APK after the reported device reboot.
+
+
 User-authorized feasibility checkpoint on the existing `feature/hebrew-voice-poc`
 branch / Draft PR #22. No architecture re-baseline or completed roadmap stage.
 The first device probe found only English installed in Android's on-device STT
@@ -282,3 +287,59 @@ of the mobile package use the same deliberately PUBLIC debug test key stored as
 never be used for release signing, accounts, or privileged integrations. The
 mobile package is debug-only. Uninstalling it still removes its models; use APK
 updates rather than uninstalling for subsequent versions.
+
+## CPU diagnostic follow-up (2026-10-04)
+
+The user reported a full-device freeze/reboot with the mobile Vulkan-capable
+build, and then no transcript after about 51 seconds for 3–4 seconds of audio
+in a two-thread CPU diagnostic build. Model loading succeeded. The earlier
+29.5-second successful Hebrew test spent about 28 seconds in the encoder;
+these observations do not prove which component triggered the kernel panic.
+
+This follow-up is stacked on draft PR #22 and remains experimental, outside
+roadmap completion evidence. `main` at `7d2a4d4` has the saved-meal editor;
+Stage 3 and Windows verification remain partial in the roadmap. No contracts,
+Firebase setup, Core architecture or trusted meal data are changed.
+
+- Vulkan is excluded from the Whisper engine at build time; `-PvoiceVulkan=true` fails explicitly.
+- Private, same-UID `:speech` service owns native model initialization/inference.
+  Loading and transcription each use a disposable process. This costs a model
+  reload per attempt and avoids retaining native state after cancellation.
+- Two CPU threads, ARMv8.2 FP16/dotprod, optimized native Debug code. The target
+  is Pixel 10 Pro / Tensor G5; **there is no TPU integration**. No claim of
+  device-specific optimal thread count is made.
+- Input is 16 kHz mono PCM, 0.5–8 seconds, sent via an app-private temporary
+  file rather than a large Binder message. Audio is deleted after consumption
+  and on attempt cleanup. Neither audio nor transcript is uploaded or logged.
+- The checked short-window experiment uses `audio_ctx=512` (10.24 seconds),
+  instead of the model's default 1500 frames (30 seconds). The maximum recording
+  fits with over two seconds of context margin; input is not cut to fit.
+  This is an **experimental accuracy/latency tradeoff**, not a verified fix.
+  Uncheck it for a full-context A/B comparison. Same Hebrew model and Beam 5
+  default are retained; no automatic fallback/retry doubles the workload.
+- No automatic BlueTTS after STT. TTS has a separate manual button.
+- Cancel, leaving the foreground, or a 90-second wall timeout disposes the
+  service process. A first-terminal-outcome guard prevents late results from
+  replacing cancellation/timeout. This cannot prevent a kernel/driver crash.
+- Hardware rendering is disabled for the debug diagnostic Activity.
+- A bounded local `speech-diagnostic.log` records phase/time/input length and
+  terminal status, without recordings or transcripts. Recent entries appear
+  on the next launch. Temporary PCM is discarded on restart.
+
+Build: `./gradlew :app:assembleDebug :app:testDebugUnitTest -PvoiceMobile=true`
+(with the existing generated `voice-bootstrap` fixture). CI now produces
+`voice-mobile-cpu-diagnostic-apk` rather than a Vulkan APK, using the same
+mobile application ID and public test-only key. Install over the mobile app,
+without uninstalling, to retain downloaded models.
+
+Device gate: load-only first; then one short Hebrew sentence with the short
+window. Check responsiveness, transcription accuracy, encoder/decoder times,
+cancel and reopen diagnostics. Only if stable compare the full window on the
+same sentence. Latency, accuracy, thermal behavior and stability on Tensor G5
+remain unverified until physical-device measurements are provided.
+
+APK checks distinguish native dependencies from unused provider-name strings:
+ONNX Runtime contains a `libvulkan.so` string but no Vulkan ELF dependency;
+BlueTTS creates CPU sessions only. Whisper has neither the Vulkan dependency
+nor its backend initialization symbol. Mobile packaging includes ARM64 only,
+matching Pixel and the native STT runtime, to omit unused x86/ARM32 TTS libraries.

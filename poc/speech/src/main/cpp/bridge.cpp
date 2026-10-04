@@ -68,10 +68,10 @@ Java_life_mosaic_voice_WhisperNative_release(JNIEnv *, jobject, jlong handle) {
     delete session(handle);
 }
 extern "C" JNIEXPORT jstring JNICALL
-Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle, jfloatArray pcm, jboolean accurate, jint budget_seconds) {
+Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong handle, jfloatArray pcm, jboolean accurate, jint budget_seconds, jint audio_context) {
     auto *s = session(handle);
     if (!s || !s->ctx) { fail(env, "Whisper session is not loaded"); return nullptr; }
-    if (budget_seconds != 30 && budget_seconds != 60) {
+    if (budget_seconds != 30 && budget_seconds != 60 && budget_seconds != 90) {
         fail(env, "Invalid inference budget"); return nullptr;
     }
     s->deadline = Clock::now() + std::chrono::seconds(budget_seconds);
@@ -79,7 +79,15 @@ Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong hand
     std::vector<float> audio(env->GetArrayLength(pcm));
     env->GetFloatArrayRegion(pcm, 0, audio.size(), audio.data());
     auto p = whisper_full_default_params(accurate ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
-    p.n_threads = 4;
+    p.n_threads = 2;
+    // Short-command experiment: 512 frames = 10.24 seconds, including silence.
+    // Never truncate input; retain the full 30-second context as an A/B control.
+    if (audio.size() < 8000 || audio.size() > 16000 * 8 ||
+        (audio_context != 0 && audio_context != 512) ||
+        (audio_context != 0 && audio_context > whisper_n_audio_ctx(s->ctx.get()))) {
+        fail(env, "Invalid short-command input/context"); return nullptr;
+    }
+    p.audio_ctx = audio_context;
     p.language = "he";
     p.detect_language = false;
     p.translate = false;
