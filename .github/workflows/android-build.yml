@@ -64,6 +64,8 @@ jobs:
         run: ./gradlew :app:assembleDebug -PvoiceMobile=true
       - name: Test model installer
         run: ./gradlew :app:testDebugUnitTest -PvoiceMobile=true
+      - name: Verify packaged CPU APK
+        run: python3 scripts/verify_cpu_apk.py app/build/outputs/apk/debug/app-debug.apk "$ANDROID_HOME/build-tools/35.0.0"
       - name: Upload experimental APK
         uses: actions/upload-artifact@v4
         with:

@@ -20,7 +20,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import life.mosaic.voice.WhisperNative
 import org.json.JSONObject
 import java.io.File
 import java.io.DataOutputStream
@@ -35,9 +34,6 @@ class VoicePocActivity : Activity() {
     private val turn = AtomicInteger()
     private lateinit var download: Button
     private var bootstrapAvailable = false
-    private lateinit var gpu: CheckBox
-    private var gpuBuild = false
-    private var loadedGpu = false
     private lateinit var accuracy: CheckBox
     private lateinit var status: TextView
     private lateinit var talk: Button
@@ -75,12 +71,6 @@ class VoicePocActivity : Activity() {
             setOnClickListener { installModels() }
         }
         status = TextView(this).apply { textSize = 17f }
-        gpuBuild = try { WhisperNative.gpuBuild() } catch (_: LinkageError) { false }
-        gpu = CheckBox(this).apply {
-            text = if (gpuBuild) "ניסוי האצת GPU (Vulkan)" else "GPU זמין ב־APK הניסיוני בלבד"
-            isChecked = false
-            isEnabled = gpuBuild
-        }
         accuracy = CheckBox(this).apply {
             text = "מצב דיוק (Beam 5) — עשוי לקחת יותר זמן"
             isChecked = true
@@ -99,7 +89,7 @@ class VoicePocActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
             setPadding(dp(16), dp(48), dp(16), dp(24))
-            addView(download); addView(load); addView(shortWindow); addView(talk); addView(stop); addView(accuracy); addView(gpu); addView(voice); addView(status)
+            addView(download); addView(load); addView(shortWindow); addView(talk); addView(stop); addView(accuracy); addView(voice); addView(status)
         }
         val scroll = ScrollView(this).apply { addView(layout) }
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
@@ -130,7 +120,6 @@ class VoicePocActivity : Activity() {
 
     private fun updateButtons() {
         download.isEnabled = bootstrapAvailable && foreground && !busy
-        gpu.isEnabled = gpuBuild && foreground && !busy
         accuracy.isEnabled = foreground && !busy
         talk.isEnabled = foreground && !busy
         voice.isEnabled = foreground && !busy

@@ -1,5 +1,10 @@
 # Local Hebrew voice POC — Whisper Small Q5 and BlueTTS
 
+> Current diagnostic branch: CPU only; Vulkan instructions below describe the
+> historical PR #22 experiment and are superseded by the 2026-10-04 section.
+> Do not run the older Vulkan-capable APK after the reported device reboot.
+
+
 User-authorized feasibility checkpoint on the existing `feature/hebrew-voice-poc`
 branch / Draft PR #22. No architecture re-baseline or completed roadmap stage.
 The first device probe found only English installed in Android's on-device STT
