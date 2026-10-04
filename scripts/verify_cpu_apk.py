@@ -22,5 +22,13 @@ with ZipFile(args.apk) as apk:
     for name in libraries:
         assert 'vulkan' not in name.lower(), name
         data = apk.read(name)
-        assert b'libvulkan.so' not in data and b'ggml_backend_vk_init' not in data, name
+        # ONNX Runtime contains optional-provider names even in CPU use;
+        # a string alone does not establish an ELF dependency or activation.
+        with tempfile.TemporaryDirectory() as directory:
+            library = Path(directory) / Path(name).name
+            library.write_bytes(data)
+            dynamic = subprocess.check_output(['readelf', '-d', str(library)], text=True)
+            assert not re.search(r'NEEDED.*libvulkan', dynamic, re.I), name
+        if name.endswith('/libmosaic_whisper.so'):
+            assert b'libvulkan.so' not in data and b'ggml_backend_vk_init' not in data, name
 print('Verified signature, private :speech service, ARM64 native engine, and absence of Vulkan linkage.')

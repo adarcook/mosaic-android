@@ -301,7 +301,7 @@ roadmap completion evidence. `main` at `7d2a4d4` has the saved-meal editor;
 Stage 3 and Windows verification remain partial in the roadmap. No contracts,
 Firebase setup, Core architecture or trusted meal data are changed.
 
-- Vulkan is excluded at build time; `-PvoiceVulkan=true` fails explicitly.
+- Vulkan is excluded from the Whisper engine at build time; `-PvoiceVulkan=true` fails explicitly.
 - Private, same-UID `:speech` service owns native model initialization/inference.
   Loading and transcription each use a disposable process. This costs a model
   reload per attempt and avoids retaining native state after cancellation.
@@ -337,3 +337,9 @@ window. Check responsiveness, transcription accuracy, encoder/decoder times,
 cancel and reopen diagnostics. Only if stable compare the full window on the
 same sentence. Latency, accuracy, thermal behavior and stability on Tensor G5
 remain unverified until physical-device measurements are provided.
+
+APK checks distinguish native dependencies from unused provider-name strings:
+ONNX Runtime contains a `libvulkan.so` string but no Vulkan ELF dependency;
+BlueTTS creates CPU sessions only. Whisper has neither the Vulkan dependency
+nor its backend initialization symbol. Mobile packaging includes ARM64 only,
+matching Pixel and the native STT runtime, to omit unused x86/ARM32 TTS libraries.
