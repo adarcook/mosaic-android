@@ -2,7 +2,9 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
 }
-val voiceVulkan = providers.gradleProperty("voiceVulkan").orNull == "true"
+// GPU backend is excluded after the Pixel kernel panic; do not accept an opt-in.
+require(providers.gradleProperty("voiceVulkan").orNull != "true") { "Vulkan disabled for CPU diagnostics" }
+val voiceVulkan = false
 
 android {
     namespace = "life.mosaic.voice.runtime"

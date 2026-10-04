@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import life.mosaic.voice.WhisperNative
 import org.json.JSONObject
 import java.io.File
+import java.io.DataOutputStream
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -47,8 +48,17 @@ class VoicePocActivity : Activity() {
     @Volatile private var busy = false
     @Volatile private var recording = false
     @Volatile private var transcribing = false
-    private val nativeLock = Any()
-    private var whisperHandle = 0L // Owned by worker; cancel/release share nativeLock.
+    @Volatile private var speechCall: SpeechCall? = null
+    private lateinit var load: Button
+    private lateinit var shortWindow: CheckBox
+    private val diagLock = Any()
+    private fun diagnostic(message: String) {
+        synchronized(diagLock) {
+            val file = File(filesDir, "speech-diagnostic.log")
+            if (file.length() > 64000) file.writeText("")
+            file.appendText("${System.currentTimeMillis()} $message\n")
+        }
+    }
     @Volatile private var mic: AudioRecord? = null
     @Volatile private var speaker: AudioTrack? = null
     private var verified = false
@@ -56,6 +66,7 @@ class VoicePocActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        File(cacheDir, "speech-input.pcm").delete()
         models = File(requireNotNull(getExternalFilesDir(null)), "voice-models")
         bootstrapAvailable = try { assets.open("voice-bootstrap/index.json").close(); true } catch (_: java.io.IOException) { false }
         download = Button(this).apply {
@@ -74,7 +85,12 @@ class VoicePocActivity : Activity() {
             text = "מצב דיוק (Beam 5) — עשוי לקחת יותר זמן"
             isChecked = true
         }
-        talk = Button(this).apply { text = "דבר בעברית"; setOnClickListener { requestRecording() } }
+        load = Button(this).apply { text = "1. בדיקת טעינת מודל בלבד"; setOnClickListener { begin(true, true) } }
+        shortWindow = CheckBox(this).apply {
+            text = "חלון קצר ניסיוני — השווה גם דיוק בעברית"
+            isChecked = true
+        }
+        talk = Button(this).apply { text = "2. תמלול משפט קצר (עד 8 שניות)"; setOnClickListener { requestRecording() } }
         voice = Button(this).apply { text = "בדיקת BlueTTS בלבד"; setOnClickListener { begin(false) } }
         stop = Button(this).apply { text = "סיום משפט"; isEnabled = false; setOnClickListener {
             if (recording) stopRecording() else cancelTurn()
@@ -83,7 +99,7 @@ class VoicePocActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
             setPadding(dp(16), dp(48), dp(16), dp(24))
-            addView(download); addView(talk); addView(stop); addView(accuracy); addView(gpu); addView(voice); addView(status)
+            addView(download); addView(load); addView(shortWindow); addView(talk); addView(stop); addView(accuracy); addView(gpu); addView(voice); addView(status)
         }
         val scroll = ScrollView(this).apply { addView(layout) }
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { view, insets ->
@@ -93,7 +109,10 @@ class VoicePocActivity : Activity() {
         }
         setContentView(scroll)
         ViewCompat.requestApplyInsets(scroll)
-        status.text = if (bootstrapAvailable) "להתקנה עצמאית: לחץ ‘הורדת מודלים למכשיר’. השאר את המסך פתוח בזמן ההורדה. לאחר ההורדה ניתן לעבוד במצב טיסה." else "Whisper Small Q5 → BlueTTS 2.5\nתשובה קבועה; ללא LLM.\nמודלים: ${models.path}\nהכן והעתק את חבילת המודלים לפי המסמך ב־PR."
+        status.text = "גרסת CPU בלבד • שני תהליכונים • ללא תמלול וקול במקביל.\nהחלון הקצר ניסיוני; אפשר לבטל אותו להשוואה עם חלון מלא.\n" +
+            (if (bootstrapAvailable) "אם המודלים כבר קיימים אין צורך להוריד שוב.\n" else "הכן מודלים לפי מסמך ההתקנה.\n") +
+            File(filesDir, "speech-diagnostic.log").takeIf { it.isFile }?.readText()?.takeLast(3000).orEmpty()
+
     }
 
     private fun requestRecording() {
@@ -115,104 +134,75 @@ class VoicePocActivity : Activity() {
         accuracy.isEnabled = foreground && !busy
         talk.isEnabled = foreground && !busy
         voice.isEnabled = foreground && !busy
+        load.isEnabled = foreground && !busy
+        shortWindow.isEnabled = foreground && !busy
         stop.isEnabled = foreground && busy
         stop.text = if (recording) "סיום משפט" else "ביטול פעולה"
     }
     private fun post(id: Int, action: () -> Unit) {
         handler.post { if (foreground && turn.get() == id) action() }
     }
-    private fun begin(withMic: Boolean) {
-        if (busy || !foreground) return
-        if (!checkModelFiles()) return
-        val useGpu = gpu.isChecked
-        val backendLabel = if (useGpu) "Vulkan GPU" else "ARM CPU FP16 + dotprod"
+    private fun begin(withMic: Boolean, loadOnly: Boolean = false) {
+        if (busy || !foreground || !checkModelFiles()) return
         val accurate = accuracy.isChecked
-        val mode = if (accurate) "דיוק (Beam 5)" else "מהיר (Greedy)"
+        val short = shortWindow.isChecked
         val id = turn.incrementAndGet()
         busy = true; updateButtons()
-        status.text = "בודק חבילת מודלים מקומית…"
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        status.text = "בודק חבילת מודלים…"
         worker.execute {
             fun cancelled() = !foreground || turn.get() != id
             try {
+                diagnostic("attempt start loadOnly=$loadOnly short=$short beam=$accurate CPU=2")
                 verifyModels()
                 check(!cancelled()) { "Cancelled" }
                 if (withMic) {
-                    val profile = JSONObject(File(models, "manifest.json").readText()).optString("stt_profile")
-                    require(profile in setOf("small-q5_1", "small-fp16", "ivrit-turbo-q5_0")) {
-                        "יש לעדכן למודל התמלול הקטן: python -X utf8 scripts/prepare_voice_poc.py --stt-only, ואז להעתיק whisper ו־manifest.json לפיקסל."
-                    }
-                    val modelLabel = when (profile) {
-                        "ivrit-turbo-q5_0" -> "ivrit.ai Turbo Q5 (עברית)"
-                        "small-fp16" -> "Whisper Small FP16"
-                        else -> "Whisper Small Q5"
-                    }
-                    val budgetSeconds = if (profile == "ivrit-turbo-q5_0") 60 else 30
-                    val loadStart = SystemClock.elapsedRealtime()
-                    if (whisperHandle != 0L && loadedGpu != useGpu) {
-                        synchronized(nativeLock) {
-                            WhisperNative.release(whisperHandle)
-                            whisperHandle = 0L
+                    val pcm = if (loadOnly) null else capture(id)
+                    check(!cancelled()) { "Cancelled" }
+                    if (pcm != null) {
+                        require(pcm.size in 8000..128000) { "הקלטה חייבת להיות בין חצי שנייה לשמונה שניות" }
+                        DataOutputStream(File(cacheDir, "speech-input.pcm").outputStream().buffered()).use { out ->
+                            for (sample in pcm) out.writeFloat(sample)
                         }
+                        diagnostic("audio samples=${pcm.size} seconds=${pcm.size / 16000f}")
                     }
-                    val cached = whisperHandle != 0L
-                    if (!cached) {
-                        post(id) { status.append("\nטוען $modelLabel לזיכרון…") }
-                        WhisperNative.ensureLoaded()
-                        val handle = WhisperNative.create(File(models, "whisper/ggml-model.bin").path, useGpu)
-                        check(handle != 0L) { "Whisper load failed" }
-                        synchronized(nativeLock) { whisperHandle = handle; loadedGpu = useGpu }
-                    }
-                    check(!cancelled()) { "Cancelled" }
-                    val loadMs = SystemClock.elapsedRealtime() - loadStart
-                    post(id) { status.append("\nSTT load: $loadMs ms${if (cached) " (cached)" else ""}") }
-                    val pcm = capture(id)
-                    check(!cancelled()) { "Cancelled" }
-                    require(pcm.size >= 8000) { "המשפט קצר מדי. נסה לפחות חצי שנייה." }
-                    post(id) { status.append("\nמתמלל מקומית…") }
                     val start = SystemClock.elapsedRealtime()
-                    transcribing = true
-                    synchronized(nativeLock) { WhisperNative.prepare(whisperHandle) }
-                    val ticker = object : Runnable {
-                        override fun run() {
-                            if (foreground && turn.get() == id && transcribing) {
-                                val phase = synchronized(nativeLock) { WhisperNative.phase(whisperHandle) }
-                                val stage = when (phase) {
-                                    1 -> "מחשב ייצוג שמע (encoder)"
-                                    2 -> "מפענח מילים (decoder)"
-                                    else -> "מכין שמע"
-                                }
-                                status.text = "$backendLabel\n$modelLabel — $mode\nSTT load: $loadMs ms\nמגבלת ניסוי: $budgetSeconds שניות\n$stage… ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nניתן ללחוץ ‘ביטול פעולה’."
-                                handler.postDelayed(this, 1000)
-                            }
-                        }
+                    val call = SpeechCall(applicationContext) { phase ->
+                        val stage = when (phase) { 1 -> "encoder"; 2 -> "decoder"; else -> "טעינת מודל / הכנת שמע" }
+                        diagnostic("phase=$stage elapsedMs=${SystemClock.elapsedRealtime() - start}")
+                        post(id) { status.text = "$stage • ${(SystemClock.elapsedRealtime() - start) / 1000} שניות\nCPU בלבד • חלון ${if (short) "קצר" else "מלא"} • מגבלה 90 שניות" }
                     }
-                    handler.post(ticker)
-                    val text = try {
-                        check(!cancelled()) { "Cancelled" }
-                        WhisperNative.transcribe(whisperHandle, pcm, accurate, budgetSeconds).trim()
-                    } finally { transcribing = false; handler.removeCallbacks(ticker) }
-                    val nativeTimings = WhisperNative.timings(whisperHandle)
-                    val inferenceMs = SystemClock.elapsedRealtime() - start
-                    require(text.isNotEmpty()) { "לא התקבל תמלול" }
-                    post(id) { status.append("\nתמלול ($backendLabel; $modelLabel; $mode): $text\nSTT inference: $inferenceMs ms\n$nativeTimings\naudio: ${pcm.size / 16000f} s") }
+                    speechCall = call; transcribing = true
+                    if (cancelled()) call.cancel()
+                    val result = call.run(loadOnly, accurate, short)
+                    speechCall = null; transcribing = false
+                    diagnostic("terminal error=${result.getString("error").orEmpty()} loadMs=${result.getLong("loadMs")} inferenceMs=${result.getLong("inferenceMs")} ${result.getString("timings").orEmpty()}")
+                    result.getString("error")?.let { error(it) }
+                    check(!cancelled()) { "Cancelled" }
+                    val text = result.getString("text").orEmpty()
+                    if (!loadOnly) require(text.isNotBlank()) { "לא התקבל תמלול" }
+                    post(id) { status.text = if (loadOnly) "טעינת המודל הצליחה.\n${result.getLong("loadMs")} ms" else
+                        "תמלול: $text\nload: ${result.getLong("loadMs")} ms\ninference: ${result.getLong("inferenceMs")} ms\n${result.getString("timings")}\naudio: ${pcm!!.size / 16000f} s" }
+                } else {
+                    post(id) { status.text = "בדיקת BlueTTS נפרדת…" }
+                    val (audio, rate) = BlueSynthesizer(models).synthesize(::cancelled)
+                    check(!cancelled()) { "Cancelled" }
+                    play(audio, rate, ::cancelled)
+                    post(id) { status.text = "בדיקת הקול הסתיימה." }
                 }
-                check(!cancelled()) { "Cancelled" }
-                post(id) { status.append("\nמסנתז תשובת בדיקה ב־BlueTTS…") }
-                val start = SystemClock.elapsedRealtime()
-                val (audio, rate) = BlueSynthesizer(models).synthesize(::cancelled)
-                check(!cancelled()) { "Cancelled" }
-                post(id) { status.append("\nTTS load+synthesis: ${SystemClock.elapsedRealtime() - start} ms\nמשמיע תשובה קבועה (נתוני דוגמה).") }
-                play(audio, rate, ::cancelled)
-                post(id) { status.append("\nהסתיים. בדוק דיוק, קול ומהירות גם במצב טיסה.") }
             } catch (e: Exception) {
-                post(id) { status.append("\nשגיאה: ${e.message ?: e.javaClass.simpleName}") }
+                diagnostic("attempt stopped ${e.javaClass.simpleName}: ${e.message}")
+                post(id) { status.text = "הבדיקה נעצרה: ${e.message}" }
             } catch (e: LinkageError) {
-                post(id) { status.append("\nלא ניתן לטעון את ספריית מנוע הקול: ${e.message ?: e.javaClass.simpleName}\nיש לעדכן את התקנת ה־APK ולשלוח את ההודעה הזו לבדיקה.") }
+                diagnostic("native linkage error")
+                post(id) { status.text = "לא ניתן לטעון את מנוע הקול: ${e.message}" }
             } finally {
-                busy = false; recording = false
+                File(cacheDir, "speech-input.pcm").delete()
+                speechCall = null; transcribing = false; busy = false; recording = false
                 handler.post { if (!isDestroyed) {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     updateButtons()
-                    if (foreground && turn.get() != id) status.text = "הפעולה בוטלה. ניתן לנסות שוב."
+                    if (foreground && turn.get() != id) status.text = "הפעולה בוטלה."
                 } }
             }
         }
@@ -241,9 +231,6 @@ class VoicePocActivity : Activity() {
                     maxOf(0L, it.size - maxOf(target.length(), File(target.path + ".download").length()))
                 }
                 require(models.usableSpace > needed + 64L * 1024 * 1024) { "אין מספיק מקום פנוי להורדת המודלים" }
-                synchronized(nativeLock) {
-                    if (whisperHandle != 0L) { WhisperNative.release(whisperHandle); whisperHandle = 0L }
-                }
                 verified = false
                 val installer = VoiceModelInstaller(models)
                 var completed = 0L
@@ -266,7 +253,7 @@ class VoicePocActivity : Activity() {
                 val reply = assets.open("voice-bootstrap/reply.json").use { it.readBytes() }
                 installer.commitFixture(reply, manifest.getJSONObject("files").getString("reply.json"), manifest.toString().toByteArray(Charsets.UTF_8))
                 verifyModels()
-                post(id) { status.text = "המודלים מוכנים. לחץ ‘דבר בעברית’.\nלתמלול המואץ סמן GPU; מצב דיוק נשאר מסומן.\nמכאן ניתן לעבוד גם במצב טיסה." }
+                post(id) { status.text = "המודלים מוכנים. בצע תחילה בדיקת טעינת מודל בלבד.\nמכאן ניתן לעבוד גם במצב טיסה." }
             } catch (e: Exception) {
                 post(id) { status.text = "ההתקנה נעצרה: ${e.message}\nלחץ על הורדת מודלים כדי להמשיך. קבצים שהושלמו נשמרו." }
             } finally {
@@ -318,7 +305,7 @@ class VoicePocActivity : Activity() {
         require(size > 0) { "Microphone format unavailable" }
         val recorder = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
             AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(size, 8192))
-        val samples = FloatArray(16000 * 12)
+        val samples = FloatArray(16000 * 8)
         var count = 0
         try {
             require(recorder.state == AudioRecord.STATE_INITIALIZED) { "Microphone unavailable" }
@@ -326,8 +313,8 @@ class VoicePocActivity : Activity() {
             if (!foreground || turn.get() != id) return floatArrayOf()
             recorder.startRecording()
             post(id) {
-                status.append("\nדבר עכשיו; לחץ ‘סיום משפט’. עד 12 שניות.")
-                updateButtons(); handler.postDelayed(autoStop, 12_000)
+                status.append("\nדבר עכשיו; לחץ ‘סיום משפט’. עד 8 שניות.")
+                updateButtons(); handler.postDelayed(autoStop, 8_000)
             }
             val chunk = ShortArray(1024)
             while (recording && foreground && turn.get() == id && count < samples.size) {
@@ -350,9 +337,8 @@ class VoicePocActivity : Activity() {
     }
     private fun cancelTurn() {
         turn.incrementAndGet(); stopRecording()
-        synchronized(nativeLock) {
-            if (whisperHandle != 0L && transcribing) WhisperNative.cancel(whisperHandle)
-        }
+        speechCall?.cancel()
+        diagnostic("user cancellation")
         try { speaker?.pause(); speaker?.flush() } catch (_: IllegalStateException) {}
         status.text = "מבטל את הפעולה…"
     }
@@ -383,23 +369,14 @@ class VoicePocActivity : Activity() {
     override fun onResume() { super.onResume(); foreground = true; updateButtons() }
     override fun onPause() {
         foreground = false; turn.incrementAndGet(); stopRecording()
-        // Cancel native inference if loaded; no model download or initialization here.
-        if (transcribing) {
-            synchronized(nativeLock) {
-                if (whisperHandle != 0L) WhisperNative.cancel(whisperHandle)
-            }
-        }
+        speechCall?.cancel("Cancelled when app left foreground")
+        if (busy) diagnostic("activity left foreground; cancellation requested")
         try { speaker?.pause(); speaker?.flush() } catch (_: IllegalStateException) {}
         super.onPause()
     }
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        // Queue destruction behind active inference; never free a context being used.
-        worker.execute {
-            synchronized(nativeLock) {
-                if (whisperHandle != 0L) { WhisperNative.release(whisperHandle); whisperHandle = 0L }
-            }
-        }
+        speechCall?.cancel("Activity destroyed")
         worker.shutdown()
         super.onDestroy()
     }

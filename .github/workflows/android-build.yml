@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - "feature/**"
+      - "fix/**"
 
 jobs:
   assemble-debug:
@@ -44,7 +45,7 @@ jobs:
       - name: Run voice tensor math tests
         run: ./gradlew :app:testDebugUnitTest
 
-  assemble-vulkan-poc:
+  assemble-cpu-poc:
     needs: prepare-mobile-bootstrap
     runs-on: ubuntu-latest
     steps:
@@ -59,14 +60,14 @@ jobs:
         with:
           name: voice-mobile-bootstrap
           path: app/src/debug/assets/voice-bootstrap
-      - name: Build standalone mobile Vulkan APK
-        run: ./gradlew :app:assembleDebug -PvoiceVulkan=true -PvoiceMobile=true
+      - name: Build standalone mobile CPU APK
+        run: ./gradlew :app:assembleDebug -PvoiceMobile=true
       - name: Test model installer
-        run: ./gradlew :app:testDebugUnitTest -PvoiceVulkan=true -PvoiceMobile=true
+        run: ./gradlew :app:testDebugUnitTest -PvoiceMobile=true
       - name: Upload experimental APK
         uses: actions/upload-artifact@v4
         with:
-          name: voice-mobile-vulkan-apk
+          name: voice-mobile-cpu-diagnostic-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
