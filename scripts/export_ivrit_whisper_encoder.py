@@ -1,0 +1,193 @@
+"""Export the Hebrew ivrit.ai Whisper Large v3 Turbo encoder to LiteRT.
+
+This script is intentionally local-only: point --model-dir at a complete local
+Transformers checkpoint directory. It never contacts Hugging Face.
+
+Run on Linux with Python 3.11. The official LiteRT Torch converter currently
+supports Linux and recommends Python 3.11.
+
+Expected source model:
+  ivrit-ai/whisper-large-v3-turbo
+  Whisper Large v3 Turbo Hebrew fine-tune
+  encoder_layers=32, decoder_layers=4, d_model=1280, num_mel_bins=128
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+import numpy as np
+import torch
+from transformers import AutoModelForSpeechSeq2Seq
+import litert_torch
+
+EXPECTED = {
+    "model_type": "whisper",
+    "d_model": 1280,
+    "encoder_layers": 32,
+    "decoder_layers": 4,
+    "num_mel_bins": 128,
+    "max_source_positions": 1500,
+}
+INPUT_SHAPE = (1, 128, 3000)
+
+
+class EncoderOnly(torch.nn.Module):
+    def __init__(self, whisper_model: torch.nn.Module) -> None:
+        super().__init__()
+        self.encoder = whisper_model.model.encoder
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        # Keep the exported interface tensor-only. The outer converter receives
+        # positional tensors only; HF-specific kwargs stay encapsulated here.
+        return self.encoder(
+            input_features=input_features,
+            return_dict=False,
+        )[0]
+
+
+def validate_local_checkpoint(model_dir: Path) -> dict:
+    required = [
+        model_dir / "config.json",
+        model_dir / "preprocessor_config.json",
+        model_dir / "model.safetensors",
+    ]
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise SystemExit(
+            "Incomplete local checkpoint. Missing:\n  " + "\n  ".join(missing)
+        )
+
+    config = json.loads((model_dir / "config.json").read_text())
+    mismatches = {
+        key: (config.get(key), expected)
+        for key, expected in EXPECTED.items()
+        if config.get(key) != expected
+    }
+    if mismatches:
+        details = "\n".join(
+            f"  {key}: got {actual!r}, expected {expected!r}"
+            for key, (actual, expected) in mismatches.items()
+        )
+        raise SystemExit(
+            "Checkpoint does not match ivrit.ai Whisper Large v3 Turbo:\n" + details
+        )
+
+    pre = json.loads((model_dir / "preprocessor_config.json").read_text())
+    if pre.get("feature_size") != 128 or pre.get("nb_max_frames") != 3000:
+        raise SystemExit(
+            "Unexpected preprocessing contract: expected feature_size=128 and "
+            "nb_max_frames=3000"
+        )
+    if pre.get("sampling_rate") != 16000:
+        raise SystemExit("Unexpected sample rate; expected 16 kHz")
+
+    return config
+
+
+def first_array(value):
+    if isinstance(value, (tuple, list)):
+        if not value:
+            raise RuntimeError("LiteRT converter returned an empty output sequence")
+        value = value[0]
+    if hasattr(value, "numpy"):
+        value = value.numpy()
+    return np.asarray(value)
+
+
+def main() -> None:
+    if sys.version_info[:2] != (3, 11):
+        raise SystemExit(
+            f"Use Python 3.11 for LiteRT Torch conversion; got {sys.version.split()[0]}"
+        )
+    if sys.platform != "linux":
+        raise SystemExit(
+            "LiteRT Torch conversion is run on Linux. Use a Linux x86_64 environment "
+            "for this export step; do not attempt it with macOS Python 3.14."
+        )
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model-dir",
+        required=True,
+        type=Path,
+        help="Local directory containing the complete ivrit.ai Transformers checkpoint",
+    )
+    parser.add_argument(
+        "--output",
+        required=True,
+        type=Path,
+        help="Output .tflite path, outside Git",
+    )
+    args = parser.parse_args()
+
+    model_dir = args.model_dir.expanduser().resolve()
+    output = args.output.expanduser().resolve()
+    validate_local_checkpoint(model_dir)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    print(f"Loading local checkpoint: {model_dir}")
+    model = AutoModelForSpeechSeq2Seq.from_pretrained(
+        str(model_dir),
+        local_files_only=True,
+        torch_dtype=torch.float32,
+        low_cpu_mem_usage=True,
+    ).eval()
+
+    encoder = EncoderOnly(model).eval()
+    total = sum(p.numel() for p in model.parameters())
+    encoder_total = sum(p.numel() for p in encoder.parameters())
+    print(f"Full parameters: {total:,}")
+    print(f"Encoder parameters: {encoder_total:,}")
+
+    # Deterministic non-zero sample helps expose conversion/parity problems that
+    # an all-zero tensor can hide.
+    torch.manual_seed(7)
+    sample = torch.randn(INPUT_SHAPE, dtype=torch.float32) * 0.05
+    sample_inputs = (sample,)
+
+    with torch.no_grad():
+        reference = encoder(sample).detach().cpu().numpy()
+
+    if reference.shape != (1, 1500, 1280):
+        raise RuntimeError(
+            f"Unexpected PyTorch encoder output shape: {reference.shape}; "
+            "expected (1, 1500, 1280)"
+        )
+    if not np.isfinite(reference).all():
+        raise RuntimeError("PyTorch encoder produced non-finite values")
+
+    print("Converting encoder directly from PyTorch to LiteRT…")
+    edge_model = litert_torch.convert(encoder, sample_inputs)
+
+    print("Running host parity check…")
+    converted = first_array(edge_model(*sample_inputs))
+    if converted.shape != reference.shape:
+        raise RuntimeError(
+            f"Converted output shape {converted.shape} != reference {reference.shape}"
+        )
+    if not np.isfinite(converted).all():
+        raise RuntimeError("Converted LiteRT encoder produced non-finite values")
+
+    abs_error = np.abs(reference - converted)
+    max_abs = float(abs_error.max())
+    mean_abs = float(abs_error.mean())
+    print(f"Parity max abs error: {max_abs:.8f}")
+    print(f"Parity mean abs error: {mean_abs:.8f}")
+
+    # This first gate is intentionally conservative. If conversion changes the
+    # encoder numerically more than this, stop before Tensor compilation.
+    if max_abs > 5e-3 or mean_abs > 5e-4:
+        raise RuntimeError(
+            "LiteRT encoder parity is outside the initial acceptance threshold"
+        )
+
+    edge_model.export(str(output))
+    print(f"Exported: {output}")
+    print(f"Size: {output.stat().st_size:,} bytes")
+
+
+if __name__ == "__main__":
+    main()
