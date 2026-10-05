@@ -1,0 +1,23 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="Mosaic TPU ASR Gate"
+        android:allowBackup="false"
+        android:extractNativeLibs="true"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <uses-native-library android:name="libedgetpu_litert.so" android:required="false" />
+        <activity
+            android:name=".WhisperGateActivity"
+            android:exported="true"
+            android:hardwareAccelerated="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".WhisperGateService"
+            android:exported="false"
+            android:process=":tpu" />
+    </application>
+</manifest>
