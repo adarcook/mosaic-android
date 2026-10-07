@@ -25,6 +25,7 @@ except ModuleNotFoundError:
 
 EXPECTED_INPUT = [1, 128, 3000]
 DIAGNOSTIC_BLOCK_INPUT = [1, 1500, 1280]
+DIRECT_CONV2D_INPUT = [1, 1, 3000, 128]
 
 
 def resolve_sdk_root() -> Path:
@@ -110,14 +111,17 @@ def inspect_encoder(path: Path) -> None:
         raise RuntimeError(f"Expected one encoder input, got {graph.InputsLength()}")
     tensor = graph.Tensors(graph.Inputs(0))
     shape = [tensor.Shape(i) for i in range(tensor.ShapeLength())]
-    if shape not in (EXPECTED_INPUT, DIAGNOSTIC_BLOCK_INPUT):
+    if shape not in (EXPECTED_INPUT, DIAGNOSTIC_BLOCK_INPUT, DIRECT_CONV2D_INPUT):
         raise RuntimeError(
             "Expected encoder input "
-            f"{EXPECTED_INPUT} or diagnostic block input {DIAGNOSTIC_BLOCK_INPUT}, "
+            f"{EXPECTED_INPUT}, diagnostic block input {DIAGNOSTIC_BLOCK_INPUT}, "
+            f"or direct Conv2d input {DIRECT_CONV2D_INPUT}, "
             f"got {shape}; refusing compile"
         )
     if shape == DIAGNOSTIC_BLOCK_INPUT:
-        print("Diagnostic graph: one Transformer block with hidden-state input")
+        print("Diagnostic graph: hidden-state input")
+    elif shape == DIRECT_CONV2D_INPUT:
+        print("Diagnostic graph: direct Whisper conv1 Conv2d control")
     print(
         f"Encoder graph: {graph.OperatorsLength()} operators; "
         f"input shape={shape}"
