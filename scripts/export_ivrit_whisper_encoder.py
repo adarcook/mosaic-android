@@ -48,6 +48,38 @@ class EncoderOnly(torch.nn.Module):
         )[0]
 
 
+class EncoderFrontend(torch.nn.Module):
+    """Whisper conv frontend + learned positional embeddings, no Transformer."""
+
+    def __init__(self, whisper_model: torch.nn.Module) -> None:
+        super().__init__()
+        encoder = whisper_model.model.encoder
+        self.conv1 = encoder.conv1
+        self.conv2 = encoder.conv2
+        self.embed_positions = encoder.embed_positions
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        hidden_states = torch.nn.functional.gelu(self.conv1(input_features))
+        hidden_states = torch.nn.functional.gelu(self.conv2(hidden_states))
+        hidden_states = hidden_states.permute(0, 2, 1)
+        positions = torch.arange(
+            self.embed_positions.num_embeddings,
+            device=hidden_states.device,
+        )
+        return hidden_states + self.embed_positions(positions)
+
+
+class EncoderBlockOnly(torch.nn.Module):
+    """One real ivrit.ai Whisper encoder Transformer block, no frontend."""
+
+    def __init__(self, whisper_model: torch.nn.Module) -> None:
+        super().__init__()
+        self.layer = whisper_model.model.encoder.layers[0]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.layer(hidden_states, None)
+
+
 def validate_local_checkpoint(model_dir: Path) -> dict:
     required = [
         model_dir / "config.json",
@@ -130,7 +162,24 @@ def main() -> None:
             "This is not a user-facing ASR model. Valid range: 1..32."
         ),
     )
+    parser.add_argument(
+        "--diagnostic-component",
+        choices=("frontend", "block"),
+        default=None,
+        help=(
+            "Export only the Whisper convolutional frontend or one Transformer "
+            "encoder block. Mutually exclusive with --diagnostic-encoder-layers."
+        ),
+    )
     args = parser.parse_args()
+
+    if (
+        args.diagnostic_component is not None
+        and args.diagnostic_encoder_layers is not None
+    ):
+        raise SystemExit(
+            "--diagnostic-component and --diagnostic-encoder-layers are mutually exclusive"
+        )
 
     model_dir = args.model_dir.expanduser().resolve()
     output = args.output.expanduser().resolve()
@@ -162,7 +211,17 @@ def main() -> None:
                 f"{layer_count}/{EXPECTED['encoder_layers']} encoder layers"
             )
 
-    encoder = EncoderOnly(model).eval()
+    if args.diagnostic_component == "frontend":
+        encoder = EncoderFrontend(model).eval()
+        sample_shape = INPUT_SHAPE
+        print("DIAGNOSTIC ONLY: exporting Whisper convolutional frontend")
+    elif args.diagnostic_component == "block":
+        encoder = EncoderBlockOnly(model).eval()
+        sample_shape = (1, 1500, EXPECTED["d_model"])
+        print("DIAGNOSTIC ONLY: exporting one Whisper Transformer encoder block")
+    else:
+        encoder = EncoderOnly(model).eval()
+        sample_shape = INPUT_SHAPE
     total = sum(p.numel() for p in model.parameters())
     encoder_total = sum(p.numel() for p in encoder.parameters())
     print(f"Full parameters: {total:,}")
@@ -171,7 +230,7 @@ def main() -> None:
     # Deterministic non-zero sample helps expose conversion/parity problems that
     # an all-zero tensor can hide.
     torch.manual_seed(7)
-    sample = torch.randn(INPUT_SHAPE, dtype=torch.float32) * 0.05
+    sample = torch.randn(sample_shape, dtype=torch.float32) * 0.05
     sample_inputs = (sample,)
 
     with torch.no_grad():
