@@ -1,6 +1,6 @@
 --- a/include/whisper.h
 +++ b/include/whisper.h
-@@ -125,7 +125,11 @@
+@@ -125,5 +125,9 @@
          int dtw_n_top;
          struct whisper_aheads dtw_aheads;
  
@@ -10,7 +10,7 @@
 +        // Default false; normal whisper.cpp behavior is unchanged.
 +        bool mosaic_external_encoder;
      };
-@@ -282,6 +286,20 @@
+@@ -282,8 +286,23 @@
              struct whisper_context * ctx,
                struct whisper_state * state,
                         const float * samples,
@@ -49,20 +49,20 @@
  
      // decode output (2-dimensional array: [n_tokens][n_vocab])
      std::vector<float> logits;
-@@ -1958,7 +1962,6 @@
+@@ -1958,5 +1962,4 @@
  static bool whisper_encode_external(const whisper_state & wstate) {
 -    GGML_UNUSED(wstate);
  
  #ifndef WHISPER_USE_COREML
      const bool use_coreml = false;
-@@ -1970,7 +1973,7 @@
+@@ -1970,5 +1973,5 @@
      const bool use_openvino = wstate.ctx_openvino != nullptr;
  #endif
  
 -    return use_coreml || use_openvino;
 +    return wstate.mosaic_external_encoder || use_coreml || use_openvino;
  }
-@@ -2407,12 +2410,22 @@
+@@ -2407,11 +2410,26 @@
              }
          } else {
              ggml_backend_sched_reset(sched);
@@ -92,14 +92,14 @@
 +            }
          }
      }
-@@ -3375,6 +3388,7 @@
+@@ -3375,5 +3393,6 @@
  struct whisper_state * whisper_init_state(whisper_context * ctx) {
      whisper_state * state = new whisper_state;
 +    state->mosaic_external_encoder = ctx->params.mosaic_external_encoder;
  
      state->backends = whisper_backend_init(ctx->params);
      if (state->backends.empty()) {
-@@ -3618,6 +3631,8 @@
+@@ -3618,6 +3637,8 @@
              /*.heads            =*/ NULL,
          },
          /*.dtw_mem_size         =*/ 1024*1024*128,
@@ -108,7 +108,7 @@
      };
      return result;
  }
-@@ -3884,6 +3898,57 @@
+@@ -3884,8 +3905,63 @@
  int whisper_pcm_to_mel(struct whisper_context * ctx, const float * samples, int n_samples, int n_threads) {
      return whisper_pcm_to_mel_with_state(ctx, ctx->state, samples, n_samples, n_threads);
  }
