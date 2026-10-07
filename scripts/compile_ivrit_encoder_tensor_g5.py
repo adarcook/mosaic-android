@@ -10,6 +10,8 @@ import argparse
 import os
 from pathlib import Path
 import re
+import shutil
+import tempfile
 
 from ai_edge_litert import schema_py_generated as schema
 from ai_edge_litert.aot import aot_compile
@@ -93,6 +95,7 @@ def main() -> None:
     os.environ.setdefault("GOOGLE_TENSOR_BACKEND_ENABLED", "1")
     sdk_root = resolve_sdk_root()
     print(f"Tensor SDK root: {sdk_root}")
+    print("Large model support: enabled")
     print(
         "Tensor compiler: "
         + os.environ.get(
@@ -103,6 +106,7 @@ def main() -> None:
     restore_sdk_executable_bits()
     inspect_encoder(encoder)
 
+    before_errors = set(Path(tempfile.gettempdir()).glob("*.error"))
     result = aot_compile.aot_compile(
         str(encoder),
         target=[
@@ -111,7 +115,17 @@ def main() -> None:
         ],
         keep_going=True,
         google_tensor_truncation_type="half",
+        google_tensor_enable_large_model_support=True,
     )
+    after_errors = set(Path(tempfile.gettempdir()).glob("*.error"))
+    new_errors = sorted(
+        after_errors - before_errors,
+        key=lambda path: path.stat().st_mtime,
+    )
+    for index, error_path in enumerate(new_errors, start=1):
+        preserved = output / f"tensor-g5-compiler-error-{index}.txt"
+        shutil.copyfile(error_path, preserved)
+        print(f"Preserved compiler stderr: {preserved}")
 
     report = result.compilation_report()
     print(report)
