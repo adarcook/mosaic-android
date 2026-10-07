@@ -1,36 +1,56 @@
-name: Tensor Whisper gate template
+name: Tensor Whisper hybrid gate
 on:
   push:
-    branches: ["experiment/tensor-g5-whisper-gate"]
+    branches:
+      - "experiment/tensor-g5-whisper-gate"
+      - "experiment/ivrit-hybrid-asr-gate"
   pull_request:
     paths:
       - "poc/tensor-whisper/**"
+      - "poc/speech/**"
       - "scripts/*whisper*"
       - ".github/workflows/tensor-whisper.yml"
       - "docs/tensor-g5-whisper-gate.md"
+      - "docs/ivrit-whisper-hybrid-asr-gate.md"
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Install pinned Android native toolchain
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "ndk;27.0.12077973"             "cmake;3.22.1"
+
       - name: Python syntax
         run: |
           python3 -m py_compile scripts/prepare_whisper_tiny_litert.py
           python3 -m py_compile scripts/compile_tensor_whisper.py
           python3 -m py_compile scripts/prepare_tensor_whisper_runtime.py
+
       - name: Fetch pinned public Tensor runtime
         run: python3 scripts/prepare_tensor_whisper_runtime.py
-      - name: Build template without private AOT model
-        run: ./gradlew -p poc/tensor-whisper assembleDebug
-      - uses: actions/upload-artifact@v4
+
+      - name: Build Tensor G5 + Whisper hybrid gate
+        run: ./gradlew -p poc/tensor-whisper clean assembleDebug
+
+      - name: Upload hybrid gate APK
+        uses: actions/upload-artifact@v4
         with:
-          name: tensor-whisper-template-not-for-installation
+          name: tensor-whisper-hybrid-asr-apk
           path: poc/tensor-whisper/build/outputs/apk/debug/*.apk
           if-no-files-found: error
