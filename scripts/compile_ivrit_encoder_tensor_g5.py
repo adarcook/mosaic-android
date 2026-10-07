@@ -14,14 +14,37 @@ import re
 from ai_edge_litert import schema_py_generated as schema
 from ai_edge_litert.aot import aot_compile
 from ai_edge_litert.aot.vendors.google_tensor import target
-import ai_edge_litert_sdk_google_tensor
+try:
+    import ai_edge_litert_sdk_google_tensor
+except ModuleNotFoundError:
+    ai_edge_litert_sdk_google_tensor = None
 
 
 EXPECTED_INPUT = [1, 128, 3000]
 
 
+def resolve_sdk_root() -> Path:
+    compiler = os.environ.get("GOOGLE_TENSOR_COMPILER_LIB")
+    if compiler:
+        compiler_path = Path(compiler).expanduser().resolve()
+        if not compiler_path.is_file():
+            raise RuntimeError(
+                f"GOOGLE_TENSOR_COMPILER_LIB does not exist: {compiler_path}"
+            )
+        return compiler_path.parent
+
+    if ai_edge_litert_sdk_google_tensor is not None:
+        return Path(ai_edge_litert_sdk_google_tensor.path_to_sdk_libs()).resolve()
+
+    raise RuntimeError(
+        "Google Tensor SDK path is unavailable. Set GOOGLE_TENSOR_COMPILER_LIB "
+        "to the extracted liblitert_plugin_compiler.so, or install the "
+        "ai-edge-litert-sdk-google-tensor wrapper with its SDK location configured."
+    )
+
+
 def restore_sdk_executable_bits() -> None:
-    sdk = Path(ai_edge_litert_sdk_google_tensor.path_to_sdk_libs())
+    sdk = resolve_sdk_root()
     tools = sdk / "third_party/unsupported_toolchains/darwinn_riscv/llvmorg_23_init/bin"
     if not tools.exists():
         raise RuntimeError(f"Tensor SDK LLVM directory not found: {tools}")
@@ -67,6 +90,15 @@ def main() -> None:
     output.mkdir(parents=True, exist_ok=True)
 
     os.environ.setdefault("GOOGLE_TENSOR_BACKEND_ENABLED", "1")
+    sdk_root = resolve_sdk_root()
+    print(f"Tensor SDK root: {sdk_root}")
+    print(
+        "Tensor compiler: "
+        + os.environ.get(
+            "GOOGLE_TENSOR_COMPILER_LIB",
+            str(sdk_root / "liblitert_plugin_compiler.so"),
+        )
+    )
     restore_sdk_executable_bits()
     inspect_encoder(encoder)
 
