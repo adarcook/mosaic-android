@@ -180,3 +180,30 @@ inference: not executed
 
 This clears stage 1 of the device safety gate. Stage 2 remains the deterministic
 zero-log-mel encoder run.
+
+
+## Verified Pixel encoder runtime result
+
+The deterministic full-encoder stage also passed on Pixel 10 Pro / Tensor G5:
+
+```text
+PASS — full ivrit.ai encoder ran through NPU/TPU path
+model load: 1335 ms
+encoder run: 2623 ms
+output floats: 1920000
+sample checksum: -42.65475845336914
+```
+
+The output size matches the expected Large-v3 encoder tensor exactly:
+
+```text
+1500 * 1280 = 1,920,000 float values
+```
+
+The earlier CPU trial spent about 28 seconds in the encoder, so this single
+device gate indicates roughly a 10.7x encoder speedup. This is not yet an
+end-to-end transcription benchmark because the input was deterministic zero
+log-mel and no microphone frontend or decoder was connected.
+
+Both device safety gates passed without a freeze, reboot, process crash, timeout,
+or non-finite output.
