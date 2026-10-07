@@ -80,6 +80,35 @@ class EncoderConv1Only(torch.nn.Module):
         return self.conv1(input_features)
 
 
+class EncoderConv1Pure2d(torch.nn.Module):
+    """Whisper conv1 weights as Conv2d with channels-last output.
+
+    This diagnostic is shaped so LiteRT can keep the graph in NHWC and, ideally,
+    emit a single CONV_2D op with no layout ops around it.
+    """
+
+    def __init__(self, whisper_model: torch.nn.Module) -> None:
+        super().__init__()
+        source = whisper_model.model.encoder.conv1
+        self.conv2d = torch.nn.Conv2d(
+            in_channels=source.in_channels,
+            out_channels=source.out_channels,
+            kernel_size=(1, source.kernel_size[0]),
+            stride=(1, source.stride[0]),
+            padding=(0, source.padding[0]),
+            bias=source.bias is not None,
+        )
+        with torch.no_grad():
+            self.conv2d.weight.copy_(source.weight.unsqueeze(2))
+            if source.bias is not None:
+                self.conv2d.bias.copy_(source.bias)
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        x = input_features.permute(0, 3, 1, 2)
+        y = self.conv2d(x)
+        return y.permute(0, 2, 3, 1)
+
+
 class EncoderConv1Direct2d(torch.nn.Module):
     """The same Whisper conv1 weights expressed directly as Conv2d.
 
@@ -238,11 +267,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--diagnostic-component",
-        choices=("frontend", "conv1", "conv1-direct2d", "conv", "positional-add", "block"),
+        choices=("frontend", "conv1", "conv1-pure2d", "conv1-direct2d", "conv", "positional-add", "block"),
         default=None,
         help=(
             "Export only a Whisper encoder component: full frontend, conv1, "
-            "direct Conv2d control, full conv path, positional-add path, or "
+            "pure/direct Conv2d controls, full conv path, positional-add path, or "
             "one Transformer block. "
             "Mutually exclusive "
             "with --diagnostic-encoder-layers."
@@ -298,6 +327,11 @@ def main() -> None:
         sample_shape = INPUT_SHAPE
         expected_output_shape = (1, EXPECTED["d_model"], 3000)
         print("DIAGNOSTIC ONLY: exporting Whisper conv1 only")
+    elif args.diagnostic_component == "conv1-pure2d":
+        encoder = EncoderConv1Pure2d(model).eval()
+        sample_shape = (1, 1, 3000, EXPECTED["num_mel_bins"])
+        expected_output_shape = (1, 1, 3000, EXPECTED["d_model"])
+        print("DIAGNOSTIC ONLY: exporting Whisper conv1 as NHWC-friendly pure Conv2d")
     elif args.diagnostic_component == "conv1-direct2d":
         encoder = EncoderConv1Direct2d(model).eval()
         sample_shape = (1, 1, 3000, EXPECTED["num_mel_bins"])
