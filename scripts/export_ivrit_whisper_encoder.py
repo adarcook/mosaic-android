@@ -80,6 +80,24 @@ class EncoderConv1Only(torch.nn.Module):
         return self.conv1(input_features)
 
 
+class SyntheticConv2d(torch.nn.Module):
+    """Small conventional Conv2d control unrelated to Whisper topology."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.conv = torch.nn.Conv2d(
+            in_channels=32,
+            out_channels=32,
+            kernel_size=(3, 3),
+            stride=(1, 1),
+            padding=(1, 1),
+            bias=True,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.conv(x)
+
+
 class EncoderConv1Pure2d(torch.nn.Module):
     """Whisper conv1 weights as Conv2d with channels-last output.
 
@@ -290,10 +308,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--diagnostic-component",
-        choices=("frontend", "conv1", "conv1-pure2d", "conv1-direct2d", "conv", "positional-add", "block"),
+        choices=("frontend", "synthetic-conv2d", "conv1", "conv1-pure2d", "conv1-direct2d", "conv", "positional-add", "block"),
         default=None,
         help=(
-            "Export only a Whisper encoder component: full frontend, conv1, "
+            "Export a compiler diagnostic: synthetic Conv2d, full frontend, conv1, "
             "pure/direct Conv2d controls, full conv path, positional-add path, or "
             "one Transformer block. "
             "Mutually exclusive "
@@ -349,7 +367,12 @@ def main() -> None:
             )
 
     expected_output_shape = (1, 1500, EXPECTED["d_model"])
-    if args.diagnostic_component == "frontend":
+    if args.diagnostic_component == "synthetic-conv2d":
+        encoder = SyntheticConv2d().eval()
+        sample_shape = (1, 32, 32, 32)
+        expected_output_shape = (1, 32, 32, 32)
+        print("DIAGNOSTIC ONLY: exporting conventional synthetic Conv2d")
+    elif args.diagnostic_component == "frontend":
         encoder = EncoderFrontend(model).eval()
         sample_shape = INPUT_SHAPE
         print("DIAGNOSTIC ONLY: exporting Whisper convolutional frontend")
