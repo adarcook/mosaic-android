@@ -55,15 +55,40 @@ def resolve_sdk_root() -> Path:
 
 def restore_sdk_executable_bits() -> None:
     sdk = resolve_sdk_root()
-    tools = sdk / "third_party/unsupported_toolchains/darwinn_riscv/llvmorg_23_init/bin"
-    if not tools.exists():
-        raise RuntimeError(f"Tensor SDK LLVM directory not found: {tools}")
-    for path in tools.iterdir():
-        if not path.is_file():
-            continue
-        with path.open("rb") as handle:
-            if handle.read(4) == b"\x7fELF":
+
+    # SDK releases do not all bundle the same LLVM directory layout. The v2
+    # archive currently uses llvmorg_23_init, while older drops may use a
+    # different toolchain layout or no bundled LLVM directory at all. Search
+    # rather than hard-coding one release-specific path.
+    third_party = sdk / "third_party"
+    bin_dirs = (
+        sorted(path for path in third_party.rglob("bin") if path.is_dir())
+        if third_party.exists()
+        else []
+    )
+    if not bin_dirs:
+        print("Tensor SDK bundled LLVM tools not found; skipping executable-bit repair")
+        return
+
+    repaired = 0
+    for tools in bin_dirs:
+        for path in tools.iterdir():
+            if not path.is_file():
+                continue
+            try:
+                with path.open("rb") as handle:
+                    is_elf = handle.read(4) == b"\x7fELF"
+            except OSError:
+                continue
+            if is_elf:
                 path.chmod(path.stat().st_mode | 0o111)
+                repaired += 1
+
+    print(
+        f"Checked {len(bin_dirs)} Tensor SDK tool bin director"
+        f"{'y' if len(bin_dirs) == 1 else 'ies'}; "
+        f"ensured execute bits on {repaired} ELF tools"
+    )
 
 
 def inspect_encoder(path: Path) -> None:
