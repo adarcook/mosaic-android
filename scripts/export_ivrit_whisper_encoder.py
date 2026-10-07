@@ -69,6 +69,17 @@ class EncoderFrontend(torch.nn.Module):
         return hidden_states + self.embed_positions(positions)
 
 
+class EncoderConv1Only(torch.nn.Module):
+    """Whisper conv1 only, no activation or downstream frontend ops."""
+
+    def __init__(self, whisper_model: torch.nn.Module) -> None:
+        super().__init__()
+        self.conv1 = whisper_model.model.encoder.conv1
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        return self.conv1(input_features)
+
+
 class EncoderConvOnly(torch.nn.Module):
     """Whisper conv1/GELU + conv2/GELU + layout change, no positions."""
 
@@ -194,11 +205,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--diagnostic-component",
-        choices=("frontend", "conv", "positional-add", "block"),
+        choices=("frontend", "conv1", "conv", "positional-add", "block"),
         default=None,
         help=(
-            "Export only a Whisper encoder component: full frontend, conv path, "
-            "positional-add path, or one Transformer block. Mutually exclusive "
+            "Export only a Whisper encoder component: full frontend, conv1, "
+            "full conv path, positional-add path, or one Transformer block. "
+            "Mutually exclusive "
             "with --diagnostic-encoder-layers."
         ),
     )
@@ -242,10 +254,16 @@ def main() -> None:
                 f"{layer_count}/{EXPECTED['encoder_layers']} encoder layers"
             )
 
+    expected_output_shape = (1, 1500, EXPECTED["d_model"])
     if args.diagnostic_component == "frontend":
         encoder = EncoderFrontend(model).eval()
         sample_shape = INPUT_SHAPE
         print("DIAGNOSTIC ONLY: exporting Whisper convolutional frontend")
+    elif args.diagnostic_component == "conv1":
+        encoder = EncoderConv1Only(model).eval()
+        sample_shape = INPUT_SHAPE
+        expected_output_shape = (1, EXPECTED["d_model"], 3000)
+        print("DIAGNOSTIC ONLY: exporting Whisper conv1 only")
     elif args.diagnostic_component == "conv":
         encoder = EncoderConvOnly(model).eval()
         sample_shape = INPUT_SHAPE
@@ -275,10 +293,10 @@ def main() -> None:
     with torch.no_grad():
         reference = encoder(sample).detach().cpu().numpy()
 
-    if reference.shape != (1, 1500, 1280):
+    if reference.shape != expected_output_shape:
         raise RuntimeError(
             f"Unexpected PyTorch encoder output shape: {reference.shape}; "
-            "expected (1, 1500, 1280)"
+            f"expected {expected_output_shape}"
         )
     if not np.isfinite(reference).all():
         raise RuntimeError("PyTorch encoder produced non-finite values")
