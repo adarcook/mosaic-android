@@ -55,6 +55,37 @@ Java_life_mosaic_voice_WhisperNative_create(JNIEnv *env, jobject, jstring path, 
     if (!s->ctx) { fail(env, "Could not load the local Whisper model"); return 0; }
     return reinterpret_cast<jlong>(s.release());
 }
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_life_mosaic_voice_WhisperNative_createHybrid(JNIEnv *env, jobject, jstring path) {
+    whisper_log_set(no_log, nullptr);
+    const char *chars = env->GetStringUTFChars(path, nullptr);
+    if (!chars) return 0;
+    std::string model(chars);
+    env->ReleaseStringUTFChars(path, chars);
+
+    auto cp = whisper_context_default_params();
+    cp.use_gpu = false;
+    cp.flash_attn = true;
+    cp.mosaic_external_encoder = true;
+
+    auto s = std::make_unique<Session>();
+    s->ctx.reset(whisper_init_from_file_with_params(model.c_str(), cp));
+    if (!s->ctx) {
+        fail(env, "Could not load the local Whisper decoder model in external-encoder mode");
+        return 0;
+    }
+
+    if (whisper_model_n_mels(s->ctx.get()) != 128 ||
+        whisper_model_n_audio_ctx(s->ctx.get()) != 1500 ||
+        whisper_model_n_audio_state(s->ctx.get()) != 1280) {
+        fail(env, "Hybrid gate requires Whisper Large-v3 128x3000 -> 1500x1280 architecture");
+        return 0;
+    }
+
+    return reinterpret_cast<jlong>(s.release());
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_life_mosaic_voice_WhisperNative_prepare(JNIEnv *, jobject, jlong handle) {
     if (handle) { session(handle)->cancelled = false; session(handle)->phase = 0; }
@@ -116,6 +147,125 @@ Java_life_mosaic_voice_WhisperNative_transcribe(JNIEnv *env, jobject, jlong hand
     std::string text;
     for (int i = 0; i < whisper_full_n_segments(s->ctx.get()); ++i)
         text += whisper_full_get_segment_text(s->ctx.get(), i);
+    return env->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_life_mosaic_voice_WhisperNative_prepareEncoderInput(JNIEnv *env, jobject, jlong handle, jfloatArray pcm) {
+    auto *s = session(handle);
+    if (!s || !s->ctx) {
+        fail(env, "Whisper hybrid session is not loaded");
+        return nullptr;
+    }
+
+    const jsize n_samples = env->GetArrayLength(pcm);
+    if (n_samples < 8000 || n_samples > 16000 * 8) {
+        fail(env, "Hybrid gate accepts 0.5 to 8 seconds of 16 kHz PCM");
+        return nullptr;
+    }
+
+    std::vector<float> audio(n_samples);
+    env->GetFloatArrayRegion(pcm, 0, n_samples, audio.data());
+
+    whisper_reset_timings(s->ctx.get());
+    if (whisper_pcm_to_mel(s->ctx.get(), audio.data(), audio.size(), 2) != 0) {
+        fail(env, "Whisper log-mel frontend failed");
+        return nullptr;
+    }
+
+    const int n_mels = whisper_model_n_mels(s->ctx.get());
+    const int n_frames = 2 * whisper_model_n_audio_ctx(s->ctx.get());
+    const int n_elements = n_mels * n_frames;
+    std::vector<float> input(n_elements);
+    if (whisper_mosaic_copy_encoder_input(s->ctx.get(), input.data(), n_elements) != 0) {
+        fail(env, "Could not copy Whisper encoder input");
+        return nullptr;
+    }
+
+    jfloatArray result = env->NewFloatArray(n_elements);
+    if (!result) return nullptr;
+    env->SetFloatArrayRegion(result, 0, n_elements, input.data());
+    return result;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_life_mosaic_voice_WhisperNative_transcribeEncoded(
+        JNIEnv *env,
+        jobject,
+        jlong handle,
+        jfloatArray encoded,
+        jboolean accurate,
+        jint budget_seconds) {
+    auto *s = session(handle);
+    if (!s || !s->ctx) {
+        fail(env, "Whisper hybrid session is not loaded");
+        return nullptr;
+    }
+    if (budget_seconds != 30 && budget_seconds != 60 && budget_seconds != 90) {
+        fail(env, "Invalid hybrid decode budget");
+        return nullptr;
+    }
+
+    const int expected =
+            whisper_model_n_audio_ctx(s->ctx.get()) *
+            whisper_model_n_audio_state(s->ctx.get());
+    const jsize n_encoded = env->GetArrayLength(encoded);
+    if (n_encoded != expected) {
+        fail(env, "Unexpected Tensor G5 encoder output size");
+        return nullptr;
+    }
+
+    std::vector<float> encoder_output(n_encoded);
+    env->GetFloatArrayRegion(encoded, 0, n_encoded, encoder_output.data());
+    if (whisper_mosaic_set_encoder_output(
+            s->ctx.get(), encoder_output.data(), encoder_output.size()) != 0) {
+        fail(env, "Could not inject Tensor G5 encoder output");
+        return nullptr;
+    }
+
+    s->cancelled = false;
+    s->phase = 1;
+    s->deadline = Clock::now() + std::chrono::seconds(budget_seconds);
+
+    auto p = whisper_full_default_params(
+            accurate ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
+    p.n_threads = 2;
+    p.audio_ctx = 0;  // Tensor artifact is compiled for the full 1500-frame audio context.
+    p.language = "he";
+    p.detect_language = false;
+    p.translate = false;
+    p.no_context = true;
+    p.no_timestamps = true;
+    p.single_segment = true;
+    p.max_tokens = 96;
+    p.greedy.best_of = 1;
+    p.beam_search.beam_size = accurate ? 5 : 1;
+    p.temperature = 0.0f;
+    p.temperature_inc = 0.0f;
+    p.print_realtime = false;
+    p.print_progress = false;
+    p.print_timestamps = false;
+    p.encoder_begin_callback = encoder_begin;
+    p.encoder_begin_callback_user_data = s;
+    p.logits_filter_callback = decoding;
+    p.logits_filter_callback_user_data = s;
+    p.abort_callback = should_abort;
+    p.abort_callback_user_data = s;
+
+    // PCM has already been converted to the state-owned mel spectrogram.
+    // n_samples=0 deliberately preserves that mel and only runs the external
+    // encoder seam + existing cross-attention/decoder path.
+    if (whisper_full(s->ctx.get(), p, nullptr, 0) != 0 || should_abort(s)) {
+        fail(env, s->cancelled
+                ? "Cancelled"
+                : "Hybrid decode failed or exceeded the selected inference budget");
+        return nullptr;
+    }
+
+    std::string text;
+    for (int i = 0; i < whisper_full_n_segments(s->ctx.get()); ++i) {
+        text += whisper_full_get_segment_text(s->ctx.get(), i);
+    }
     return env->NewStringUTF(text.c_str());
 }
 
