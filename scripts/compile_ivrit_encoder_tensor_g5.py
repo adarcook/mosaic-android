@@ -91,6 +91,14 @@ def restore_sdk_executable_bits() -> None:
     )
 
 
+def _builtin_operator_names() -> dict[int, str]:
+    return {
+        value: name
+        for name, value in vars(schema.BuiltinOperator).items()
+        if isinstance(value, int) and not name.startswith("_")
+    }
+
+
 def inspect_encoder(path: Path) -> None:
     model = schema.Model.GetRootAsModel(path.read_bytes(), 0)
     if model.SubgraphsLength() != 1:
@@ -115,11 +123,34 @@ def inspect_encoder(path: Path) -> None:
         f"input shape={shape}"
     )
 
+    builtin_names = _builtin_operator_names()
+    op_names = []
+    for i in range(graph.OperatorsLength()):
+        op = graph.Operators(i)
+        opcode = model.OperatorCodes(op.OpcodeIndex())
+        builtin_code = opcode.BuiltinCode()
+        name = builtin_names.get(builtin_code, f"BUILTIN_{builtin_code}")
+        if name == "CUSTOM":
+            custom = opcode.CustomCode()
+            if custom:
+                name = f"CUSTOM:{custom.decode('utf-8', errors='replace')}"
+        op_names.append(name)
+    print("Operator sequence: " + " -> ".join(op_names))
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("encoder", type=Path, help="Encoder-only LiteRT .tflite")
     parser.add_argument("output", type=Path, help="Private output directory outside Git")
+    parser.add_argument(
+        "--truncation-type",
+        choices=("none", "half", "bfloat16"),
+        default="half",
+        help=(
+            "Google Tensor numeric truncation mode. Use 'none' to omit the "
+            "compiler option entirely. Default preserves the existing half mode."
+        ),
+    )
     args = parser.parse_args()
 
     encoder = args.encoder.expanduser().resolve()
@@ -135,21 +166,27 @@ def main() -> None:
     os.environ["GOOGLE_TENSOR_COMPILER_LIB"] = str(sdk_root)
     print(f"Tensor SDK root: {sdk_root}")
     print("Large model support: enabled")
+    print(f"Tensor truncation type: {args.truncation_type}")
     print(f"Tensor SDK libs path: {os.environ['GOOGLE_TENSOR_COMPILER_LIB']}")
     print(f"Tensor compiler: {sdk_root / 'liblitert_plugin_compiler.so'}")
     restore_sdk_executable_bits()
     inspect_encoder(encoder)
 
     before_errors = set(Path(tempfile.gettempdir()).glob("*.error"))
+    compile_kwargs = {
+        "keep_going": True,
+        "google_tensor_enable_large_model_support": True,
+    }
+    if args.truncation_type != "none":
+        compile_kwargs["google_tensor_truncation_type"] = args.truncation_type
+
     result = aot_compile.aot_compile(
         str(encoder),
         target=[
             target.Target(target.SocModel.TENSOR_G5),
             fallback_backend.FallbackTarget(),
         ],
-        keep_going=True,
-        google_tensor_truncation_type="half",
-        google_tensor_enable_large_model_support=True,
+        **compile_kwargs,
     )
     after_errors = set(Path(tempfile.gettempdir()).glob("*.error"))
     new_errors = sorted(
