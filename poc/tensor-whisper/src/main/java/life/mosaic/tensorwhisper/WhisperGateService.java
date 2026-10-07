@@ -241,8 +241,8 @@ public final class WhisperGateService extends Service {
                             "אודיו אמיתי: %.2f שניות", pcm.length / 16000.0));
 
                     long decoderLoadStart = SystemClock.elapsedRealtime();
-                    WhisperNative.ensureLoaded();
-                    whisperHandle = WhisperNative.createHybrid(decoderFile.getAbsolutePath());
+                    WhisperNative.INSTANCE.ensureLoaded();
+                    whisperHandle = WhisperNative.INSTANCE.createHybrid(decoderFile.getAbsolutePath());
                     if (whisperHandle == 0L) {
                         throw new IllegalStateException("Whisper hybrid decoder load failed");
                     }
@@ -251,7 +251,7 @@ public final class WhisperGateService extends Service {
 
                     long melStart = SystemClock.elapsedRealtime();
                     float[] encoderInput =
-                            WhisperNative.prepareEncoderInput(whisperHandle, pcm);
+                            WhisperNative.INSTANCE.prepareEncoderInput(whisperHandle, pcm);
                     long melMs = SystemClock.elapsedRealtime() - melStart;
                     if (encoderInput.length != INPUT_FLOATS) {
                         throw new IllegalStateException(
@@ -289,7 +289,7 @@ public final class WhisperGateService extends Service {
 
                     send(reply, 2, "מפענח עברית עם whisper.cpp Beam 5…");
                     long decodeStart = SystemClock.elapsedRealtime();
-                    String transcript = WhisperNative.transcribeEncoded(
+                    String transcript = WhisperNative.INSTANCE.transcribeEncoded(
                             whisperHandle, encoded, true, 60).trim();
                     long decodeMs = SystemClock.elapsedRealtime() - decodeStart;
                     if (transcript.isEmpty()) {
@@ -309,7 +309,7 @@ public final class WhisperGateService extends Service {
                                     + "Tensor encoder: " + encoderMs + " ms\n"
                                     + "CPU decode: " + decodeMs + " ms\n"
                                     + "total worker: " + totalMs + " ms\n"
-                                    + WhisperNative.timings(whisperHandle);
+                                    + WhisperNative.INSTANCE.timings(whisperHandle);
                 }
             }
         } catch (Throwable e) {
@@ -317,7 +317,7 @@ public final class WhisperGateService extends Service {
         } finally {
             if (whisperHandle != 0L) {
                 try {
-                    WhisperNative.release(whisperHandle);
+                    WhisperNative.INSTANCE.release(whisperHandle);
                 } catch (Throwable ignored) {
                 }
             }
