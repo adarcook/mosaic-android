@@ -87,21 +87,34 @@ class EncoderConv1Pure2d(torch.nn.Module):
     emit a single CONV_2D op with no layout ops around it.
     """
 
-    def __init__(self, whisper_model: torch.nn.Module) -> None:
+    def __init__(
+        self,
+        whisper_model: torch.nn.Module,
+        out_channels: int | None = None,
+    ) -> None:
         super().__init__()
         source = whisper_model.model.encoder.conv1
+        selected_out_channels = out_channels or source.out_channels
+        if not 1 <= selected_out_channels <= source.out_channels:
+            raise ValueError(
+                f"out_channels must be in 1..{source.out_channels}, "
+                f"got {selected_out_channels}"
+            )
+        self.out_channels = selected_out_channels
         self.conv2d = torch.nn.Conv2d(
             in_channels=source.in_channels,
-            out_channels=source.out_channels,
+            out_channels=selected_out_channels,
             kernel_size=(1, source.kernel_size[0]),
             stride=(1, source.stride[0]),
             padding=(0, source.padding[0]),
             bias=source.bias is not None,
         )
         with torch.no_grad():
-            self.conv2d.weight.copy_(source.weight.unsqueeze(2))
+            self.conv2d.weight.copy_(
+                source.weight[:selected_out_channels].unsqueeze(2)
+            )
             if source.bias is not None:
-                self.conv2d.bias.copy_(source.bias)
+                self.conv2d.bias.copy_(source.bias[:selected_out_channels])
 
     def forward(self, input_features: torch.Tensor) -> torch.Tensor:
         x = input_features.permute(0, 3, 1, 2)
@@ -266,6 +279,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--diagnostic-conv-out-channels",
+        type=int,
+        default=None,
+        help=(
+            "For --diagnostic-component conv1-pure2d only, export the first N "
+            "Whisper conv1 output channels. Useful for isolating compiler "
+            "shape/channel limits without changing input length or kernel."
+        ),
+    )
+    parser.add_argument(
         "--diagnostic-component",
         choices=("frontend", "conv1", "conv1-pure2d", "conv1-direct2d", "conv", "positional-add", "block"),
         default=None,
@@ -285,6 +308,14 @@ def main() -> None:
     ):
         raise SystemExit(
             "--diagnostic-component and --diagnostic-encoder-layers are mutually exclusive"
+        )
+    if (
+        args.diagnostic_conv_out_channels is not None
+        and args.diagnostic_component != "conv1-pure2d"
+    ):
+        raise SystemExit(
+            "--diagnostic-conv-out-channels requires "
+            "--diagnostic-component conv1-pure2d"
         )
 
     model_dir = args.model_dir.expanduser().resolve()
@@ -328,10 +359,14 @@ def main() -> None:
         expected_output_shape = (1, EXPECTED["d_model"], 3000)
         print("DIAGNOSTIC ONLY: exporting Whisper conv1 only")
     elif args.diagnostic_component == "conv1-pure2d":
-        encoder = EncoderConv1Pure2d(model).eval()
+        out_channels = args.diagnostic_conv_out_channels or EXPECTED["d_model"]
+        encoder = EncoderConv1Pure2d(model, out_channels=out_channels).eval()
         sample_shape = (1, 1, 3000, EXPECTED["num_mel_bins"])
-        expected_output_shape = (1, 1, 3000, EXPECTED["d_model"])
-        print("DIAGNOSTIC ONLY: exporting Whisper conv1 as NHWC-friendly pure Conv2d")
+        expected_output_shape = (1, 1, 3000, out_channels)
+        print(
+            "DIAGNOSTIC ONLY: exporting Whisper conv1 as NHWC-friendly pure "
+            f"Conv2d with {out_channels} output channels"
+        )
     elif args.diagnostic_component == "conv1-direct2d":
         encoder = EncoderConv1Direct2d(model).eval()
         sample_shape = (1, 1, 3000, EXPECTED["num_mel_bins"])
