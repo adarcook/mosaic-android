@@ -99,6 +99,15 @@
  
      state->backends = whisper_backend_init(ctx->params);
      if (state->backends.empty()) {
+@@ -3618,6 +3631,8 @@
+             /*.heads            =*/ NULL,
+         },
+         /*.dtw_mem_size         =*/ 1024*1024*128,
++
++        /*.mosaic_external_encoder =*/ false,
+     };
+     return result;
+ }
 @@ -3884,6 +3898,57 @@
  int whisper_pcm_to_mel(struct whisper_context * ctx, const float * samples, int n_samples, int n_threads) {
      return whisper_pcm_to_mel_with_state(ctx, ctx->state, samples, n_samples, n_threads);
