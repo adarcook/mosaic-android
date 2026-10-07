@@ -65,9 +65,18 @@ python -m pip install torch transformers accelerate safetensors numpy \
   litert-torch ai-edge-litert
 ```
 
-Install the authorized Tensor SDK packages in the same or a separate compatible
-Python 3.11 environment according to the beta instructions already used for the
-Tensor G5 probe.
+Use a separate Python 3.11 AOT environment provisioned through the official
+Google Tensor SDK wrapper. The full ivrit.ai encoder was successfully compiled
+with the SDK v2.0 archive and:
+
+```text
+ai-edge-litert==2.1.6
+ai-edge-litert-sdk-google-tensor==2.1.6
+```
+
+Point `GOOGLE_TENSOR_SDK_BETA` at the authorized SDK archive before installing
+the wrapper package. Do not manually wire `GOOGLE_TENSOR_COMPILER_LIB` or
+`LD_LIBRARY_PATH` for the production AOT path.
 
 ## Step 1 — direct PyTorch → LiteRT encoder export
 
@@ -105,11 +114,29 @@ python scripts/compile_ivrit_encoder_tensor_g5.py \
   /private/ivrit-g5
 ```
 
-Success requires:
+The compile script intentionally mirrors the Google reference path:
 
-- a Tensor G5 target in the compilation report;
-- at least one encoder operation offloaded;
-- a generated Tensor G5 artifact containing `DISPATCH_OP`.
+- Tensor G5 is the only compilation target;
+- `keep_going=False`;
+- no CPU fallback target;
+- no truncation override;
+- no large-model flag;
+- the official `ai-edge-litert-sdk-google-tensor` wrapper supplies the SDK.
+
+Success requires the entire encoder subgraph to be offloaded and the generated
+Tensor G5 artifact to contain `DISPATCH_OP`.
+
+The verified full encoder result is:
+
+```text
+Subgraph 0 fully compiled: 1693 / 1693 ops offloaded to 1 partitions.
+```
+
+The same path also fully compiled the 8-layer diagnostic graph:
+
+```text
+Subgraph 0 fully compiled: 445 / 445 ops offloaded to 1 partitions.
+```
 
 The report is written to:
 
@@ -124,10 +151,14 @@ The report is written to:
 Stop. Capture the first unsupported Torch/LiteRT operation. Fix or rewrite only
 that operation; do not switch models yet.
 
-### If export passes but Tensor compilation offloads little or nothing
+### If export passes but Tensor compilation fails
 
-The model is accurate but not currently a useful Tensor G5 target. Inspect the
-compiler report before trying quantization or graph surgery.
+First verify the official SDK wrapper path with a known-good Google reference
+model before changing the Whisper graph. During this experiment, manually wiring
+the compiler library, adding a fallback target, `keep_going=True`, and extra
+compiler flags produced misleading INTERNAL failures even for tiny diagnostic
+graphs. The official wrapper + single-target fail-fast path successfully
+compiled the complete encoder.
 
 ### If Tensor compilation succeeds
 
