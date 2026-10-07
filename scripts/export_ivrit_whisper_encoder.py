@@ -69,6 +69,36 @@ class EncoderFrontend(torch.nn.Module):
         return hidden_states + self.embed_positions(positions)
 
 
+class EncoderConvOnly(torch.nn.Module):
+    """Whisper conv1/GELU + conv2/GELU + layout change, no positions."""
+
+    def __init__(self, whisper_model: torch.nn.Module) -> None:
+        super().__init__()
+        encoder = whisper_model.model.encoder
+        self.conv1 = encoder.conv1
+        self.conv2 = encoder.conv2
+
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        hidden_states = torch.nn.functional.gelu(self.conv1(input_features))
+        hidden_states = torch.nn.functional.gelu(self.conv2(hidden_states))
+        return hidden_states.permute(0, 2, 1)
+
+
+class EncoderPositionalAddOnly(torch.nn.Module):
+    """Whisper learned positional embedding lookup + add, no convolutions."""
+
+    def __init__(self, whisper_model: torch.nn.Module) -> None:
+        super().__init__()
+        self.embed_positions = whisper_model.model.encoder.embed_positions
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        positions = torch.arange(
+            self.embed_positions.num_embeddings,
+            device=hidden_states.device,
+        )
+        return hidden_states + self.embed_positions(positions)
+
+
 class EncoderBlockOnly(torch.nn.Module):
     """One real ivrit.ai Whisper encoder Transformer block, no frontend."""
 
@@ -164,11 +194,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--diagnostic-component",
-        choices=("frontend", "block"),
+        choices=("frontend", "conv", "positional-add", "block"),
         default=None,
         help=(
-            "Export only the Whisper convolutional frontend or one Transformer "
-            "encoder block. Mutually exclusive with --diagnostic-encoder-layers."
+            "Export only a Whisper encoder component: full frontend, conv path, "
+            "positional-add path, or one Transformer block. Mutually exclusive "
+            "with --diagnostic-encoder-layers."
         ),
     )
     args = parser.parse_args()
@@ -215,6 +246,14 @@ def main() -> None:
         encoder = EncoderFrontend(model).eval()
         sample_shape = INPUT_SHAPE
         print("DIAGNOSTIC ONLY: exporting Whisper convolutional frontend")
+    elif args.diagnostic_component == "conv":
+        encoder = EncoderConvOnly(model).eval()
+        sample_shape = INPUT_SHAPE
+        print("DIAGNOSTIC ONLY: exporting Whisper conv path")
+    elif args.diagnostic_component == "positional-add":
+        encoder = EncoderPositionalAddOnly(model).eval()
+        sample_shape = (1, 1500, EXPECTED["d_model"])
+        print("DIAGNOSTIC ONLY: exporting Whisper positional-add path")
     elif args.diagnostic_component == "block":
         encoder = EncoderBlockOnly(model).eval()
         sample_shape = (1, 1500, EXPECTED["d_model"])
