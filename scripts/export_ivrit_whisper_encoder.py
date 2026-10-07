@@ -121,6 +121,15 @@ def main() -> None:
         type=Path,
         help="Output .tflite path, outside Git",
     )
+    parser.add_argument(
+        "--diagnostic-encoder-layers",
+        type=int,
+        default=None,
+        help=(
+            "Export only the first N encoder layers as a compiler diagnostic. "
+            "This is not a user-facing ASR model. Valid range: 1..32."
+        ),
+    )
     args = parser.parse_args()
 
     model_dir = args.model_dir.expanduser().resolve()
@@ -135,6 +144,23 @@ def main() -> None:
         torch_dtype=torch.float32,
         low_cpu_mem_usage=True,
     ).eval()
+
+    if args.diagnostic_encoder_layers is not None:
+        layer_count = args.diagnostic_encoder_layers
+        if not 1 <= layer_count <= EXPECTED["encoder_layers"]:
+            raise SystemExit(
+                "--diagnostic-encoder-layers must be between 1 and "
+                f"{EXPECTED['encoder_layers']}"
+            )
+        if layer_count < EXPECTED["encoder_layers"]:
+            original_layers = model.model.encoder.layers
+            model.model.encoder.layers = torch.nn.ModuleList(
+                list(original_layers[:layer_count])
+            )
+            print(
+                "DIAGNOSTIC ONLY: exporting the first "
+                f"{layer_count}/{EXPECTED['encoder_layers']} encoder layers"
+            )
 
     encoder = EncoderOnly(model).eval()
     total = sum(p.numel() for p in model.parameters())
