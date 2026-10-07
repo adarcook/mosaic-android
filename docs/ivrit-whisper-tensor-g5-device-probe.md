@@ -165,3 +165,18 @@ After this gate, the next slice is:
 The first end-to-end acceptance run should reuse the same short Hebrew sentence
 set that previously produced the accurate ~29.5 s CPU transcript, then compare
 encoder latency, total latency, transcript quality, temperature, and stability.
+
+
+## Verified Pixel load-only result
+
+On Pixel 10 Pro / Tensor G5, the full compiled ivrit.ai encoder artifact loaded
+successfully through the NPU/TPU runtime path without running inference:
+
+```text
+PASS — full ivrit.ai model loaded through NPU/TPU path
+load time: 1884 ms
+inference: not executed
+```
+
+This clears stage 1 of the device safety gate. Stage 2 remains the deterministic
+zero-log-mel encoder run.
