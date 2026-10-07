@@ -58,6 +58,20 @@ if(NOT PATCH_ALREADY_APPLIED EQUAL 0)
         message(FATAL_ERROR "Cannot apply pinned Whisper cancellation fix")
     endif()
 endif()
+
+# Hybrid Tensor G5 gate: allow one context to bypass whisper.cpp's audio encoder
+# while retaining its exact mel frontend, cross-attention preparation and decoder.
+set(WHISPER_EXTERNAL_ENCODER_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/whisper-external-encoder.patch")
+execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${WHISPER_EXTERNAL_ENCODER_PATCH}"
+    WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE EXTERNAL_PATCH_ALREADY_APPLIED
+    OUTPUT_QUIET ERROR_QUIET)
+if(NOT EXTERNAL_PATCH_ALREADY_APPLIED EQUAL 0)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${WHISPER_EXTERNAL_ENCODER_PATCH}"
+        WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE EXTERNAL_PATCH_RESULT)
+    if(NOT EXTERNAL_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "Cannot apply pinned Whisper external encoder seam")
+    endif()
+endif()
 add_library(mosaic_whisper SHARED bridge.cpp)
 target_compile_features(mosaic_whisper PRIVATE cxx_std_17)
 target_link_libraries(mosaic_whisper PRIVATE whisper)

@@ -7,8 +7,8 @@ android {
         applicationId = "life.mosaic.tensorwhisper"
         minSdk = 31
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2-ivrit-full-tpu-gate"
+        versionCode = 3
+        versionName = "0.3-ivrit-hybrid-asr-gate"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
@@ -20,6 +20,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":speech"))
     implementation("com.google.ai.edge.litert:litert:2.1.6") { isTransitive = false }
     implementation("com.google.ai.edge.litert:litert-api:2.1.6") { isTransitive = false }
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
