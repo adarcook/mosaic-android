@@ -14,6 +14,7 @@ import re
 from ai_edge_litert import schema_py_generated as schema
 from ai_edge_litert.aot import aot_compile
 from ai_edge_litert.aot.vendors.google_tensor import target
+from ai_edge_litert.aot.vendors import fallback_backend
 try:
     import ai_edge_litert_sdk_google_tensor
 except ModuleNotFoundError:
@@ -106,7 +107,7 @@ def main() -> None:
         str(encoder),
         target=[
             target.Target(target.SocModel.TENSOR_G5),
-            target.FallbackTarget(),
+            fallback_backend.FallbackTarget(),
         ],
         keep_going=True,
         google_tensor_truncation_type="half",
