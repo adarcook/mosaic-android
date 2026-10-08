@@ -10,6 +10,8 @@ object WhisperNative {
     external fun transcribe(handle: Long, samples: FloatArray, accurate: Boolean, budgetSeconds: Int, audioContext: Int): String
     external fun prepareEncoderInput(handle: Long, samples: FloatArray): FloatArray
     external fun transcribeEncoded(handle: Long, encoded: FloatArray, accurate: Boolean, budgetSeconds: Int): String
+    external fun transcribeEncodedCross(handle: Long, encoded: FloatArray, cross: FloatArray, accurate: Boolean, budgetSeconds: Int): String
+    external fun compareCross(handle: Long, encoded: FloatArray, cross: FloatArray): String
     external fun phase(handle: Long): Int
     external fun timings(handle: Long): String
     external fun cancel(handle: Long)

@@ -54,6 +54,8 @@ public final class WhisperGateService extends Service {
     static final int REQUEST_HYBRID_PCM = 3;
     static final int REQUEST_CROSS_LOAD = 4;
     static final int REQUEST_CROSS_RUN = 5;
+    static final int REQUEST_CROSS_COMPARE = 6;
+    static final int REQUEST_TPU_CROSS_PCM = 7;
     private static final String CROSS_NAME = "ivrit_whisper_cross_attention_Google_Tensor_G5.tflite";
     private static final long CROSS_BYTES = 26_846_992L;
     private static final String CROSS_SHA256 =
@@ -72,7 +74,9 @@ public final class WhisperGateService extends Service {
                 && msg.what != REQUEST_RUN_ZERO_MEL
                 && msg.what != REQUEST_HYBRID_PCM
                 && msg.what != REQUEST_CROSS_LOAD
-                && msg.what != REQUEST_CROSS_RUN)
+                && msg.what != REQUEST_CROSS_RUN
+                && msg.what != REQUEST_CROSS_COMPARE
+                && msg.what != REQUEST_TPU_CROSS_PCM)
                 || started
                 || msg.replyTo == null) {
             return true;
@@ -181,9 +185,7 @@ public final class WhisperGateService extends Service {
         }
     }
 
-    private String runCrossGate(Environment env, Messenger reply, boolean loadOnly)
-            throws Exception {
-        long totalStart = SystemClock.elapsedRealtime();
+    private File verifiedCrossFile() throws Exception {
         File file = externalFile(CROSS_NAME, CROSS_BYTES);
         java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
         try (FileInputStream in = new FileInputStream(file)) {
@@ -196,6 +198,51 @@ public final class WhisperGateService extends Service {
         if (!CROSS_SHA256.equals(hash.toString())) {
             throw new IllegalStateException("Cross-attention model SHA-256 mismatch");
         }
+        return file;
+    }
+
+    private static final class CrossExecution {
+        float[] values;
+        long loadMs;
+        long stageMs;
+    }
+
+    private CrossExecution prepareCross(Environment env, float[] encoded) throws Exception {
+        File file = verifiedCrossFile();
+        CrossExecution result = new CrossExecution();
+        long loadStart = SystemClock.elapsedRealtime();
+        try (CompiledModel model = CompiledModel.create(file.getAbsolutePath(),
+                new CompiledModel.Options(Accelerator.NPU), env)) {
+            result.loadMs = SystemClock.elapsedRealtime() - loadStart;
+            List<TensorBuffer> inputs = model.createInputBuffers(0);
+            List<TensorBuffer> outputs = new ArrayList<>();
+            try {
+                outputs = model.createOutputBuffers(0);
+                if (inputs.size() != 1 || outputs.size() != 1) {
+                    throw new IllegalStateException("Unexpected cross-attention signature");
+                }
+                long start = SystemClock.elapsedRealtime();
+                inputs.get(0).writeFloat(encoded);
+                model.run(inputs, outputs, 0);
+                result.values = outputs.get(0).readFloat();
+                result.stageMs = SystemClock.elapsedRealtime() - start;
+                if (result.values.length != CROSS_OUTPUT_FLOATS) {
+                    throw new IllegalStateException("Unexpected cross-attention output size");
+                }
+                // All elements checked in native compare/injection; avoid duplicate
+                // full Java diagnostic scan in the actual ASR performance trial.
+            } finally {
+                for (TensorBuffer b : outputs) b.close();
+                for (TensorBuffer b : inputs) b.close();
+            }
+        }
+        return result;
+    }
+
+    private String runCrossGate(Environment env, Messenger reply, boolean loadOnly)
+            throws Exception {
+        long totalStart = SystemClock.elapsedRealtime();
+        File file = verifiedCrossFile();
         long verifyMs = SystemClock.elapsedRealtime() - totalStart;
         send(reply, 2, "קובץ cross-attention אומת. טוען דרך NPU…");
         long loadStart = SystemClock.elapsedRealtime();
@@ -376,10 +423,24 @@ public final class WhisperGateService extends Service {
                     }
                     requireFinite(encoded, "encoder output");
 
+                    CrossExecution cross = null;
+                    if (request == REQUEST_CROSS_COMPARE || request == REQUEST_TPU_CROSS_PCM) {
+                        send(reply, 2, "מכין cross-attention על Tensor G5…");
+                        cross = prepareCross(env, encoded);
+                    }
+                    if (request == REQUEST_CROSS_COMPARE) {
+                        send(reply, 2, "משווה מטמון Q5 ב-CPU מול TPU; בדיקה חד-פעמית איטית…");
+                        long compareStart = SystemClock.elapsedRealtime();
+                        result = WhisperNative.INSTANCE.compareCross(whisperHandle, encoded, cross.values)
+                                + "\ncomparison: " + (SystemClock.elapsedRealtime() - compareStart) + " ms"
+                                + "\nTPU cross + transfers: " + cross.stageMs + " ms"
+                                + "\nאין כאן תמלול; זהו סף התאמה ניסיוני ל-Q5.";
+                    } else {
                     send(reply, 2, "מפענח עברית עם whisper.cpp Beam 5…");
                     long decodeStart = SystemClock.elapsedRealtime();
-                    String transcript = WhisperNative.INSTANCE.transcribeEncoded(
-                            whisperHandle, encoded, true, 60).trim();
+                    String transcript = cross == null
+                            ? WhisperNative.INSTANCE.transcribeEncoded(whisperHandle, encoded, true, 60).trim()
+                            : WhisperNative.INSTANCE.transcribeEncodedCross(whisperHandle, encoded, cross.values, true, 60).trim();
                     long decodeMs = SystemClock.elapsedRealtime() - decodeStart;
                     if (transcript.isEmpty()) {
                         throw new IllegalStateException("Decoder returned an empty transcript");
@@ -387,7 +448,7 @@ public final class WhisperGateService extends Service {
 
                     long totalMs = SystemClock.elapsedRealtime() - totalStart;
                     result =
-                            "PASS — תמלול hybrid אמיתי\n"
+                            (cross == null ? "PASS — תמלול hybrid אמיתי\n" : "PASS — תמלול עם encoder ו-cross-attention על TPU\n")
                                     + "תמלול: " + transcript + "\n\n"
                                     + "audio: " + String.format(
                                             java.util.Locale.ROOT,
@@ -396,9 +457,12 @@ public final class WhisperGateService extends Service {
                                     + "decoder load: " + decoderLoadMs + " ms\n"
                                     + "mel: " + melMs + " ms\n"
                                     + "Tensor encoder: " + encoderMs + " ms\n"
-                                    + "CPU decode: " + decodeMs + " ms\n"
+                                    + (cross == null ? "" : "cross load: " + cross.loadMs + " ms\n"
+                                            + "TPU cross + transfers: " + cross.stageMs + " ms\n")
+                                    + "cache injection + CPU decode: " + decodeMs + " ms\n"
                                     + "total worker: " + totalMs + " ms\n"
                                     + WhisperNative.INSTANCE.timings(whisperHandle);
+                    }
                 }
             }
             }

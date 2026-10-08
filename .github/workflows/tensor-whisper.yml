@@ -5,6 +5,7 @@ on:
       - "experiment/tensor-g5-whisper-gate"
       - "experiment/ivrit-hybrid-asr-gate"
       - "experiment/ivrit-cross-attention-tensor-g5"
+      - "experiment/ivrit-tpu-cross-integration"
   pull_request:
     paths:
       - "poc/tensor-whisper/**"

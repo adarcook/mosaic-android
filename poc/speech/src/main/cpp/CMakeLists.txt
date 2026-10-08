@@ -47,6 +47,19 @@ FetchContent_MakeAvailable(whisper)
 # v1.8.3 drops abort callbacks in scheduled encoder/decoder graphs.
 # Apply an idempotent, version-pinned patch so cancellation reaches CPU kernels.
 find_package(Git REQUIRED)
+# Unwind only our last patch before checking earlier overlapping patches.
+# This keeps repeated CMake configuration idempotent without resetting upstream.
+set(WHISPER_EXTERNAL_CROSS_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/whisper-external-cross.patch")
+execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${WHISPER_EXTERNAL_CROSS_PATCH}"
+    WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE CROSS_PATCH_PRESENT
+    OUTPUT_QUIET ERROR_QUIET)
+if(CROSS_PATCH_PRESENT EQUAL 0)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse "${WHISPER_EXTERNAL_CROSS_PATCH}"
+        WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE CROSS_UNPATCH_RESULT)
+    if(NOT CROSS_UNPATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "Cannot unwind existing external cross-attention seam")
+    endif()
+endif()
 set(WHISPER_ABORT_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/whisper-abort.patch")
 execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${WHISPER_ABORT_PATCH}"
     WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE PATCH_ALREADY_APPLIED
@@ -70,6 +83,18 @@ if(NOT EXTERNAL_PATCH_ALREADY_APPLIED EQUAL 0)
         WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE EXTERNAL_PATCH_RESULT)
     if(NOT EXTERNAL_PATCH_RESULT EQUAL 0)
         message(FATAL_ERROR "Cannot apply pinned Whisper external encoder seam")
+    endif()
+endif()
+# TPU cross-attention cache handoff, applied only after the encoder seam.
+set(WHISPER_EXTERNAL_CROSS_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/whisper-external-cross.patch")
+execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${WHISPER_EXTERNAL_CROSS_PATCH}"
+    WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE CROSS_PATCH_ALREADY_APPLIED
+    OUTPUT_QUIET ERROR_QUIET)
+if(NOT CROSS_PATCH_ALREADY_APPLIED EQUAL 0)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${WHISPER_EXTERNAL_CROSS_PATCH}"
+        WORKING_DIRECTORY "${whisper_SOURCE_DIR}" RESULT_VARIABLE CROSS_PATCH_RESULT)
+    if(NOT CROSS_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "Cannot apply pinned Whisper external cross-attention seam")
     endif()
 endif()
 add_library(mosaic_whisper SHARED bridge.cpp)

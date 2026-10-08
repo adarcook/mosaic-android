@@ -1,0 +1,149 @@
+--- a/src/whisper.cpp
++++ b/src/whisper.cpp
+@@ -892,6 +892,7 @@
+     // Mosaic external-encoder experiment. Opt-in via context params.
+     bool mosaic_external_encoder = false;
+     std::vector<float> mosaic_external_encoder_output;
++    std::vector<float> mosaic_external_cross_output;
+ 
+     // decode output (2-dimensional array: [n_tokens][n_vocab])
+     std::vector<float> logits;
+@@ -2355,6 +2356,36 @@
+     return gf;
+ }
+ 
++// Mosaic layout: [layer, K/V, frame, channel]. Padding is zeroed per layer.
++static bool mosaic_write_cross(whisper_context & ctx, whisper_state & state) {
++    const int frames = ctx.model.hparams.n_audio_ctx;
++    const int dim = ctx.model.hparams.n_audio_state;
++    const int layers = ctx.model.hparams.n_text_layer;
++    const size_t count = size_t(frames)*dim;
++    const size_t padded = size_t(GGML_PAD(frames, 256))*dim;
++    if (!ctx.params.flash_attn || state.exp_n_audio_ctx > 0 ||
++        state.mosaic_external_cross_output.size() != size_t(layers)*2*count) return false;
++    for (int kv = 0; kv < 2; ++kv) {
++        ggml_tensor * tensor = kv == 0 ? state.kv_cross.k : state.kv_cross.v;
++        if (tensor->type != GGML_TYPE_F16 && tensor->type != GGML_TYPE_F32) return false;
++        if (ggml_nbytes(tensor) < size_t(layers)*padded*ggml_element_size(tensor)) return false;
++        for (int layer = 0; layer < layers; ++layer) {
++            const float * source = state.mosaic_external_cross_output.data() + (layer*2 + kv)*count;
++            const size_t offset = size_t(layer)*padded*ggml_element_size(tensor);
++            if (tensor->type == GGML_TYPE_F16) {
++                std::vector<ggml_fp16_t> data(padded, ggml_fp32_to_fp16(0));
++                ggml_fp32_to_fp16_row(source, data.data(), count);
++                ggml_backend_tensor_set(tensor, data.data(), offset, padded*sizeof(ggml_fp16_t));
++            } else {
++                std::vector<float> data(padded, 0);
++                std::copy(source, source + count, data.begin());
++                ggml_backend_tensor_set(tensor, data.data(), offset, padded*sizeof(float));
++            }
++        }
++    }
++    return true;
++}
++
+ // evaluate the encoder with the given state
+ //
+ // given audio recording (more specifically, its log mel spectrogram), runs forward pass of the encoder
+@@ -2458,8 +2489,10 @@
+         }
+     }
+ 
+-    // cross
+-    {
++    // cross: externally prepared K/V bypasses all CPU projection graphs.
++    if (!wstate.mosaic_external_cross_output.empty()) {
++        if (!mosaic_write_cross(wctx, wstate)) return false;
++    } else {
+         auto & sched = wstate.sched_cross.sched;
+ 
+         ggml_cgraph * gf = whisper_build_graph_cross(wctx, wstate);
+@@ -3944,6 +3977,7 @@
+ 
+     // Prevent stale embeddings from being reused for a new utterance.
+     state.mosaic_external_encoder_output.clear();
++    state.mosaic_external_cross_output.clear();
+     return 0;
+ }
+ 
+@@ -3964,7 +3998,64 @@
+         return -2;
+     }
+ 
++    state.mosaic_external_cross_output.clear();
+     state.mosaic_external_encoder_output.assign(data, data + n_elements);
++    return 0;
++}
++
++int whisper_mosaic_set_cross_output(whisper_context * ctx, const float * data, int n) {
++    if (!ctx || !ctx->state || !ctx->state->mosaic_external_encoder || !ctx->params.flash_attn ||
++        ctx->state->exp_n_audio_ctx > 0 || !data) return -1;
++    const auto & h = ctx->model.hparams;
++    if (n != h.n_text_layer*2*h.n_audio_ctx*h.n_audio_state) return -2;
++    for (int i = 0; i < n; ++i) if (!std::isfinite(data[i])) return -3;
++    ctx->state->mosaic_external_cross_output.assign(data, data+n);
++    return 0;
++}
++
++// Compute Q5 CPU K/V once, then compare every cache element against FP32 TPU
++// projections after the same cache dtype conversion. Does not run token decoding.
++int whisper_mosaic_compare_cross(whisper_context * ctx, const float * data, int n,
++        double * metrics, int n_metrics, ggml_abort_callback abort_cb, void * abort_data) {
++    if (!ctx || !ctx->state || !data || !metrics || !ctx->params.flash_attn ||
++        !ctx->state->mosaic_external_encoder || ctx->state->exp_n_audio_ctx > 0) return -1;
++    auto & state = *ctx->state;
++    const auto & h = ctx->model.hparams;
++    const size_t count = size_t(h.n_audio_ctx)*h.n_audio_state;
++    const size_t padded = size_t(GGML_PAD(h.n_audio_ctx,256))*h.n_audio_state;
++    if (size_t(n) != size_t(h.n_text_layer)*2*count || n_metrics != h.n_text_layer*2*3) return -2;
++    state.mosaic_external_cross_output.clear();
++    if (!whisper_encode_internal(*ctx, state, 0, 2, abort_cb, abort_data)) return -3;
++    std::vector<float> reference(count);
++    for (int layer=0; layer<h.n_text_layer; ++layer) {
++        for (int kv=0; kv<2; ++kv) {
++            ggml_tensor * tensor = kv == 0 ? state.kv_cross.k : state.kv_cross.v;
++            const size_t offset = size_t(layer)*padded*ggml_element_size(tensor);
++            if (tensor->type == GGML_TYPE_F16) {
++                std::vector<ggml_fp16_t> half(count);
++                ggml_backend_tensor_get(tensor, half.data(), offset, count*sizeof(ggml_fp16_t));
++                ggml_fp16_to_fp32_row(half.data(), reference.data(), count);
++            } else if (tensor->type == GGML_TYPE_F32) {
++                ggml_backend_tensor_get(tensor, reference.data(), offset, count*sizeof(float));
++            } else return -4;
++            const float * candidate = data + (layer*2+kv)*count;
++            double diff_sq=0, ref_sq=0, cand_sq=0, dot=0, max_abs=0;
++            for (size_t i=0; i<count; ++i) {
++                if ((i % 65536 == 0) && abort_cb && abort_cb(abort_data)) return -5;
++                double a=reference[i];
++                double b=tensor->type == GGML_TYPE_F16
++                        ? ggml_fp16_to_fp32(ggml_fp32_to_fp16(candidate[i])) : candidate[i];
++                if (!std::isfinite(a) || !std::isfinite(b)) return -6;
++                double d=a-b;
++                diff_sq+=d*d; ref_sq+=a*a; cand_sq+=b*b; dot+=a*b;
++                max_abs=std::max(max_abs,std::abs(d));
++            }
++            const int m=(layer*2+kv)*3;
++            metrics[m]=max_abs;
++            metrics[m+1]=sqrt(diff_sq/std::max(ref_sq,1e-20));
++            metrics[m+2]=dot/sqrt(std::max(ref_sq*cand_sq,1e-20));
++        }
++    }
+     return 0;
+ }
+ 
+--- a/include/whisper.h
++++ b/include/whisper.h
+@@ -305,6 +305,13 @@
+                      const float * data,
+                              int   n_elements);
+ 
++    WHISPER_API int whisper_mosaic_set_cross_output(
++        struct whisper_context * ctx, const float * data, int n_elements);
++    WHISPER_API int whisper_mosaic_compare_cross(
++        struct whisper_context * ctx, const float * data, int n_elements,
++        double * metrics, int n_metrics, ggml_abort_callback abort_cb, void * abort_data);
++
++
+     // This can be used to set a custom log mel spectrogram inside the default state of the provided whisper context.
+     // Use this instead of whisper_pcm_to_mel() if you want to provide your own log mel spectrogram.
+     // n_mel must be 80
