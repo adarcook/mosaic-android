@@ -63,6 +63,7 @@ public final class WhisperGateActivity extends Activity {
     private Button crossCompare;
     private Button tpuAsr;
     private Button continuous;
+    private Button archive;
     private int recordingRequest = WhisperGateService.REQUEST_HYBRID_PCM;
 
     private boolean running;
@@ -126,6 +127,10 @@ public final class WhisperGateActivity extends Activity {
         continuous.setText("8. בדיקת שיחה רציפה — עד 10 דקות");
         continuous.setOnClickListener(v -> startActivity(new Intent(this, StreamingGateActivity.class)));
 
+        archive = new Button(this);
+        archive.setText("9. ארכיון שיחה — הקלטה והשלמת תמלול");
+        archive.setOnClickListener(v -> startActivity(new Intent(this, ArchiveGateActivity.class)));
+
         Button copy = new Button(this);
         copy.setText("העתקת תוצאה");
 
@@ -153,6 +158,7 @@ public final class WhisperGateActivity extends Activity {
         layout.addView(crossCompare);
         layout.addView(tpuAsr);
         layout.addView(continuous);
+        layout.addView(archive);
         layout.addView(copy);
         layout.addView(status);
 
@@ -363,6 +369,7 @@ public final class WhisperGateActivity extends Activity {
         crossRun.setEnabled(idle && crossLoaded);
         crossCompare.setEnabled(idle && loadPassed && crossLoaded);
         continuous.setEnabled(idle && getPreferences(0).getBoolean("crossParityPassedV1", false));
+        archive.setEnabled(idle && getPreferences(0).getBoolean("crossParityPassedV1", false));
         tpuAsr.setEnabled(idle && loadPassed && crossLoaded
                 && getPreferences(0).getBoolean("crossParityPassedV1", false));
     }

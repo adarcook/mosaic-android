@@ -8,6 +8,7 @@ on:
       - "experiment/ivrit-tpu-cross-integration"
       - "experiment/ivrit-continuous-asr-gate"
       - "experiment/ivrit-decoder-throughput"
+      - "experiment/ivrit-durable-audio-recovery"
   pull_request:
     paths:
       - "poc/tensor-whisper/**"
@@ -48,6 +49,11 @@ jobs:
           mkdir -p /tmp/stream-tests
           javac -d /tmp/stream-tests poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamWindow.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamText.java poc/tensor-whisper/src/test/java/life/mosaic/tensorwhisper/StreamWindowTest.java
           java -cp /tmp/stream-tests life.mosaic.tensorwhisper.StreamWindowTest
+
+      - name: Test durable audio and recovery
+        run: |
+          javac -d /tmp/stream-tests poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamWindow.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/ArchivePcm.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/ArchiveJournal.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/ArchiveCheckpoint.java poc/tensor-whisper/src/test/java/life/mosaic/tensorwhisper/ArchiveStorageTest.java
+          java -cp /tmp/stream-tests life.mosaic.tensorwhisper.ArchiveStorageTest
 
       - name: Test session comparison
         run: python3 -m unittest discover -s scripts/tests -p test_compare_asr_sessions.py -v

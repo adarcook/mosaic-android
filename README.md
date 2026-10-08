@@ -69,3 +69,5 @@ The first architecture stage changes branding and documents the target structure
 Start with the [Hebrew explanation and experiment history](docs/ASR_EXPERIMENT_HISTORY.md): model conversion, CPU/TPU responsibilities, measured breakthroughs/regressions, reproducibility gaps and rollback commits. This voice work is experimental and lives in open PRs, not completed production functionality.
 
 For each new experiment or later device result, update the history using the [record template](docs/ASR_EXPERIMENT_TEMPLATE.md) and follow [AGENTS.md](AGENTS.md).
+
+The [ASR-18 audio archive trial](docs/ivrit-whisper-audio-archive.md) adds durable local recording and resumable post-recording transcription. Device validation is pending; it is not background or realtime transcription support.

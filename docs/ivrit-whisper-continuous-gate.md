@@ -70,3 +70,7 @@ python3 scripts/compare_asr_sessions.py baseline.jsonl candidate.jsonl
 ```
 
 This prints coverage, full-window decode/compute means, cumulative RTF, peak backlog, memory and thermal status, plus percentage reductions. Missing terminal records are marked interrupted with unknown uncaptured tail rather than treated as successful runs. It does not compute WER or claim accuracy without a reference transcript. All journal processing remains local.
+
+## Separate durable archive trial
+
+Step 9 in v0.8 records PCM locally first, then transcribes after Stop and can resume missing chunks. This is a separate offline/archive trial, not a passing realtime gate. See [archive workflow](ivrit-whisper-audio-archive.md) and ASR-18 in the [experiment history](ASR_EXPERIMENT_HISTORY.md). The audio persistence and terminal-before-cleanup ordering apply to step 9; step 8 retains its prior baseline behavior.
