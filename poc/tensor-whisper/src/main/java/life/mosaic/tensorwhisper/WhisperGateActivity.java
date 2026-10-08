@@ -58,6 +58,8 @@ public final class WhisperGateActivity extends Activity {
     private Button zeroRun;
     private Button realAsr;
     private Button stopRecording;
+    private Button crossLoad;
+    private Button crossRun;
 
     private boolean running;
     private boolean recording;
@@ -96,6 +98,13 @@ public final class WhisperGateActivity extends Activity {
         stopRecording.setText("סיום משפט");
         stopRecording.setEnabled(false);
 
+        crossLoad = new Button(this);
+        crossLoad.setText("4. טעינת CROSS-ATTENTION בלבד");
+        crossRun = new Button(this);
+        crossRun.setText("5. מדידת CROSS-ATTENTION על TPU");
+        crossLoad.setOnClickListener(v -> begin(WhisperGateService.REQUEST_CROSS_LOAD, null));
+        crossRun.setOnClickListener(v -> begin(WhisperGateService.REQUEST_CROSS_RUN, null));
+
         Button copy = new Button(this);
         copy.setText("העתקת תוצאה");
 
@@ -115,6 +124,8 @@ public final class WhisperGateActivity extends Activity {
         layout.addView(zeroRun);
         layout.addView(realAsr);
         layout.addView(stopRecording);
+        layout.addView(crossLoad);
+        layout.addView(crossRun);
         layout.addView(copy);
         layout.addView(status);
 
@@ -126,10 +137,12 @@ public final class WhisperGateActivity extends Activity {
         boolean loadPassed = getPreferences(0).getBoolean("loadPassed", false);
         zeroRun.setEnabled(loadPassed);
         realAsr.setEnabled(loadPassed);
+        crossRun.setEnabled(getPreferences(0).getBoolean("crossLoadPassed", false));
 
         String last = getPreferences(0).getString("result", "");
         status.setText(
                 "ivrit.ai Whisper Large v3 Turbo — Tensor G5 + CPU decoder.\n"
+                        + "שלבים 4–5 בודקים cross-attention בנפרד, ללא מיקרופון.\n"
                         + "שלב 3 הוא תמלול אמיתי מהמיקרופון, עד 8 שניות.\n"
                         + "האודיו נשמר זמנית ב-cache ונמחק אחרי הניסיון.\n\n"
                         + device() + "\n\n"
@@ -317,6 +330,8 @@ public final class WhisperGateActivity extends Activity {
         zeroRun.setEnabled(idle && loadPassed);
         realAsr.setEnabled(idle && loadPassed);
         stopRecording.setEnabled(recording);
+        crossLoad.setEnabled(idle);
+        crossRun.setEnabled(idle && getPreferences(0).getBoolean("crossLoadPassed", false));
     }
 
     private void begin(int request, File pcmFile) {
@@ -328,7 +343,14 @@ public final class WhisperGateActivity extends Activity {
             return;
         }
 
-        if (request != WhisperGateService.REQUEST_LOAD_ONLY
+        boolean crossRequest = request == WhisperGateService.REQUEST_CROSS_LOAD
+                || request == WhisperGateService.REQUEST_CROSS_RUN;
+        if (request == WhisperGateService.REQUEST_CROSS_RUN
+                && !getPreferences(0).getBoolean("crossLoadPassed", false)) {
+            status.setText("יש להריץ בהצלחה את שלב 4 לפני שלב 5.");
+            return;
+        }
+        if (!crossRequest && request != WhisperGateService.REQUEST_LOAD_ONLY
                 && !getPreferences(0).getBoolean("loadPassed", false)) {
             status.setText(
                     device() + "\n\n"
@@ -343,7 +365,8 @@ public final class WhisperGateActivity extends Activity {
 
         final int attempt = ++generation;
         if (request != WhisperGateService.REQUEST_HYBRID_PCM) {
-            String label = request == WhisperGateService.REQUEST_LOAD_ONLY
+            String label = crossRequest ? "פותח תהליך TPU מבודד לבדיקת cross-attention…"
+                    : request == WhisperGateService.REQUEST_LOAD_ONLY
                     ? "פותח תהליך TPU מבודד ל-load-only…"
                     : "פותח תהליך TPU מבודד להרצת encoder…";
             status.setText(device() + "\n\n" + label);
@@ -410,8 +433,8 @@ public final class WhisperGateActivity extends Activity {
             }
         };
 
-        long timeoutMs = request == WhisperGateService.REQUEST_LOAD_ONLY
-                ? 60_000L : 90_000L;
+        long timeoutMs = crossRequest ? 45_000L
+                : request == WhisperGateService.REQUEST_LOAD_ONLY ? 60_000L : 90_000L;
         timeout = () -> {
             if (running && attempt == generation) {
                 finishGate(
@@ -441,6 +464,9 @@ public final class WhisperGateActivity extends Activity {
             getPreferences(0).edit().putBoolean("loadPassed", true).apply();
         }
 
+        if (activeRequest == WhisperGateService.REQUEST_CROSS_LOAD) {
+            getPreferences(0).edit().putBoolean("crossLoadPassed", result.startsWith("PASS")).apply();
+        }
         running = false;
         ++generation;
         if (timeout != null) main.removeCallbacks(timeout);

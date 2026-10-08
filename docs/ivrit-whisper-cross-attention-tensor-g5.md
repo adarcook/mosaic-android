@@ -64,10 +64,20 @@ no special compiler overrides. Compiler errors must be preserved as evidence.
 
 ## Validation and next gates
 
-Implemented: exporter, fail-closed compiler gate, formula/report tests and CI.
-Not run in the authoring environment: torch/LiteRT export, checkpoint parity,
-Tensor SDK compilation, GGML cache comparison or Pixel execution. This
-environment has neither torch, the checkpoint nor the private SDK.
+Implemented: exporter, fail-closed compiler gate, formula/report tests, CI and
+isolated Pixel load/run probe.
+
+User-run host evidence on 2026-10-08:
+- FP32 LiteRT export: 52,455,716 bytes;
+- host parity max absolute errors: 2.0861626e-7 and 1.9371510e-7;
+- mean absolute errors: 7.8668858e-9 and 7.8709874e-9;
+- official Tensor G5 compiler: 18/18 ops, one fully compiled partition;
+- uploaded compiled artifact: 26,846,992 bytes;
+- SHA-256: `fa2d5bb9200d8db59860c5b23dfbe899762f42d269885e2633fc56b18e6306a3`.
+
+GGML Q5 cache comparison, Pixel execution and full-ASR performance remain untested.
+The successful AOT environment was `~/venvs/mosaic-tensor-official`; the older
+`mosaic-tensor-aot216` environment did not contain the official SDK wrapper.
 
 Next gates, sequentially:
 
@@ -81,3 +91,36 @@ Next gates, sequentially:
 Product target: final short-utterance result within 1–3 seconds after speech ends,
 with user-approved Hebrew accuracy. Compilation alone is not this gate, and
 accelerating Whisper does not itself establish native streaming support.
+
+
+## Pixel probe
+
+The existing standalone package gains two independent steps:
+4. load the SHA-256-pinned cross-attention artifact only;
+5. run one deterministic non-zero synthetic embedding tensor.
+
+Step 5 is enabled only after step 4 succeeds. Both operate in the disposable
+`:tpu` process, enforce a 45-second UI timeout, and cancel when backgrounded.
+No encoder or decoder model is needed for steps 4–5. They do not capture audio
+or inject anything into the Whisper decoder.
+
+Push `ivrit_whisper_cross_attention_Google_Tensor_G5.tflite` to
+`/sdcard/Android/data/life.mosaic.tensorwhisper/files/`. The probe checks its
+exact size and SHA-256, then requires a single output of 15,360,000 finite floats
+and non-zero magnitude. This is a runtime/smoke gate, not a numerical parity gate.
+
+Result reports model verification/load, input write, one NPU run, output read,
+run plus transfer total, and full output validation time. The output read can
+include synchronization; interpret `run + transfers` as the practical stage cost.
+The 61.44 MB output transfer is intentionally measured, not hidden.
+
+Build from the same WSL environment/signing key as the existing installation:
+
+```bash
+python3 scripts/prepare_tensor_whisper_runtime.py
+./gradlew -p poc/tensor-whisper clean assembleDebug
+```
+
+Install with `adb install -r`, push the model, run step 4 then step 5 and retain
+the result. A CI-built debug APK may have a different signature from the local
+installation and cannot necessarily update it. Do not uninstall to resolve that.

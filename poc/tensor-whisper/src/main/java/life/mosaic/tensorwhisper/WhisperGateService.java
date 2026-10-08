@@ -52,6 +52,13 @@ public final class WhisperGateService extends Service {
     static final int REQUEST_LOAD_ONLY = 1;
     static final int REQUEST_RUN_ZERO_MEL = 2;
     static final int REQUEST_HYBRID_PCM = 3;
+    static final int REQUEST_CROSS_LOAD = 4;
+    static final int REQUEST_CROSS_RUN = 5;
+    private static final String CROSS_NAME = "ivrit_whisper_cross_attention_Google_Tensor_G5.tflite";
+    private static final long CROSS_BYTES = 26_846_992L;
+    private static final String CROSS_SHA256 =
+            "fa2d5bb9200d8db59860c5b23dfbe899762f42d269885e2633fc56b18e6306a3";
+    private static final int CROSS_OUTPUT_FLOATS = 4 * 2 * 1500 * 1280;
 
     private boolean started;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -63,7 +70,9 @@ public final class WhisperGateService extends Service {
         }
         if ((msg.what != REQUEST_LOAD_ONLY
                 && msg.what != REQUEST_RUN_ZERO_MEL
-                && msg.what != REQUEST_HYBRID_PCM)
+                && msg.what != REQUEST_HYBRID_PCM
+                && msg.what != REQUEST_CROSS_LOAD
+                && msg.what != REQUEST_CROSS_RUN)
                 || started
                 || msg.replyTo == null) {
             return true;
@@ -172,6 +181,83 @@ public final class WhisperGateService extends Service {
         }
     }
 
+    private String runCrossGate(Environment env, Messenger reply, boolean loadOnly)
+            throws Exception {
+        long totalStart = SystemClock.elapsedRealtime();
+        File file = externalFile(CROSS_NAME, CROSS_BYTES);
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        try (FileInputStream in = new FileInputStream(file)) {
+            byte[] chunk = new byte[65536];
+            int n;
+            while ((n = in.read(chunk)) != -1) digest.update(chunk, 0, n);
+        }
+        StringBuilder hash = new StringBuilder();
+        for (byte b : digest.digest()) hash.append(String.format(java.util.Locale.ROOT, "%02x", b & 255));
+        if (!CROSS_SHA256.equals(hash.toString())) {
+            throw new IllegalStateException("Cross-attention model SHA-256 mismatch");
+        }
+        long verifyMs = SystemClock.elapsedRealtime() - totalStart;
+        send(reply, 2, "קובץ cross-attention אומת. טוען דרך NPU…");
+        long loadStart = SystemClock.elapsedRealtime();
+        try (CompiledModel model = CompiledModel.create(file.getAbsolutePath(),
+                new CompiledModel.Options(Accelerator.NPU), env)) {
+            long loadMs = SystemClock.elapsedRealtime() - loadStart;
+            if (loadOnly) return "PASS — cross-attention load only\n"
+                    + "verify: " + verifyMs + " ms\nload: " + loadMs
+                    + " ms\nלא בוצע חישוב. אפשר להמשיך לשלב 5.";
+            List<TensorBuffer> inputs = model.createInputBuffers(0);
+            List<TensorBuffer> outputs = new ArrayList<>();
+            try {
+                outputs = model.createOutputBuffers(0);
+                if (inputs.size() != 1 || outputs.size() != 1) {
+                    throw new IllegalStateException("Unexpected cross-attention signature");
+                }
+                // Non-zero synthetic embeddings; no microphone or Whisper context.
+                float[] sample = new float[OUTPUT_FLOATS];
+                for (int i = 0; i < sample.length; i++) {
+                    sample[i] = ((i % 127) - 63) * (0.05f / 63.0f);
+                }
+                long writeStart = SystemClock.elapsedRealtime();
+                inputs.get(0).writeFloat(sample);
+                long writeMs = SystemClock.elapsedRealtime() - writeStart;
+                send(reply, 2, "מריץ cross-attention יחיד על קלט בדיקה…");
+                long runStart = SystemClock.elapsedRealtime();
+                model.run(inputs, outputs, 0);
+                long runMs = SystemClock.elapsedRealtime() - runStart;
+                long readStart = SystemClock.elapsedRealtime();
+                float[] values = outputs.get(0).readFloat();
+                long readMs = SystemClock.elapsedRealtime() - readStart;
+                if (values.length != CROSS_OUTPUT_FLOATS) {
+                    throw new IllegalStateException("Unexpected cross output length: " + values.length);
+                }
+                long validateStart = SystemClock.elapsedRealtime();
+                float maxAbs = 0;
+                for (float value : values) {
+                    if (!Float.isFinite(value)) {
+                        throw new IllegalStateException("Cross output contains NaN/Inf");
+                    }
+                    maxAbs = Math.max(maxAbs, Math.abs(value));
+                }
+                if (maxAbs == 0) throw new IllegalStateException("Cross output is all zero");
+                long validateMs = SystemClock.elapsedRealtime() - validateStart;
+                return "PASS — cross-attention runtime probe\n"
+                        + "קלט בדיקה בלבד; ללא תמלול וללא בדיקת דיוק מול Q5.\n\n"
+                        + "verify: " + verifyMs + " ms\n"
+                        + "load: " + loadMs + " ms\n"
+                        + "input write: " + writeMs + " ms\n"
+                        + "NPU run: " + runMs + " ms\n"
+                        + "output read (61.44 MB): " + readMs + " ms\n"
+                        + "run + transfers: " + (writeMs + runMs + readMs) + " ms\n"
+                        + "validation: " + validateMs + " ms\n"
+                        + "output floats: " + values.length + "\nmax abs: " + maxAbs + "\n"
+                        + "total worker: " + (SystemClock.elapsedRealtime() - totalStart) + " ms";
+            } finally {
+                for (TensorBuffer b : outputs) b.close();
+                for (TensorBuffer b : inputs) b.close();
+            }
+        }
+    }
+
     private void runGate(Messenger reply, int request, String pcmPath) {
         String result;
         File pcmFile = null;
@@ -186,6 +272,9 @@ public final class WhisperGateService extends Service {
                 throw new IllegalStateException("NPU unavailable: " + available);
             }
 
+            if (request == REQUEST_CROSS_LOAD || request == REQUEST_CROSS_RUN) {
+                result = runCrossGate(env, reply, request == REQUEST_CROSS_LOAD);
+            } else {
             File modelFile = externalFile(MODEL_NAME, EXPECTED_MODEL_BYTES);
             long totalStart = SystemClock.elapsedRealtime();
 
@@ -311,6 +400,7 @@ public final class WhisperGateService extends Service {
                                     + "total worker: " + totalMs + " ms\n"
                                     + WhisperNative.INSTANCE.timings(whisperHandle);
                 }
+            }
             }
         } catch (Throwable e) {
             result = "FAIL — " + e.getClass().getSimpleName() + ": " + e.getMessage();
