@@ -7,8 +7,8 @@ android {
         applicationId = "life.mosaic.tensorwhisper"
         minSdk = 31
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.5-tpu-cross-asr"
+        versionCode = 6
+        versionName = "0.6-continuous-asr-gate"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

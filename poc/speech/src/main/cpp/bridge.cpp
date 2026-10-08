@@ -15,6 +15,7 @@ struct Session {
     std::atomic_bool cancelled{false};
     std::atomic_int phase{0};
     Clock::time_point deadline;
+    int audio_samples = 0;
 };
 static Session * session(jlong handle) { return reinterpret_cast<Session *>(handle); }
 static bool should_abort(void *data) {
@@ -161,14 +162,15 @@ Java_life_mosaic_voice_WhisperNative_prepareEncoderInput(JNIEnv *env, jobject, j
     }
 
     const jsize n_samples = env->GetArrayLength(pcm);
-    if (n_samples < 8000 || n_samples > 16000 * 8) {
-        fail(env, "Hybrid gate accepts 0.5 to 8 seconds of 16 kHz PCM");
+    if (n_samples < 8000 || n_samples > 16000 * 30) {
+        fail(env, "Hybrid frontend accepts 0.5 to 30 seconds of 16 kHz PCM");
         return nullptr;
     }
 
     std::vector<float> audio(n_samples);
     env->GetFloatArrayRegion(pcm, 0, n_samples, audio.data());
 
+    s->audio_samples = n_samples;
     whisper_reset_timings(s->ctx.get());
     if (whisper_pcm_to_mel(s->ctx.get(), audio.data(), audio.size(), 2) != 0) {
         fail(env, "Whisper log-mel frontend failed");
@@ -252,7 +254,7 @@ static jstring transcribe_encoded(
     p.no_context = true;
     p.no_timestamps = true;
     p.single_segment = true;
-    p.max_tokens = 96;
+    p.max_tokens = s->audio_samples > 16000 * 8 ? 384 : 96;
     p.greedy.best_of = 1;
     p.beam_search.beam_size = accurate ? 5 : 1;
     p.temperature = 0.0f;
@@ -278,8 +280,13 @@ static jstring transcribe_encoded(
     }
 
     std::string text;
+    int tokens = 0;
     for (int i = 0; i < whisper_full_n_segments(s->ctx.get()); ++i) {
+        tokens += whisper_full_n_tokens(s->ctx.get(), i);
         text += whisper_full_get_segment_text(s->ctx.get(), i);
+    }
+    if (tokens >= p.max_tokens) {
+        fail(env, "Hybrid token limit reached; chunk may be truncated"); return nullptr;
     }
     return env->NewStringUTF(text.c_str());
 }
