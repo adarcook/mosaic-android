@@ -16,6 +16,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".StreamingGateActivity" android:exported="false" android:hardwareAccelerated="false" />
+        <service android:name=".StreamingGateService" android:exported="false" android:process=":stream" />
         <service
             android:name=".WhisperGateService"
             android:exported="false"
