@@ -1,0 +1,24 @@
+name: ivrit cross-attention contracts
+on:
+  push:
+    branches: ["experiment/ivrit-cross-attention-tensor-g5"]
+  pull_request:
+    paths:
+      - "scripts/*cross_attention*"
+      - "scripts/tests/test_ivrit_cross_attention.py"
+      - ".github/workflows/ivrit-cross-attention.yml"
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install numpy==2.3.5
+      - name: Check export syntax and cache math
+        run: |
+          python -m py_compile scripts/export_ivrit_whisper_cross_attention.py scripts/compile_ivrit_cross_attention_tensor_g5.py
+          python -m unittest discover -s scripts/tests -v
