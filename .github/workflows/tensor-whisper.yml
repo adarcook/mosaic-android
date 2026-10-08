@@ -7,14 +7,18 @@ on:
       - "experiment/ivrit-cross-attention-tensor-g5"
       - "experiment/ivrit-tpu-cross-integration"
       - "experiment/ivrit-continuous-asr-gate"
+      - "experiment/ivrit-decoder-throughput"
   pull_request:
     paths:
       - "poc/tensor-whisper/**"
       - "poc/speech/**"
       - "scripts/*whisper*"
+      - "scripts/compare_asr_sessions.py"
+      - "scripts/tests/test_compare_asr_sessions.py"
       - ".github/workflows/tensor-whisper.yml"
       - "docs/tensor-g5-whisper-gate.md"
       - "docs/ivrit-whisper-hybrid-asr-gate.md"
+      - "docs/ivrit-whisper-continuous-gate.md"
 
 permissions:
   contents: read
@@ -44,6 +48,9 @@ jobs:
           mkdir -p /tmp/stream-tests
           javac -d /tmp/stream-tests poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamWindow.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamText.java poc/tensor-whisper/src/test/java/life/mosaic/tensorwhisper/StreamWindowTest.java
           java -cp /tmp/stream-tests life.mosaic.tensorwhisper.StreamWindowTest
+
+      - name: Test session comparison
+        run: python3 -m unittest discover -s scripts/tests -p test_compare_asr_sessions.py -v
 
       - name: Python syntax
         run: |

@@ -22,11 +22,15 @@ public final class StreamingGateService extends Service {
     private volatile String failure;
     private volatile AudioRecord recorder;
     private boolean started;
+    private int beamSize = 2;
     private Messenger reply;
     private final Messenger binder = new Messenger(new Handler(Looper.getMainLooper(), msg -> {
         if (msg.what == 9) { stopCapture(); return true; }
         if (msg.what == 10) { aborting = true; stopCapture(); return true; }
         if (msg.what == 1 && !started && msg.replyTo != null) {
+            int selectedBeam = msg.getData().getInt("beam_size", 2);
+            if (selectedBeam != 1 && selectedBeam != 2 && selectedBeam != 5) return true;
+            beamSize = selectedBeam;
             started = true; reply = msg.replyTo;
             Message pid = Message.obtain(null, 1); pid.arg1 = android.os.Process.myPid();
             try { reply.send(pid); } catch (Exception e) { android.os.Process.killProcess(android.os.Process.myPid()); }
@@ -119,9 +123,10 @@ public final class StreamingGateService extends Service {
         try {
             if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("Session directory unavailable");
             try (FileOutputStream file = new FileOutputStream(sessionFile)) {
-                journal(file, new JSONObject().put("type", "start").put("version", 1)
+                journal(file, new JSONObject().put("type", "start").put("version", 2)
                         .put("started_at_ms", System.currentTimeMillis()).put("window_s", 12)
-                        .put("overlap_s", 1).put("max_capture_s", 600).put("state", "provisional"));
+                        .put("overlap_s", 1).put("beam_size", beamSize).put("cpu_threads", 2)
+                        .put("build", BuildConfig.VERSION_NAME).put("max_capture_s", 600).put("state", "provisional"));
                 try {
                     send(2, "טוען מודלים פעם אחת; ההקלטה תתחיל לאחר הטעינה…");
                     try (WarmHybridEngine engine = new WarmHybridEngine(getExternalFilesDir(null), getApplicationInfo().nativeLibraryDir)) {
@@ -133,7 +138,7 @@ public final class StreamingGateService extends Service {
                             StreamWindow.Chunk chunk = queue.poll(200, TimeUnit.MILLISECONDS);
                             if (chunk == null) { if (captureDone) break; continue; }
                             send(5, "מתמלל מקטע " + (segments + 1) + "; ההקלטה ממשיכה במקביל…");
-                            WarmHybridEngine.Result result = engine.transcribe(chunk.pcm);
+                            WarmHybridEngine.Result result = engine.transcribe(chunk.pcm, beamSize);
                             long lagSamples = Math.max(0, captured.get() - chunk.endSample);
                             long pssKb = Debug.getPss();
                             int thermal = ((PowerManager)getSystemService(POWER_SERVICE)).getCurrentThermalStatus();
@@ -143,6 +148,7 @@ public final class StreamingGateService extends Service {
                                     .put("text", result.text).put("status", "provisional")
                                     .put("mel_ms", result.melMs).put("encoder_ms", result.encoderMs)
                                     .put("cross_ms", result.crossMs).put("decode_ms", result.decodeMs)
+                                    .put("native_timings", result.nativeTimings).put("beam_size", beamSize)
                                     .put("compute_ms", result.totalMs).put("backlog_s", lagSamples / 16000.0)
                                     .put("queue_depth", queue.size()).put("pss_kb", pssKb).put("thermal_status", thermal);
                             journal(file, event); // Commit raw chunk transcript before UI overlap reconciliation.
@@ -151,7 +157,7 @@ public final class StreamingGateService extends Service {
                             segments++; processedEnd = chunk.endSample;
                             computeMs += result.totalMs; newSamples += chunk.newSamples();
                             double rtf = computeMs / (newSamples / 16.0);
-                            send(3, "מקטעים: " + segments + " | עיבוד: " + result.totalMs + " ms"
+                            send(3, "Decoder: " + (beamSize == 1 ? "Greedy" : "Beam " + beamSize) + " | מקטעים: " + segments + " | עיבוד: " + result.totalMs + " ms"
                                     + "\nRTF מצטבר: " + String.format(java.util.Locale.ROOT, "%.3f", rtf)
                                     + " | פיגור: " + String.format(java.util.Locale.ROOT, "%.2f", lagSamples / 16000.0) + " s"
                                     + "\nזיכרון תהליך: " + (pssKb / 1024) + " MB | מצב חום: " + thermal
@@ -178,6 +184,7 @@ public final class StreamingGateService extends Service {
             stopCapture();
             queue.clear();
             send(6, (failure == null && !aborting ? "הבדיקה הסתיימה" : "הבדיקה לא הושלמה: " + failure)
+                    + "\nDecoder: " + (beamSize == 1 ? "Greedy" : "Beam " + beamSize)
                     + "\nמקטעים שנשמרו: " + segments
                     + " | אודיו: " + String.format(java.util.Locale.ROOT, "%.2f", captured.get() / 16000.0) + " s"
                     + "\nRTF מצטבר: " + (newSamples == 0 ? "—" : String.format(java.util.Locale.ROOT, "%.3f", computeMs / (newSamples / 16.0)))
