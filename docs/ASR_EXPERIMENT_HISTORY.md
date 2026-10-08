@@ -201,7 +201,7 @@ Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק 
 
 ### ASR-18 — הקלטה עמידה והשלמת תמלול, ניסוי 0.8
 
-אושר להמשך ב־8.10.2026, 12:57 (Asia/Jerusalem), לאחר הסכמה על מסלול ארכיון שיחות. baseline קוד: `7d7767f5aa2fd6309ad8a05825c452b55ac619f3` (יומן ניסויים מעל PR #32). ענף: `experiment/ivrit-durable-audio-recovery`; מדריך מלא: [ivrit-whisper-audio-archive.md](ivrit-whisper-audio-archive.md).
+אושר להמשך ב־8.10.2026, 12:57 (Asia/Jerusalem), לאחר הסכמה על מסלול ארכיון שיחות. baseline קוד: `7d7767f5aa2fd6309ad8a05825c452b55ac619f3` (יומן ניסויים מעל PR #32). ענף: `experiment/ivrit-durable-audio-recovery`, [Draft PR #34](https://github.com/adarcook/mosaic-android/pull/34); קוד ניסוי: `abbad7ea512b7ba1aa78c15cb3852e41f5f4f200`; מדריך מלא: [ivrit-whisper-audio-archive.md](ivrit-whisper-audio-archive.md).
 
 **Hypothesis:** שמירת PCM מקומי לפני inference מאפשרת השלמת תמלול בלי תור RAM שמתמלא ובלי לאבד את מקור הבדיקה. terminal שנשמר ונשלח לפני native cleanup מאפשר סיכום גם אם סגירת המנוע נתקעת. זו הגנת תכנון חדשה, לא הוכחה שזוהתה סיבת התקלה של ASR-17.
 
@@ -209,7 +209,7 @@ Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק 
 
 **גורמים קבועים:** מודל ivrit.ai, encoder/K-V TPU, token decoder CPU, שתי תהליכוניות, window/overlap, inference budgets ו־cache parity gate. **שינויים שאינם נשלטים לעומת realtime:** אין inference בזמן ההקלטה, timing כולל קריאת PCM מקובץ ויש אימות hashes לפני טעינה; RTF של ארכיון אינו מבחן sustained realtime ואינו משווה רק beam. tail ראשון קצר מרופד במודל בלבד, עם offsets אמיתיים ביומן.
 
-**Validation מקומי:** בדיקות Java של windows/text ו־durable PCM/journal/checkpoint עברו; שמונה בדיקות Python עברו. Android/APK ו־Pixel עדיין pending. אין source audio/recording benchmark חדש ואין טענת דיוק/מהירות/סוללה. קלט הסינתטי של בדיקות storage אינו תמלול אמיתי.
+**Validation מקומי:** בדיקות Java של windows/text ו־durable PCM/journal/checkpoint עברו; שמונה בדיקות Python עברו. Android/JNI/native ו־APK עברו [CI run 37761861552](https://github.com/adarcook/mosaic-android/actions/runs/37761861552) על commit הניסוי; Pixel עדיין pending. אין source audio/recording benchmark חדש ואין טענת דיוק/מהירות/סוללה. קלט הסינתטי של בדיקות storage אינו תמלול אמיתי.
 
 **קבלה:** סיכום סיום גלוי ו־end complete עם אפס unprocessed לאחר Stop; שמירת audio מעבר לרקע/force-stop; Resume בלי duplicate/gap; דחיית hash/beam/metadata משתנים; אימות תחילת וסוף ההקלטה. fsync אינו מבטיח שימור דגימות שלא נקראו או נכתבו; overrun, power loss ואחסון איטי דורשים בדיקת מכשיר. **החלטה:** pending device validation. rollback: שלבים 7–8 הקיימים/commit `5e94db1e5b5d3034b54a74c9ba09c67075c8482a`. אין שינוי ל־roadmap completion; חיבור LLM עדיין לא מומש.
 

@@ -89,4 +89,4 @@ ffmpeg -f s16le -ar 16000 -ac 1 -i archive.pcm archive.wav
 
 בדיקות Java במחשב עברו: PCM16-LE כולל דגימות שליליות, union כיסוי מלא/overlap/tail, replay אחרי פתיחה מחדש, נעילה נגד בעלים שני, התאוששות מ־byte PCM ושורת journal חלקיים, padding בלי שינוי offsets, checkpoints ללא duplicate/gap ובלי ערבוב beam. בדיקות החלונות הקיימות ושמונה בדיקות Python עברו מקומית.
 
-Android/JNI/APK, fault testing על Pixel ויעילות fsync/battery עדיין Pending לפני CI/מכשיר. לא בוצעה מדידת מכשיר חדשה. סיכום LLM, חיפוש בהיסטוריה, timestamps של מילים, זיהוי דוברים, recording foreground service ושיחות של שעות הם slices נפרדים.
+Android/JNI/native ו־APK עברו CI על commit `abbad7ea512b7ba1aa78c15cb3852e41f5f4f200`: [Actions run 37761861552](https://github.com/adarcook/mosaic-android/actions/runs/37761861552). בדיקות storage/window/comparison עברו שם וה־APK הועלה כ־artifact. fault testing על Pixel ויעילות fsync/battery עדיין Pending. לא בוצעה מדידת מכשיר חדשה. סיכום LLM, חיפוש בהיסטוריה, timestamps של מילים, זיהוי דוברים, recording foreground service ושיחות של שעות הם slices נפרדים.
