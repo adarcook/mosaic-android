@@ -1,5 +1,7 @@
 # Continuous Hebrew ASR throughput gate (foreground, experimental)
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 Goal: prove sustained local transcription before connecting a local LLM or supporting hours of background recording. This branch builds on the unmerged TPU cross-attention integration, not on completed production streaming support.
 
 ## Evidence and target

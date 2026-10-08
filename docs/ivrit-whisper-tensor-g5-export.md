@@ -1,5 +1,7 @@
 # ivrit.ai Whisper Large v3 Turbo → LiteRT → Tensor G5
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 This is the accuracy-first path for Mosaic Hebrew ASR.
 
 The source model is `ivrit-ai/whisper-large-v3-turbo`, the same Hebrew

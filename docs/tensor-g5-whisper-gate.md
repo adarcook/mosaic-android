@@ -1,5 +1,7 @@
 # Tensor G5 Whisper encoder gate
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 This is the next device gate after the tiny Tensor G5 ADD probe in Draft PR #24.
 It uses a real public LiteRT Whisper Tiny graph, compiles it with the authorized
 Google Tensor SDK, and runs the encoder graph in a disposable Android process.
