@@ -4,6 +4,8 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <sstream>
+#include <cmath>
 #include "whisper.h"
 #include "ggml-backend.h"
 
@@ -188,14 +190,14 @@ Java_life_mosaic_voice_WhisperNative_prepareEncoderInput(JNIEnv *env, jobject, j
     return result;
 }
 
-extern "C" JNIEXPORT jstring JNICALL
-Java_life_mosaic_voice_WhisperNative_transcribeEncoded(
+static jstring transcribe_encoded(
         JNIEnv *env,
         jobject,
         jlong handle,
         jfloatArray encoded,
         jboolean accurate,
-        jint budget_seconds) {
+        jint budget_seconds,
+        jfloatArray cross) {
     auto *s = session(handle);
     if (!s || !s->ctx) {
         fail(env, "Whisper hybrid session is not loaded");
@@ -221,6 +223,19 @@ Java_life_mosaic_voice_WhisperNative_transcribeEncoded(
             s->ctx.get(), encoder_output.data(), encoder_output.size()) != 0) {
         fail(env, "Could not inject Tensor G5 encoder output");
         return nullptr;
+    }
+
+    if (cross) {
+        const int expected_cross = expected * 2 * whisper_model_n_text_layer(s->ctx.get());
+        if (env->GetArrayLength(cross) != expected_cross) {
+            fail(env, "Unexpected cross-attention output size"); return nullptr;
+        }
+        std::vector<float> values(expected_cross);
+        env->GetFloatArrayRegion(cross, 0, expected_cross, values.data());
+        if (env->ExceptionCheck()) return nullptr;
+        if (whisper_mosaic_set_cross_output(s->ctx.get(), values.data(), values.size()) != 0) {
+            fail(env, "Could not inject Tensor cross-attention cache"); return nullptr;
+        }
     }
 
     s->cancelled = false;
@@ -266,6 +281,54 @@ Java_life_mosaic_voice_WhisperNative_transcribeEncoded(
     for (int i = 0; i < whisper_full_n_segments(s->ctx.get()); ++i) {
         text += whisper_full_get_segment_text(s->ctx.get(), i);
     }
+    return env->NewStringUTF(text.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_life_mosaic_voice_WhisperNative_transcribeEncoded(JNIEnv *env, jobject obj, jlong handle,
+        jfloatArray encoded, jboolean accurate, jint budget) {
+    return transcribe_encoded(env, obj, handle, encoded, accurate, budget, nullptr);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_life_mosaic_voice_WhisperNative_transcribeEncodedCross(JNIEnv *env, jobject obj, jlong handle,
+        jfloatArray encoded, jfloatArray cross, jboolean accurate, jint budget) {
+    return transcribe_encoded(env, obj, handle, encoded, accurate, budget, cross);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_life_mosaic_voice_WhisperNative_compareCross(JNIEnv *env, jobject, jlong handle,
+        jfloatArray encoded, jfloatArray cross) {
+    auto *s = session(handle);
+    if (!s || !s->ctx) { fail(env, "Hybrid context missing"); return nullptr; }
+    const int count = whisper_model_n_audio_ctx(s->ctx.get()) * whisper_model_n_audio_state(s->ctx.get());
+    const int n_cross = count * 2 * whisper_model_n_text_layer(s->ctx.get());
+    if (env->GetArrayLength(encoded) != count || env->GetArrayLength(cross) != n_cross) {
+        fail(env, "Invalid cache comparison dimensions"); return nullptr;
+    }
+    std::vector<float> emb(count), cache(n_cross);
+    env->GetFloatArrayRegion(encoded, 0, count, emb.data());
+    env->GetFloatArrayRegion(cross, 0, n_cross, cache.data());
+    if (env->ExceptionCheck()) return nullptr;
+    if (whisper_mosaic_set_encoder_output(s->ctx.get(), emb.data(), count) != 0) {
+        fail(env, "Encoder injection failed"); return nullptr;
+    }
+    s->cancelled=false;
+    s->deadline=Clock::now()+std::chrono::seconds(60);
+    std::vector<double> metrics(whisper_model_n_text_layer(s->ctx.get())*2*3);
+    int rc=whisper_mosaic_compare_cross(s->ctx.get(),cache.data(),n_cross,
+            metrics.data(),metrics.size(),should_abort,s);
+    if (rc != 0) { fail(env, "CPU cross-cache comparison failed or timed out"); return nullptr; }
+    bool passed=true;
+    std::ostringstream out;
+    for (size_t i=0;i<metrics.size()/3;++i) {
+        double max_abs=metrics[i*3], relative=metrics[i*3+1], cosine=metrics[i*3+2];
+        if (!std::isfinite(relative) || !std::isfinite(cosine) || relative>0.10 || cosine<0.99) passed=false;
+        out << "layer " << i/2 << (i%2 == 0 ? " K" : " V")
+            << ": max_abs=" << max_abs << ", relL2=" << relative << ", cosine=" << cosine << "\n";
+    }
+    // Provisional Q5-vs-FP32 tolerance, not a transcript accuracy guarantee.
+    std::string text=(passed ? "PASS" : "FAIL") + std::string(" — cross cache comparison\n") + out.str();
     return env->NewStringUTF(text.c_str());
 }
 

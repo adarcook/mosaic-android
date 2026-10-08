@@ -60,6 +60,9 @@ public final class WhisperGateActivity extends Activity {
     private Button stopRecording;
     private Button crossLoad;
     private Button crossRun;
+    private Button crossCompare;
+    private Button tpuAsr;
+    private int recordingRequest = WhisperGateService.REQUEST_HYBRID_PCM;
 
     private boolean running;
     private boolean recording;
@@ -105,13 +108,29 @@ public final class WhisperGateActivity extends Activity {
         crossLoad.setOnClickListener(v -> begin(WhisperGateService.REQUEST_CROSS_LOAD, null));
         crossRun.setOnClickListener(v -> begin(WhisperGateService.REQUEST_CROSS_RUN, null));
 
+        crossCompare = new Button(this);
+        crossCompare.setText("6. אימות Q5 מול TPU על משפט אמיתי");
+        tpuAsr = new Button(this);
+        tpuAsr.setText("7. תמלול עם CROSS-ATTENTION על TPU");
+        crossCompare.setOnClickListener(v -> {
+            recordingRequest = WhisperGateService.REQUEST_CROSS_COMPARE;
+            requestRealRecording();
+        });
+        tpuAsr.setOnClickListener(v -> {
+            recordingRequest = WhisperGateService.REQUEST_TPU_CROSS_PCM;
+            requestRealRecording();
+        });
+
         Button copy = new Button(this);
         copy.setText("העתקת תוצאה");
 
         load.setOnClickListener(v -> begin(WhisperGateService.REQUEST_LOAD_ONLY, null));
         zeroRun.setOnClickListener(
                 v -> begin(WhisperGateService.REQUEST_RUN_ZERO_MEL, null));
-        realAsr.setOnClickListener(v -> requestRealRecording());
+        realAsr.setOnClickListener(v -> {
+            recordingRequest = WhisperGateService.REQUEST_HYBRID_PCM;
+            requestRealRecording();
+        });
         stopRecording.setOnClickListener(v -> stopMic());
 
         copy.setOnClickListener(v -> {
@@ -126,6 +145,8 @@ public final class WhisperGateActivity extends Activity {
         layout.addView(stopRecording);
         layout.addView(crossLoad);
         layout.addView(crossRun);
+        layout.addView(crossCompare);
+        layout.addView(tpuAsr);
         layout.addView(copy);
         layout.addView(status);
 
@@ -137,11 +158,12 @@ public final class WhisperGateActivity extends Activity {
         boolean loadPassed = getPreferences(0).getBoolean("loadPassed", false);
         zeroRun.setEnabled(loadPassed);
         realAsr.setEnabled(loadPassed);
-        crossRun.setEnabled(getPreferences(0).getBoolean("crossLoadPassed", false));
+        updateButtons();
 
         String last = getPreferences(0).getString("result", "");
         status.setText(
                 "ivrit.ai Whisper Large v3 Turbo — Tensor G5 + CPU decoder.\n"
+                        + "שלב 6 מאמת מטמון (איטי); שלב 7 בודק תמלול מואץ.\n"
                         + "שלבים 4–5 בודקים cross-attention בנפרד, ללא מיקרופון.\n"
                         + "שלב 3 הוא תמלול אמיתי מהמיקרופון, עד 8 שניות.\n"
                         + "האודיו נשמר זמנית ב-cache ונמחק אחרי הניסיון.\n\n"
@@ -305,7 +327,7 @@ public final class WhisperGateActivity extends Activity {
                         + String.format(java.util.Locale.ROOT,
                                 "נקלטו %.2f שניות. מתחיל Tensor G5 + decoder…",
                                 samples / (double) SAMPLE_RATE));
-        begin(WhisperGateService.REQUEST_HYBRID_PCM, pcmFile);
+        begin(recordingRequest, pcmFile);
     }
 
     private void recordingFailed(Throwable e) {
@@ -331,7 +353,11 @@ public final class WhisperGateActivity extends Activity {
         realAsr.setEnabled(idle && loadPassed);
         stopRecording.setEnabled(recording);
         crossLoad.setEnabled(idle);
-        crossRun.setEnabled(idle && getPreferences(0).getBoolean("crossLoadPassed", false));
+        boolean crossLoaded = getPreferences(0).getBoolean("crossLoadPassed", false);
+        crossRun.setEnabled(idle && crossLoaded);
+        crossCompare.setEnabled(idle && loadPassed && crossLoaded);
+        tpuAsr.setEnabled(idle && loadPassed && crossLoaded
+                && getPreferences(0).getBoolean("crossParityPassedV1", false));
     }
 
     private void begin(int request, File pcmFile) {
@@ -358,13 +384,23 @@ public final class WhisperGateActivity extends Activity {
             return;
         }
 
+        if ((request == WhisperGateService.REQUEST_CROSS_COMPARE
+                || request == WhisperGateService.REQUEST_TPU_CROSS_PCM)
+                && !getPreferences(0).getBoolean("crossLoadPassed", false)) return;
+        if (request == WhisperGateService.REQUEST_TPU_CROSS_PCM
+                && !getPreferences(0).getBoolean("crossParityPassedV1", false)) {
+            status.setText("יש להשלים בהצלחה את שלב 6 לפני התמלול המואץ.");
+            return;
+        }
         activeRequest = request;
         pendingPcmFile = pcmFile;
         running = true;
         updateButtons();
 
         final int attempt = ++generation;
-        if (request != WhisperGateService.REQUEST_HYBRID_PCM) {
+        if (request != WhisperGateService.REQUEST_HYBRID_PCM
+                && request != WhisperGateService.REQUEST_CROSS_COMPARE
+                && request != WhisperGateService.REQUEST_TPU_CROSS_PCM) {
             String label = crossRequest ? "פותח תהליך TPU מבודד לבדיקת cross-attention…"
                     : request == WhisperGateService.REQUEST_LOAD_ONLY
                     ? "פותח תהליך TPU מבודד ל-load-only…"
@@ -404,7 +440,9 @@ public final class WhisperGateActivity extends Activity {
 
                 Message requestMessage = Message.obtain(null, request);
                 requestMessage.replyTo = reply;
-                if (request == WhisperGateService.REQUEST_HYBRID_PCM) {
+                if (request == WhisperGateService.REQUEST_HYBRID_PCM
+                        || request == WhisperGateService.REQUEST_CROSS_COMPARE
+                        || request == WhisperGateService.REQUEST_TPU_CROSS_PCM) {
                     if (pendingPcmFile == null || !pendingPcmFile.isFile()) {
                         finishGate("FAIL — PCM file disappeared before worker start");
                         return;
@@ -466,6 +504,9 @@ public final class WhisperGateActivity extends Activity {
 
         if (activeRequest == WhisperGateService.REQUEST_CROSS_LOAD) {
             getPreferences(0).edit().putBoolean("crossLoadPassed", result.startsWith("PASS")).apply();
+        }
+        if (activeRequest == WhisperGateService.REQUEST_CROSS_COMPARE) {
+            getPreferences(0).edit().putBoolean("crossParityPassedV1", result.startsWith("PASS")).apply();
         }
         running = false;
         ++generation;
