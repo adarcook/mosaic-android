@@ -24,6 +24,7 @@ final class WarmHybridEngine implements AutoCloseable {
     static final class Result {
         String text;
         long melMs, encoderMs, crossMs, decodeMs, totalMs;
+        String nativeTimings;
     }
 
     WarmHybridEngine(File dir, String nativeLibraryDir) throws Exception {
@@ -54,7 +55,7 @@ final class WarmHybridEngine implements AutoCloseable {
         loadMs = SystemClock.elapsedRealtime() - start;
     }
 
-    Result transcribe(float[] pcm) throws Exception {
+    Result transcribe(float[] pcm, int beamSize) throws Exception {
         Result result = new Result();
         long start = SystemClock.elapsedRealtime(), phase = start;
         float[] mel = WhisperNative.INSTANCE.prepareEncoderInput(handle, pcm);
@@ -72,9 +73,10 @@ final class WarmHybridEngine implements AutoCloseable {
         if (cache.length != 4 * 2 * 1500 * 1280) throw new IllegalStateException("Cross output shape");
         result.crossMs = SystemClock.elapsedRealtime() - phase;
         phase = SystemClock.elapsedRealtime();
-        result.text = WhisperNative.INSTANCE.transcribeEncodedCross(handle, encoded, cache, true, 60).trim();
+        result.text = WhisperNative.INSTANCE.transcribeEncodedCrossBeam(handle, encoded, cache, beamSize, 60).trim();
         result.decodeMs = SystemClock.elapsedRealtime() - phase;
         result.totalMs = SystemClock.elapsedRealtime() - start;
+        result.nativeTimings = WhisperNative.INSTANCE.timings(handle);
         return result;
     }
 

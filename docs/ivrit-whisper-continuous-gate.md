@@ -43,3 +43,28 @@ adb exec-out run-as life.mosaic.tensorwhisper cat files/asr-sessions/SESSION_NAM
 ## Verification
 
 CI builds the Android APK/native bridge and runs standalone Java tests for exact sample coverage, overlap, partial-tail flushing, PCM conversion and provisional text reconciliation. Device throughput, thermal behavior and transcription quality require the Pixel test; CI does not claim these pass.
+
+## Decoder throughput A/B trial (v0.7)
+
+The supplied device-test analysis reports 111 s captured, 100 s transcribed, 11 s unprocessed and cumulative RTF 1.283. Mean encoder time was approximately 2.65 s and decoder time approximately 11.3 s per chunk. This is user-session evidence, not a new measurement on this branch. The source journal/audio is not committed.
+
+Step 8 now offers Beam 2 (default experimental candidate), Beam 5 (previous baseline) and Greedy (beam 1). Every session fixes its selection before recording. CPU threads remain 2; the TPU artifacts, 12 s windows, 1 s overlap, queue capacity, token guard and cancellation budgets stay the same. The existing short-utterance and parity steps retain their old settings. Beam 2 reduces the search width, but speedup and Hebrew accuracy remain unverified until tested on Pixel. No automatic switch or fallback hides which decoder ran.
+
+Start records now use diagnostic version 2 and include beam size, CPU threads and APK version. Segments also include the selected beam and whisper.cpp native timing breakdown (decode/batch/prompt vs sampling). The previous version-1 journal remains readable by the comparison script.
+
+### Repeat the same source
+
+1. Update the existing APK in place; do not uninstall or replace model files. If signature mismatch occurs, build using the same machine/signing key as the installed APK. The prior parity gate and private journals should be preserved by an in-place update.
+2. Open step 8, choose Beam 2, and wait for the loaded/recording indication before starting speech.
+3. Replay the exact same source recording, at the same volume and placement, where available. Reading the same text again is an indicative comparison because pacing and window boundaries change. Stop after the source finishes and wait for queue/tail processing to complete.
+4. Save the new JSONL. Compare the shared first 100 s with the previous incomplete run, then assess coverage of the complete text. Do not compare only total average decoding if one run includes a short Stop tail; inspect the full-window metrics and shared chunk offsets.
+5. Require zero unprocessed audio, sustained RTF below 1 (target 0.75–0.85), stable backlog, and acceptable Hebrew/English terminology, names and numbers. Review raw segment text for omissions separately from boundary duplicates. Lower RTF alone does not pass the quality gate.
+6. If accuracy regresses, use Beam 5 on the same source for control; Greedy is an optional separate experiment. Do not merge or mark streaming complete on the basis of this APK build.
+
+After retrieving both journals using the adb commands above:
+
+```sh
+python3 scripts/compare_asr_sessions.py baseline.jsonl candidate.jsonl
+```
+
+This prints coverage, full-window decode/compute means, cumulative RTF, peak backlog, memory and thermal status, plus percentage reductions. Missing terminal records are marked interrupted with unknown uncaptured tail rather than treated as successful runs. It does not compute WER or claim accuracy without a reference transcript. All journal processing remains local.

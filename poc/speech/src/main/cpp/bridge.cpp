@@ -197,7 +197,7 @@ static jstring transcribe_encoded(
         jobject,
         jlong handle,
         jfloatArray encoded,
-        jboolean accurate,
+        jint beam_size,
         jint budget_seconds,
         jfloatArray cross) {
     auto *s = session(handle);
@@ -208,6 +208,10 @@ static jstring transcribe_encoded(
     if (budget_seconds != 30 && budget_seconds != 60 && budget_seconds != 90) {
         fail(env, "Invalid hybrid decode budget");
         return nullptr;
+    }
+
+    if (beam_size != 1 && beam_size != 2 && beam_size != 5) {
+        fail(env, "Invalid hybrid beam size"); return nullptr;
     }
 
     const int expected =
@@ -245,7 +249,7 @@ static jstring transcribe_encoded(
     s->deadline = Clock::now() + std::chrono::seconds(budget_seconds);
 
     auto p = whisper_full_default_params(
-            accurate ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
+            beam_size > 1 ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
     p.n_threads = 2;
     p.audio_ctx = 0;  // Tensor artifact is compiled for the full 1500-frame audio context.
     p.language = "he";
@@ -256,7 +260,7 @@ static jstring transcribe_encoded(
     p.single_segment = true;
     p.max_tokens = s->audio_samples > 16000 * 8 ? 384 : 96;
     p.greedy.best_of = 1;
-    p.beam_search.beam_size = accurate ? 5 : 1;
+    p.beam_search.beam_size = beam_size;
     p.temperature = 0.0f;
     p.temperature_inc = 0.0f;
     p.print_realtime = false;
@@ -294,13 +298,19 @@ static jstring transcribe_encoded(
 extern "C" JNIEXPORT jstring JNICALL
 Java_life_mosaic_voice_WhisperNative_transcribeEncoded(JNIEnv *env, jobject obj, jlong handle,
         jfloatArray encoded, jboolean accurate, jint budget) {
-    return transcribe_encoded(env, obj, handle, encoded, accurate, budget, nullptr);
+    return transcribe_encoded(env, obj, handle, encoded, accurate ? 5 : 1, budget, nullptr);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_life_mosaic_voice_WhisperNative_transcribeEncodedCross(JNIEnv *env, jobject obj, jlong handle,
         jfloatArray encoded, jfloatArray cross, jboolean accurate, jint budget) {
-    return transcribe_encoded(env, obj, handle, encoded, accurate, budget, cross);
+    return transcribe_encoded(env, obj, handle, encoded, accurate ? 5 : 1, budget, cross);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_life_mosaic_voice_WhisperNative_transcribeEncodedCrossBeam(JNIEnv *env, jobject obj, jlong handle,
+        jfloatArray encoded, jfloatArray cross, jint beam_size, jint budget) {
+    return transcribe_encoded(env, obj, handle, encoded, beam_size, budget, cross);
 }
 
 extern "C" JNIEXPORT jstring JNICALL

@@ -7,14 +7,15 @@ android {
         applicationId = "life.mosaic.tensorwhisper"
         minSdk = 31
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6-continuous-asr-gate"
+        versionCode = 7
+        versionName = "0.7-decoder-throughput"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    buildFeatures { buildConfig = true }
     packaging { jniLibs.useLegacyPackaging = true }
     androidResources { noCompress += "tflite" }
 }

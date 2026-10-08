@@ -13,6 +13,7 @@ public final class StreamingGateActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView status, captureStatus;
     private Button start, stop;
+    private Spinner decoderProfile;
     private Messenger remote;
     private boolean running, bound;
     private int workerPid, generation;
@@ -27,6 +28,10 @@ public final class StreamingGateActivity extends Activity {
         TextView heading = new TextView(this);
         heading.setText("בדיקת שיחה רציפה — עד 10 דקות\nהמודלים נטענים פעם אחת. חלונות 12 שניות עם חפיפה של שנייה.\nהשאר מסך פתוח; מעבר לרקע מבטל את הניסוי.\nהתמלול נשמר במכשיר בלבד. טקסט בגבולות עדיין זמני.");
         layout.addView(heading);
+        decoderProfile = new Spinner(this);
+        decoderProfile.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"Beam 2 — ניסוי מהירות", "Beam 5 — הבדיקה הקודמת", "Greedy — ניסוי מהירות מרבית"}));
+        layout.addView(decoderProfile);
         start = new Button(this); start.setText("התחלת שיחה");
         stop = new Button(this); stop.setText("עצירה וסיום עיבוד המקטעים"); stop.setEnabled(false);
         captureStatus = new TextView(this);
@@ -74,6 +79,9 @@ public final class StreamingGateActivity extends Activity {
 
     private void begin() {
         running = true; lastSaved = ""; start.setEnabled(false); stop.setEnabled(false);
+        decoderProfile.setEnabled(false);
+        final int beamSize = decoderProfile.getSelectedItemPosition() == 0 ? 2
+                : decoderProfile.getSelectedItemPosition() == 1 ? 5 : 1;
         final int attempt = ++generation;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         status.setText("פותח מנוע מבודד לשיחה רציפה…"); captureStatus.setText("");
@@ -100,6 +108,7 @@ public final class StreamingGateActivity extends Activity {
             @Override public void onServiceConnected(ComponentName name, IBinder binder) {
                 if (!running || attempt != generation) return;
                 remote = new Messenger(binder); Message request = Message.obtain(null, 1); request.replyTo = reply;
+                Bundle options = new Bundle(); options.putInt("beam_size", beamSize); request.setData(options);
                 try { remote.send(request); } catch (RemoteException e) { finish("לא ניתן להתחיל שיחה"); }
             }
             @Override public void onServiceDisconnected(ComponentName name) {
@@ -123,7 +132,7 @@ public final class StreamingGateActivity extends Activity {
         else if (remote != null) try { remote.send(Message.obtain(null, 10)); } catch (RemoteException ignored) { }
         remote = null;
         if (bound) { try { unbindService(connection); } catch (IllegalArgumentException ignored) { } bound = false; }
-        start.setEnabled(true); stop.setEnabled(false); captureStatus.setText(""); status.setText(result);
+        start.setEnabled(true); stop.setEnabled(false); decoderProfile.setEnabled(true); captureStatus.setText(""); status.setText(result);
     }
 
     @Override protected void onPause() {
