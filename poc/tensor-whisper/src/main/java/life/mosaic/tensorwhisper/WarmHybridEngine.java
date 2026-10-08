@@ -54,7 +54,7 @@ final class WarmHybridEngine implements AutoCloseable {
         loadMs = SystemClock.elapsedRealtime() - start;
     }
 
-    Result transcribe(float[] pcm) {
+    Result transcribe(float[] pcm) throws Exception {
         Result result = new Result();
         long start = SystemClock.elapsedRealtime(), phase = start;
         float[] mel = WhisperNative.INSTANCE.prepareEncoderInput(handle, pcm);
