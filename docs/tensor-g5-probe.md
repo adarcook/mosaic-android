@@ -1,5 +1,7 @@
 # Tensor G5 runtime probe (experimental)
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 This standalone debug APK is the first device gate before moving the Hebrew
 Whisper encoder to LiteRT. It installs as `life.mosaic.tensorprobe`, alongside
 Mosaic Voice Mobile. It cannot transcribe speech and requires no microphone,

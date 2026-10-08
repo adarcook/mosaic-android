@@ -1,5 +1,7 @@
 # ivrit.ai Whisper Tensor G5 device probe
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 This is the first on-device runtime gate for the fully AOT-compiled
 `ivrit-ai/whisper-large-v3-turbo` encoder.
 

@@ -63,3 +63,9 @@ This repository owns the Android experience and local mobile data. Long-term cro
 ## Migration safety
 
 The first architecture stage changes branding and documents the target structure only. It intentionally keeps the existing `life.mosaic.fit` package, application ID, Room database, preferences, and API behavior unchanged.
+
+## Hebrew ASR experiments
+
+Start with the [Hebrew explanation and experiment history](docs/ASR_EXPERIMENT_HISTORY.md): model conversion, CPU/TPU responsibilities, measured breakthroughs/regressions, reproducibility gaps and rollback commits. This voice work is experimental and lives in open PRs, not completed production functionality.
+
+For each new experiment or later device result, update the history using the [record template](docs/ASR_EXPERIMENT_TEMPLATE.md) and follow [AGENTS.md](AGENTS.md).

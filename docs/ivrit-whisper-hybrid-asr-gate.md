@@ -1,5 +1,7 @@
 # ivrit.ai real-audio hybrid ASR gate
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 This experiment is stacked on the verified full-encoder Tensor G5 work in Draft
 PR #26. It does not change the Mosaic roadmap completion state.
 

@@ -1,5 +1,7 @@
 # ivrit.ai cross-attention Tensor G5 feasibility gate
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 Draft experiment stacked on PR #28; no roadmap stage is complete.
 Latest main was checked and is included in the experiment ancestry.
 

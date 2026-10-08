@@ -1,0 +1,218 @@
+# תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
+
+עודכן: 8 באוקטובר 2026. נקודת הקוד המתועדת: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+
+זהו מסמך הכניסה לתהליך ה־ASR: מה שינינו במודל, היכן כל חלק רץ, מה הצליח ומה נכשל, ואיך חוזרים לנקודה קודמת. ASR פירושו זיהוי דיבור והפיכתו לטקסט. BlueTTS, שמייצר דיבור מתוך טקסט, הוא רכיב אחר ואינו מאיץ את התמלול.
+
+**המצב כיום:** יש מסלול תמלול מקומי היברידי על Pixel 10 Pro. ה־TPU מריץ את ה־encoder ואת הכנת K/V ל־cross-attention; ה־CPU מחשב את הקלט ומייצר את הטקסט. איכות העברית נראתה שימושית בבדיקות שהובאו, אך תמלול רציף עדיין לא עבר את מבחן הקצב. ניסוי Beam 2 נבנה אך טרם נמדד בטלפון.
+
+כל שרשרת ניסויי הקול נמצאת ב־PRs פתוחים. `main` שנבדק הוא [`7d2a4d4`](https://github.com/adarcook/mosaic-android/commit/7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9); הוא אינו כולל את המסלול הזה. הצלחת ניסוי או בניית APK אינה השלמת שלב ב־[roadmap](https://github.com/adarcook/mosaic-docs/blob/main/ROADMAP.md). השלב האחרון המסומן Complete שם הוא 0; שלב 1 עדיין דורש אימות. מסמך זה אינו משנה את הארכיטקטורה של Room / Firebase / Core או את סטטוס ה־roadmap.
+
+## 1. התשובה לשאלה: האם Whisper כולו רץ על המעבד?
+
+בהתחלה — כן, במסלול CPU. כיום — לא. חשוב להפריד בין **CPU**, המעבד הכללי; **GPU**, המעבד הגרפי; ו־**TPU/NPU**, מאיץ חישובי הרשת העצבית של Tensor G5. כולם בתוך הפיקסל; התמלול הנוכחי אינו נשלח לשרת או למחשב הביתי.
+
+| חלק | מה הוא עושה בשפה פשוטה | בתחילת הדרך | במסלול הנוכחי: שלבים 7–8 |
+|---|---|---|---|
+| הקלטת PCM | קולט דגימות קול, 16,000 בשנייה, ערוץ אחד | בטלפון | בטלפון, בנפרד מעיבוד החלונות |
+| log-mel frontend | ממיר את הקול לייצוג מספרי של תדרים לאורך זמן | CPU, דרך whisper.cpp | CPU, אותה פונקציית whisper.cpp |
+| audio encoder | מפיק מהקול ייצוג שהמודל יכול לפענח | CPU | TPU דרך LiteRT ומודל AOT ל־Tensor G5 |
+| הכנת cross-attention K/V | מכין מהייצוג הזה נתונים קבועים לכל שכבת decoder | CPU | TPU; הפלט מועתק ומומר למטמון של whisper.cpp |
+| decoder ויצירת tokens | יוצר את הטקסט צעד אחר צעד, על סמך הקול והטקסט שכבר נוצר | CPU | CPU, שתי תהליכוניות חישוב; Beam 5 או ניסוי Beam 2/Greedy |
+| חיבור החלונות ושמירה | מחבר טקסט זמני ושומר לוג מקומי | לא היה ניסוי רציף | קוד האפליקציה; JSONL מקומי |
+
+**לא כל ה־cross-attention הועבר ל־TPU.** העברנו את ההכנה הקבועה של K/V. שאילתות Q, פעולות attention במהלך יצירת tokens, self-attention ושאר חישובי ה־decoder ממשיכים על CPU. ה־GPU אינו חלק מהמסלול ההיברידי הנוכחי.
+
+השלבים 3 ו־7 באפליקציה אינם זהים: שלב 3 שומר את הבסיס הישן — encoder על TPU, הכנת K/V ו־decoder על CPU. שלב 7 מוסיף את הכנת K/V על TPU. שלב 8 משתמש באותו מסלול מואץ עם חלונות רציפים ומודלים שנשארים טעונים.
+
+## 2. מה עשינו למודל המקורי?
+
+לא אימנו Whisper מחדש בפרויקט, ולא לימדנו אותו עברית בעצמנו. בחרנו **מודל שכבר עבר התאמה לעברית אצל ivrit.ai**, ממשפחת Whisper Large v3 Turbo. זוהי החלפה של המודל הרב־לשוני Small שניסינו בתחילה, לא רק שינוי בפרמטר מהירות.
+
+יש שני פורמטים של משקלים שמשמשים במסלול הנוכחי:
+
+| מסלול משקלים | המקור והתפקיד | מה נעשה אצלנו |
+|---|---|---|
+| Transformers / PyTorch של `ivrit-ai/whisper-large-v3-turbo` | מקור ל־encoder ולהכנת K/V | קריאה מקומית, ייצוא FP32 ל־LiteRT, השוואה מספרית, קומפילציה ייעודית ל־Tensor G5 |
+| קובץ GGML Q5_0 קהילתי מאותה משפחת ivrit.ai | משקלים מקוונטטים ל־whisper.cpp, tokenizer ו־decoder CPU | הורדה של קובץ קיים עם revision ו־SHA-256; לא ביצענו כאן קוונטיזציה חדשה בעצמנו |
+
+קוונטיזציה Q5 משתמשת בייצוג דחוס של משקלים כדי להפחית זיכרון ועלויות חישוב; היא עשויה לשנות תוצאות. FP16 ו־FP32 הם ייצוגי מספרים אחרים. גודל קובץ קטן יותר אינו לבדו הוכחה למהירות גבוהה יותר או לדיוק זהה.
+
+תהליך ההמרה שביצענו על המחשב:
+
+1. השגנו checkpoint מקומי מלא. קובץ `model.safetensors` בגודל 135 bytes היה מצביע Git LFS, לא משקלי המודל; אי אפשר לייצא ממנו.
+2. ייצאנו את **כל 32 שכבות ה־encoder** דרך `litert-torch`, ישירות מ־PyTorch ל־LiteRT. לא היה שלב ONNX במסלול זה. ניסויי 1/8 שכבות היו לאבחון compiler, ולא המודל הסופי.
+3. השווינו פלט של PyTorch לפלט LiteRT במחשב. זה בודק שגיאות המרה, לא איכות תמלול בעברית.
+4. קימפלנו מראש, AOT, עבור Tensor G5 באמצעות Google Tensor SDK. התוצר הוא גרף שה־TPU מסוגל להריץ. זה אינו אימון של מודל חדש.
+5. בדקנו טעינה והרצת encoder בטלפון, תחילה בלי מיקרופון ובלי decoder.
+6. הוספנו ל־whisper.cpp חיבור שמדלג על ה־encoder שלו ומקבל את פלט ה־TPU. שמרנו על עיבוד הקול וה־tokenizer הקיימים.
+7. ייצאנו בנפרד את שמונת חישובי K/V של ארבע שכבות ה־decoder, קימפלנו גם אותם ל־TPU, ואז הוספנו הזרקה למטמון CPU.
+8. השווינו K/V מה־TPU מול המטמון שנוצר ממשקלי Q5 ב־CPU, על אותו קלט. זה חשוב משום שהמשקלים וייצוגי המספרים בשני המסלולים אינם זהים לחלוטין.
+
+הקובץ המכונה `ivrit-whisper-decoder-q5_0.bin` **עדיין מכיל גם משקלי encoder**. השם לא אומר שחילצנו ממנו decoder בלבד: הקוד עוקף את הרצת ה־encoder במסלול ההיברידי.
+
+### קבצים וזהויות שצריך לשמר לשחזור
+
+| פריט | זהות מתועדת |
+|---|---|
+| מנוע whisper.cpp | v1.8.3, commit `2eeeba56e9edd762b4b38467bab96c2517163158` |
+| checkpoint לייצוא TPU | `ivrit-ai/whisper-large-v3-turbo`; revision שנמסר בתהליך: `f33172a8c3c6efbc040a7200e00835257cac0447` |
+| מקור CPU Q5 | `JoaoZaokk/ivrit-whisper-large-v3-turbo-ggml`, revision `7caf56da903afb6adf616b56ac4bbe59485e15aa` |
+| קובץ CPU במכשיר | `ivrit-whisper-decoder-q5_0.bin`, 574,041,195 bytes; SHA-256 `6c1da92e8e41dd64b8cc402eee7eb7a433d2152567e1a4d9cf181fefcc67a572` |
+| encoder LiteRT לפני AOT | קובץ FP32 שנמסר: 2,548,386,848 bytes |
+| encoder אחרי AOT | `ivrit_whisper_encoder_Google_Tensor_G5.tflite`, 1,327,807,744 bytes |
+| cross-attention אחרי AOT | `ivrit_whisper_cross_attention_Google_Tensor_G5.tflite`, 26,846,992 bytes; SHA-256 `fa2d5bb9200d8db59860c5b23dfbe899762f42d269885e2633fc56b18e6306a3` |
+| סביבת AOT שעבדה | SDK v2.0; `ai-edge-litert==2.1.6`, `ai-edge-litert-sdk-google-tensor==2.1.6`; wrapper רשמי |
+| סביבת export | Linux / Python 3.11; גרסאות Torch, Transformers ו־litert-torch מלאות לא נשמרו כאן כ־lockfile היסטורי |
+| כלי Android | JDK 17; Gradle 8.9 לניסוי; NDK `27.0.12077973`, CMake `3.22.1` |
+
+revision ה־checkpoint לעיל הוא רשומה מהתהליך, ולא אימות שהסקריפט אוכף אותו על כל תיקייה מקומית. SHA-256 מלא של ה־encoder המהודר לא מופיע במקורות שנבדקו; גודל הקובץ אינו תחליף ל־hash. גם התאמה מוחלטת בין checkpoint ה־FP32 לקובץ Q5 הקהילתי לא הוכחה באמצעות hashes משותפים. אלה פערי שחזור שיש להשלים מהקבצים המקוריים; אין להמציא זהויות חסרות.
+
+## 3. איך אנחנו משפרים מהירות ואיך אנחנו שומרים על דיוק?
+
+אלו שני צירים נפרדים. שינוי שמאיץ חישוב אינו מבטיח תמלול טוב יותר.
+
+| שינוי | המטרה | מה הוא יכול לשנות / מה צריך לבדוק |
+|---|---|---|
+| Small רב־לשוני → ivrit.ai Turbo | עברית טובה יותר | מודל כבד יותר; יש להשוות טקסט וגם מהירות |
+| Q5 לעומת FP16 | פחות זיכרון וחישוב CPU | ייתכנו הבדלים מספריים ושגיאות תמלול |
+| אופטימיזציית native: `-O3`, ARM FP16/dotprod | לנצל את הוראות ה־CPU | זו אופטימיזציית מנוע, לא אימון מודל; עדיין צריך מדידת מכשיר |
+| encoder CPU → TPU | להוריד את העלות הגדולה שנמדדה בתחילה | השוואת פלטים, תמלול אמיתי, יציבות ועלות העתקת tensors |
+| הכנת K/V CPU → TPU | להוריד צוואר בקבוק נוסף שנחשף אחרי מעבר ה־encoder | scaling, סדר שכבות, F16/F32, padding והשוואת cache |
+| מודלים טעונים לאורך שיחה | לא לטעון שוב בכל חלון | זיכרון, חום ויציבות לאורך זמן |
+| Beam 5 → Beam 2 | לבדוק פחות מועמדי טקסט בכל צעד | עלול לפגוע בדיוק; אין עדיין מדידת Pixel לגרסה 0.7 |
+| Greedy | לבחור מועמד אחד בכל צעד | ניסוי נפרד שעשוי להיות מהיר יותר; לא עבר את מבחן האיכות |
+| חפיפה וחיבור חלונות | לצמצם חיתוך מילים בגבולות | כפילויות או השמטות בחיבור; אינו משנה את משקלי Whisper |
+
+Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק רוחב חיפוש של חמישה מועמדים, Beam 2 של שניים. זמן הריצה אינו בהכרח קטן ביחס 5:2, כי חלק מהעבודה משותף ויש עלויות קבועות. לא הוספנו בפרויקט fine-tuning, distillation או speculative decoding; לא העברנו את לולאת יצירת הטקסט ל־TPU.
+
+המודל הסופי משתמש בקלט encoder קבוע `[1,128,3000]`: ייצוג מרופד של 30 שניות. פלט encoder הוא `[1,1500,1280]`. חלון ההקלטה הרציף הוא 12 שניות, אך עדיין מורץ אותו encoder עם ריפוד; קיצור ההקלטה לא מקצר אוטומטית את הגרף המהודר.
+
+חלון ראשון כולל 12 שניות חדשות; כל חלון מלא הבא מוסיף 11 שניות עם חפיפה של שנייה. לכן חלונות של 12 שניות אינם תשובה קולית מיידית: הטקסט הראשון מגיע אחרי מילוי החלון ועוד עיבוד. יעד 1–3 שניות אחרי סוף משפט הוא מבחן אחר, שעדיין לא הושג.
+
+## 4. איך לקרוא את הראיות ביומן
+
+- **קוד / CI:** היכולת נבנתה ובדיקות עברו. אינו מוכיח קצב או דיוק בטלפון.
+- **Host parity:** פלטים מספריים במחשב דומים בגבולות הבדיקה. אינו מוכיח עברית או ריצת TPU אמיתית.
+- **Device probe:** פעולה בודדת רצה בטלפון, לעיתים על קלט סינתטי. אינו מבחן תמלול מלא.
+- **דיווח מכשיר:** תוצאה שהובאה מהטלפון או סיכום שלה. אם הקובץ/צילום אינם בריפו, זה מצוין במפורש.
+- **Pending:** אין תוצאת מכשיר. אין להפוך תחזית להצלחה.
+
+מועדי PR ו־commit מתעדים שינויי קוד; הם אינם בהכרח מועד הרצת הטסט. אין להניח שכל המדידות השתמשו באותו אודיו או באותה טמפרטורה. אין כאן WER/CER מבוסס reference transcript, ולכן התרשמות איכות טובה אינה benchmark רשמי.
+
+## 5. יומן הניסויים — מה השתנה ומה למדנו
+
+הסדר הוא סדר ההתקדמות הידוע. מזהי `ASR-xx` קבועים כדי שנוכל להפנות אליהם בניסויים הבאים.
+
+| מזהה | ניסוי ומקור | תוצאה מתועדת | מסקנה ומגבלה |
+|---|---|---|---|
+| ASR-01 | Whisper Small רב־לשוני על CPU; [POC](hebrew-voice-poc.md), [PR #22](https://github.com/adarcook/mosaic-android/pull/22) | דווח כ־6 s למשפטים קצרים, אך דיוק עברית לא מספק | הכיוון המהיר לבדו לא סיפק את השימוש האמיתי; אין corpus/לוג מלא כאן |
+| ASR-02 | Small FP16 מול Q5; אותו מנוע; [תיעוד A/B](hebrew-voice-poc.md#accuracy-comparison-small-fp16-vs-q5) | מסלול השוואה קיים; אין כאן תוצאת מכשיר שמוכיחה יתרון FP16 | אין לסמן שיפור דיוק רק משום שהפורמט גדול יותר |
+| ASR-03 | מעבר ל־ivrit.ai Turbo Q5_0, CPU, Beam 5; PR #22 | 4.64 s אודיו; כ־29.5 s לתמלול, כ־28 s encoder; עברית דווחה כמדויקת | פריצת דרך בבחירת מודל לעברית; צוואר הבקבוק אז היה encoder. זו תצפית אחת |
+| ASR-04 | עדכון CPU/ניסוי Vulkan והמשך אבחון; [PR #23](https://github.com/adarcook/mosaic-android/pull/23), [device probe](ivrit-whisper-tensor-g5-device-probe.md) | דווח על קיפאון ממושך ואתחול מכשיר; בניסיון אבחון נוסף לא התקבלה תוצאה אחרי כ־51 s | כשל יציבות/ביצועים. APK/הגדרות/לוגים מלאים לא מזוהים כאן; אין בסיס לייחס את האתחול בוודאות ל־Vulkan, לחום או לרכיב מסוים |
+| ASR-05 | CPU מבודד, שתי תהליכוניות, בלי Vulkan; ניסוי context של 512 frames; PR #23 | קוד הגבלה וביטול נוצר; אין תוצאת מכשיר שמאשרת שה־context הקצר פתר את הבעיה | 512 הוא ניסוי CPU קצר, לא הגדרת encoder ה־TPU הנוכחי; אין לשחזר אותו אל הגרף המהודר |
+| ASR-06 | הכנת SDK ואבחון מאיץ: ADD ודוגמת Google; [PR #24](https://github.com/adarcook/mosaic-android/pull/24) | לפי PR, דוגמאות host קימפלו לאחר החזרת הרשאות הרצה לכלי LLVM שב־SDK | פתיחת נתיב toolchain, לא תמלול. מודל Tiny ב־[PR #25](https://github.com/adarcook/mosaic-android/pull/25) היה כלי אבחון, לא החלפה של ivrit.ai כמועמד מוצר |
+| ASR-07 | ייצוא encoder המלא; [PR #26](https://github.com/adarcook/mosaic-android/pull/26), [מדריך export](ivrit-whisper-tensor-g5-export.md) | FP32 LiteRT: 2,548,386,848 bytes; max abs `0.00608301`, mean `0.00001355`, p99.9 `0.00030820` | Host parity עבר; עוד אין הוכחת מהירות/עברית בטלפון |
+| ASR-08 | ניסיונות קומפילציה ידנית, fallback ו־flags, גם על גרפים קטנים; אותו PR | כשלי `INTERNAL`/`apply_plugin`, בעיות איתור plugin וגרפים שלא offload | נפילה ב־toolchain; לא הוכחה שהמודל גדול מדי או שה־TPU אינו מסוגל להריץ אותו |
+| ASR-09 | wrapper רשמי, Tensor G5 בלבד, `keep_going=False`, בלי fallback/override; PR #26 | דוגמת Google: 175/175 ops; encoder אבחוני 8 שכבות: 445/445; encoder מלא: 1693/1693, partition אחד | פריצת דרך בקומפילציה. נדרש offload מלא ו־`DISPATCH_OP`; אין להסכים לפלט CPU fallback שמתחזה להצלחה |
+| ASR-10 | encoder במכשיר, טעינה והרצה סינתטית; [probe](ivrit-whisper-tensor-g5-device-probe.md) | load-only 1884 ms; בריצה נפרדת load 1335 ms, encoder 2623 ms, פלט 1,920,000 floats; בלי קיפאון/אתחול שדווחו | ה־encoder המלא באמת רץ על TPU. היחס 28/2.623≈10.7 מתאר שתי תצפיות שונות, לא speedup מדויק על אודיו זהה |
+| ASR-11 | מיקרופון → TPU encoder → CPU K/V ו־decoder; [PR #28](https://github.com/adarcook/mosaic-android/pull/28), [מקור המדידה](ivrit-whisper-cross-attention-tensor-g5.md) | 8.10: אודיו 5.90 s; encoder 2528 ms; CPU stage 59,314 ms; worker total 65,267 ms | תמלול היברידי עבד אבל היה איטי מאוד. לא ניתן להשוות ישירות ל־29.5 s כי האודיו/הריצה שונים; המעבר ל־TPU לבדו לא פתר את CPU |
+| ASR-12 | export וקומפילציית הכנת K/V; [PR #29](https://github.com/adarcook/mosaic-android/pull/29), [תיעוד](ivrit-whisper-cross-attention-tensor-g5.md) | 8.10: host max abs כ־`2.09e-7`; 18/18 ops, partition אחד; AOT 26,846,992 bytes | ההכנה יכולה לרוץ על TPU, אבל יש לבדוק התאמה למטמון Q5 ופריסת הזיכרון |
+| ASR-13 | cross probe במכשיר על קלט סינתטי; [ראיות](ivrit-whisper-tpu-cross-integration.md#device-evidence-for-the-preceding-gate) | 8.10: load 33 ms; write 1 ms; NPU 37 ms; read 53 ms; compute+transfers 91 ms; scan אבחוני 1067 ms; total 1410 ms | חישוב+העברה מהירים; סריקת האבחון עצמה שלטה ב־total. 91 ms אינו זמן תמלול מלא |
+| ASR-14 | parity אמיתי והזרקת K/V, שלבים 6–7; [PR #30](https://github.com/adarcook/mosaic-android/pull/30) | לפי סיכום השיחה: gate עבר; 5.36 s אודיו, total 8.59 s כולל כ־2.41 s load; עיבוד כ־6.18 s; encoder 2534 ms, cross+transfers 272 ms, CPU injection+decode 2887 ms | פריצת דרך במסלול הכולל לאחר האצת K/V. ה־272 ms אינו בהכרח אותו קלט/גבול מדידה כמו ה־91 ms. אין בריפו צילום cache metrics לכל שכבה; אין כאן השוואת תמליל מבוקרת |
+| ASR-15 | מודלים חמים וחלונות 12/1, [PR #31](https://github.com/adarcook/mosaic-android/pull/31), [מדריך רציף](ivrit-whisper-continuous-gate.md) | לפי סיכום קודם בשיחה: בדיקת דקה RTF `0.706`, בלי אודיו שלא תומלל; פרטי מקטעים/לוג מלא אינם בריפו | תצפית חיובית, אך אינה הוכחה לקצב על דיבור צפוף או שיחה ארוכה |
+| ASR-16 | אותה שיטת חלונות, דיבור רציף צפוף, Beam 5; ניתוח `mosaic-asr-test.jsonl` שהובא בשיחה | 111 s נקלטו; 100 s תומללו; 11 s לא תומללו; 9 מקטעים; RTF `1.283`; encoder ממוצע כ־2.65 s, decode כ־11.3 s; total למקטע כ־14.26 s; cross כ־0.15 s | נפילה במבחן sustained realtime. ה־decoder הוא צוואר הבקבוק הנוכחי; תמלול שימושי בהתרשמות, אך עם טעויות וכפילויות גבול. סיכום הניתוח זמין בשיחה; raw JSONL לא מחויב ל־Git |
+| ASR-17 | Beam 2, Beam 5 כ־control ו־Greedy אופציונלי; PR #32 | APK 0.7 ו־native נבנו; 8 בדיקות Python מקומיות עברו; CI עבר. **תוצאת Pixel: Pending** | שינוי רוחב חיפוש בלבד; אין עדיין טענה לשיפור מהירות או לשמירת דיוק |
+
+### למה הריצה הרציפה האחרונה נעצרה?
+
+ב־ASR-16 הגיעו 11 שניות קול חדש בכל מחזור, אבל זמן העיבוד הממוצע היה כ־14.26 שניות. הפיגור גדל: לפי ניתוח השיחה, `15.8 → 19.3 → 23.3 → 28 → 29.9 → 31.9 → 33 s`. התור המוגבל התמלא והאפליקציה עצרה עם כיסוי לא מלא.
+
+`RTF = זמן חישוב / משך אודיו ייחודי שתומלל`, בלי ספירה כפולה של החפיפה ובלי טעינת מודלים ראשונית. `RTF=1.283` פירושו כ־128.3 שניות חישוב לכל 100 שניות אודיו שעובד. RTF קטן מ־1 הוא תנאי לקצב, לא מספיק כשלעצמו: גם עומסים נקודתיים, תור ודיוק צריכים לעבור.
+
+כ־79% מזמן העיבוד היה ב־decoder. בכל המקטעים שדווחו `thermal_status=0`, ו־PSS בערך 873–946 MB. לא נצפתה התראת חום בנתונים האלה; זה **אינו הוכחה מוחלטת שלא היה שינוי תדרים/תזמון**. גם לא נצפתה קריסה בריצה הזאת: עצירת תור היא כשל קצב שונה מהאתחול בניסוי המוקדם.
+
+לשם RTF של 1, ביחס לסיכום זה, צריך להפחית את הזמן הכולל בכ־22% לפחות; יעד הניסוי הוא 0.75–0.85 כדי להשאיר מרווח. הגדלת התור לבדה לא מאיצה תמלול. דיווח איכות טוב אינו אישור שהבעיה נפתרה.
+
+### בעיית מדידה שהייתה עלולה להטעות אותנו
+
+ב־ASR-11, timer בשם `encode` של whisper.cpp דיווח `32,115.89 ms` גם כאשר audio encoder רץ חיצונית על TPU. הוא כולל גם הכנת cross-attention. לכן אסור להסיק ממנו שה־audio encoder רץ פעמיים, או שכל ה־59.31 s ב־CPU היו token decoding. רק המדידה הנפרדת והניסוי של K/V עזרו לבודד את העלות.
+
+## 6. נקודות קוד ודרך לחזור אחורה
+
+ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.
+
+| נקודה | commit קבוע | למה לחזור אליה |
+|---|---|---|
+| POC מודלים/CPU/GPU מוקדם | [`7edb8d4`](https://github.com/adarcook/mosaic-android/commit/7edb8d4f1cdff671ba08a3d1f8aeead9acffb4da) | לבדוק את גבולות המודל/מנוע לפני TPU; אינו מזוהה כ־APK המדויק של האתחול |
+| encoder TPU עם שני probes | [`61ad4aa`](https://github.com/adarcook/mosaic-android/commit/61ad4aa3350a757a9a9eb387e0b6f9b0e8dc5ed4) | לבודד טעינה/הרצת encoder בלי decoder |
+| hybrid ראשון | [`7e6fe4e`](https://github.com/adarcook/mosaic-android/commit/7e6fe4ee52d4040fd06e75a9bd557dc867896051) | להשוות CPU cross מול TPU cross |
+| cross probe | [`25819ea`](https://github.com/adarcook/mosaic-android/commit/25819ea4d34bf28fdb909dc6572d007f26d20519) | לבודד העברות ו־K/V על TPU |
+| הזרקת K/V ו־parity | [`709fa5f`](https://github.com/adarcook/mosaic-android/commit/709fa5fe12c451788b6321667e9478ee804ffd90) | לבדוק cache layout, Q5 parity ותמלול קצר |
+| בסיס שיחה רציפה Beam 5 | [`ffe9623`](https://github.com/adarcook/mosaic-android/commit/ffe96236694b04a9490f5b41c82f1dbe0f8fde1a) | לשחזר קוד החלונות לפני ניסוי Beam 2 |
+| ניסוי Beam 2 | [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a) | הגרסה הנוכחית; תוצאת Pixel עדיין חסרה |
+
+למשל, בניית בסיס השיחה הרציפה בתיקייה נפרדת, בלי לשנות את checkout העבודה:
+
+```bash
+cd ~/git-workspaces/mosaic-android
+git fetch origin
+git worktree add --detach ../mosaic-asr-beam5-baseline ffe96236694b04a9490f5b41c82f1dbe0f8fde1a
+cd ../mosaic-asr-beam5-baseline
+python3 scripts/prepare_tensor_whisper_runtime.py
+./gradlew -p poc/tensor-whisper assembleDebug
+find poc/tensor-whisper/build/outputs/apk/debug -name '*.apk' -print
+```
+
+השתמש בשם APK שמופיע בפועל. הקובץ הנוכחי נקרא בדרך כלל `MosaicTensorWhisperGate-debug.apk`; חלק ממסמכי ה־probe הישנים מציגים שם קודם. שמור את אותו debug signing key. גרסת debug ישנה עשויה לדרוש `adb install -r -d /path/to/ACTUAL.apk` בגלל versionCode נמוך. אם יש signature mismatch, יש לבנות עם המפתח המקורי — **לא להסיר את האפליקציה**, משום שהסרה עלולה למחוק מודלים, gates ולוגים.
+
+לפני החלפה: שמור journals, זהויות המודלים, APK ו־hash שלו. כללי התקנה ונתיבי דגמים נמצאים במדריכים המפורטים בהמשך. Git מחזיר את הקוד, אך אינו משחזר לבדו SDK פרטי, model artifacts, signing key, Android build או הקלטת מקור. יש לשמור אותם בארכיון פרטי, מחוץ לריפו, ולהפנות אליו באמצעות מזהה לא רגיש.
+
+אפשר להשתמש ב־Beam 5 מתוך APK 0.7 בלי להתקין גרסה ישנה כשמטרת הבדיקה היא רוחב חיפוש בלבד. כדי לבדוק regression בקוד עצמו, יש לבנות גם את commit הבסיס.
+
+## 7. הנוהל לכל ניסוי הבא
+
+מסמך זה הוא יומן חי שמעדכנים באותו PR של הניסוי, ובהמשך כשמגיעה תוצאת המכשיר. אין מנגנון שמעלה תוצאות אוטומטית מהטלפון ל־GitHub. journal באפליקציה הוא ראיית המקור; הרשומה כאן היא הסיכום המוסבר.
+
+1. הקצה ID חדש, למשל `ASR-18`; אל תשכתב את תוצאת הניסוי הקודם.
+2. ציין hypothesis, baseline commit ומדד הצלחה. שנה גורם אחד כאשר אפשר; רשום במפורש כל שינוי נוסף.
+3. לפני ריצה: רשום commit/APK version+SHA, hashes לכל שלושת המודלים, הגדרות beam/threads/window/overlap/queue, build fingerprint של Android, מצב טעינה/חום ומזהה אודיו.
+4. ציין אם אותו קובץ אודיו הושמע שוב או שהטקסט נקרא מחדש. קריאה מחדש אינה ניסוי identical-input; גם השמעה דרך מיקרופון אינה השוואה ביט־לביט. המסלול הנוכחי אינו שומר PCM לצורך replay פנימי.
+5. שמור JSONL ו־reference transcript בארכיון פרטי. אל תוסיף לריפו תמלילים אישיים, הקלטות, SDK או מפתחות. תעד מזהה קובץ ו־SHA-256, בלי תוכן פרטי.
+6. רשום תוצאות נפרדות: build/tests, host parity, device runtime, מהירות, כיסוי, איכות ויציבות. כל שדה שלא נמדד מסומן `לא נמדד`.
+7. השווה RTF, full-window compute/decode, פיגור, כיסוי, memory/thermal. השווה גם שמות, מספרים, שלילות ומונחים באנגלית מול המקור. WER/CER דורשים reference ודרך normalization מתועדת.
+8. אם הבסיס נעצר מוקדם, השווה את פרק האודיו המשותף וגם את הכיסוי המלא של המועמד; אל תציג ממוצע על טקסט שונה כ־A/B מדויק.
+9. סיים ב־keep/reject/pending ובהסבר, עם נקודת rollback. הצלחת CI בלבד נשארת pending device validation.
+
+תבנית רשומה מלאה: [ASR_EXPERIMENT_TEMPLATE.md](ASR_EXPERIMENT_TEMPLATE.md). ההנחיות לשימור הנוהל נמצאות ב־[AGENTS.md](../AGENTS.md).
+
+כלי ההשוואה החדש:
+
+```bash
+python3 scripts/compare_asr_sessions.py baseline.jsonl candidate.jsonl
+```
+
+הוא מחשב כיסוי בלי לספור חפיפה פעמיים, מזהה gaps, מפריד חלונות מלאים מ־tail ומסמן journal ללא `end` כהפרעה עם tail לא ידוע. הוא אינו בודק דיוק טקסט ואינו מנחש תוצאות מכשיר.
+
+**הניסוי הבא:** ASR-17, Beam 2 על אותו מקור של ASR-16. תנאי קבלה: אפס אודיו שלא תומלל, RTF מתמשך מתחת ל־1 עם יעד 0.75–0.85, פיגור שאינו גדל ללא גבול, ועברית שימושית ללא regression משמעותי. עד לקבלת JSONL ובדיקת טקסט — Pending.
+
+## 8. מפת התיעוד והקוד
+
+המסמכים המפורטים נכתבו לאורך הניסויים ולכן עשויים לומר "טרם נבדק" על שלב שקיבל בהמשך דיווח מכשיר. זה מתאר את מצבם בזמן כתיבתם; היומן לעיל מציין ראיות מאוחרות יותר ואת מגבלותיהן.
+
+| נושא | מקור |
+|---|---|
+| CPU, מודלים, Q5/FP16, Vulkan ובידוד | [hebrew-voice-poc.md](hebrew-voice-poc.md) |
+| setup של compiler/runtime | [tensor-g5-probe.md](tensor-g5-probe.md), [tensor-g5-whisper-gate.md](tensor-g5-whisper-gate.md) |
+| export מלא וקומפילציה רשמית | [ivrit-whisper-tensor-g5-export.md](ivrit-whisper-tensor-g5-export.md) |
+| טעינה והרצת encoder בפיקסל | [ivrit-whisper-tensor-g5-device-probe.md](ivrit-whisper-tensor-g5-device-probe.md) |
+| חיבור מיקרופון ו־encoder חיצוני | [ivrit-whisper-hybrid-asr-gate.md](ivrit-whisper-hybrid-asr-gate.md) |
+| export וקומפילציה של K/V | [ivrit-whisper-cross-attention-tensor-g5.md](ivrit-whisper-cross-attention-tensor-g5.md) |
+| cache parity, dtype, scaling ו־padding | [ivrit-whisper-tpu-cross-integration.md](ivrit-whisper-tpu-cross-integration.md) |
+| חלונות, תור, journaling ו־Beam A/B | [ivrit-whisper-continuous-gate.md](ivrit-whisper-continuous-gate.md) |
+| native CPU/JNI וחיבורי TPU | [bridge.cpp](../poc/speech/src/main/cpp/bridge.cpp), [patches](../poc/speech/src/main/cpp/patches) |
+| export scripts | [encoder](../scripts/export_ivrit_whisper_encoder.py), [cross](../scripts/export_ivrit_whisper_cross_attention.py) |
+| AOT scripts | [encoder](../scripts/compile_ivrit_encoder_tensor_g5.py), [cross](../scripts/compile_ivrit_cross_attention_tensor_g5.py) |
+| מנוע חם וקול רציף | [WarmHybridEngine](../poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/WarmHybridEngine.java), [StreamingGateService](../poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamingGateService.java) |
+| השוואת מדידות | [compare_asr_sessions.py](../scripts/compare_asr_sessions.py) |
+| בניית גרסת 0.7 שעברה CI | [Actions run 37752763780](https://github.com/adarcook/mosaic-android/actions/runs/37752763780) |

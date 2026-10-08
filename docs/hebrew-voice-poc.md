@@ -1,5 +1,7 @@
 # Local Hebrew voice POC — Whisper Small Q5 and BlueTTS
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 > Current diagnostic branch: CPU only; Vulkan instructions below describe the
 > historical PR #22 experiment and are superseded by the 2026-10-04 section.
 > Do not run the older Vulkan-capable APK after the reported device reboot.

@@ -1,5 +1,7 @@
 # TPU cross-attention handoff to the Hebrew Whisper decoder
 
+See the [central ASR explanation and experiment history](ASR_EXPERIMENT_HISTORY.md) for later results, evidence limits and rollback points. This guide describes its specific experimental stage.
+
 Draft slice stacked on PR #29; no roadmap stage is Complete.
 
 ## Device evidence for the preceding gate
