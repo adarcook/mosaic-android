@@ -1,8 +1,8 @@
 # תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
 
-עודכן: 8 באוקטובר 2026. נקודת הקוד המתועדת: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+עודכן: 9 באוקטובר 2026. נקודת הקוד המתועדת: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
 
-נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול; תוצאות מכשיר עדיין Pending.
+נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול. התקבל דיווח מכשיר ראשון על סיום מלא; אימות הקבצים ובדיקת התאוששות עדיין Pending.
 
 זהו מסמך הכניסה לתהליך ה־ASR: מה שינינו במודל, היכן כל חלק רץ, מה הצליח ומה נכשל, ואיך חוזרים לנקודה קודמת. ASR פירושו זיהוי דיבור והפיכתו לטקסט. BlueTTS, שמייצר דיבור מתוך טקסט, הוא רכיב אחר ואינו מאיץ את התמלול.
 
@@ -212,6 +212,25 @@ Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק 
 **Validation מקומי:** בדיקות Java של windows/text ו־durable PCM/journal/checkpoint עברו; שמונה בדיקות Python עברו. Android/JNI/native ו־APK עברו [CI run 37761861552](https://github.com/adarcook/mosaic-android/actions/runs/37761861552) על commit הניסוי; Pixel עדיין pending. אין source audio/recording benchmark חדש ואין טענת דיוק/מהירות/סוללה. קלט הסינתטי של בדיקות storage אינו תמלול אמיתי.
 
 **קבלה:** סיכום סיום גלוי ו־end complete עם אפס unprocessed לאחר Stop; שמירת audio מעבר לרקע/force-stop; Resume בלי duplicate/gap; דחיית hash/beam/metadata משתנים; אימות תחילת וסוף ההקלטה. fsync אינו מבטיח שימור דגימות שלא נקראו או נכתבו; overrun, power loss ואחסון איטי דורשים בדיקת מכשיר. **החלטה:** pending device validation. rollback: שלבים 7–8 הקיימים/commit `5e94db1e5b5d3034b54a74c9ba09c67075c8482a`. אין שינוי ל־roadmap completion; חיבור LLM עדיין לא מומש.
+
+### ASR-18 — דיווח מכשיר ראשון, 9.10.2026, 11:18 (Asia/Jerusalem)
+
+**מקור:** סיכום סיום ותמליל שהמשתמש הדביק בשיחה לאחר בנייה והתקנה. session: `session-1791533553294-b23a9a59-0ad8-410b-bcc7-a95958e8dffa.jsonl`. JSONL/PCM עצמם טרם התקבלו; SHA-256, זהות APK ומודלים בפועל, פירוט זמני חלונות, memory/thermal ו־end record אינם מאומתים. התמליל האישי אינו נשמר בריפו.
+
+| מדד | דיווח |
+|---|---|
+| decoder | Beam 5 |
+| מקטעים | 13 |
+| אודיו שמור | 135.60 s |
+| טרם תומלל | 0.00 s |
+| RTF חישוב | 0.889 |
+| סיום UI | התקבל סיכום: התמלול הסתיים; האודיו והתמליל נשמרו |
+
+**פירוש:** לפי ה־UI, מסלול Stop הרגיל הסתיים בכיסוי מלא. `135.60 × 0.889 ≈ 120.55 s` הוא אומדן זמן החישוב המצטבר מתוך מספרים מעוגלים, לא מדידת זמן ההמתנה הכולל אחרי Stop (אימות/טעינה אינם כלולים ב־RTF). זהו record-first/offline ואינו מוכיח sustained realtime. ההקלטה חדשה, אינה טקסט הבדיקה הקודם; גם Beam והמסלול שונים מ־ASR-17. אין לחשב speedup או יתרון Beam 5 מול Beam 2 מכאן.
+
+**איכות:** התמליל קריא ברושם ראשוני, אך מופיעות חזרות וגרסאות כתיב שונות של שם העוזר. בלי PCM/reference אין אפשרות להפריד חזרות שנאמרו, שגיאות decoder וחיבור חפיפות, או למדוד WER/CER. זיהוי שם בתוך תמליל אינו wake-word detection. אין כאן פעולות WhatsApp/SMS או LLM שכבר מומשו.
+
+**החלטה:** הצלחה ראשונית מדווחת בסיום הרגיל; אימות journal/PCM ובדיקת interruption/resume ללא duplicates עדיין pending. השלב הבא: לשמור מקור זה כבסיס פרטי, לבדוק המשך לאחר יציאה באמצע decode, ואז להשוות ניסויים על אותו PCM. המסלול הקיים משחזר את Beam המקורי; A/B חדש עם Beam שונה דורש replay/run נפרד שטרם נוסף.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 
