@@ -1,6 +1,6 @@
 # תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
 
-עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-25; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-26; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
 
 נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול. התקבל דיווח מכשיר ראשון על סיום מלא, ואומתו PCM ו־JSONL עם כיסוי מלא. נבדקה גם יציאה אחרי מקטע אחד והמשך מוצלח בלי gap או duplicate; שאר תרחישי הכשל עדיין Pending.
 
@@ -482,6 +482,26 @@ Baseline/rollback מלא: `59e692ec0d01465bc7596e2b7d798c3e134427be` (ASR-23), P
 **CI אחרי התיקון:** commit `2fb29569d1966ce41a8e52d9589067c22bde9f2f` עבר את שתי בניות ה־APK: [LLM 38143333169](https://github.com/adarcook/mosaic-android/actions/runs/38143333169), job114481489061, ו־[ASR 38143333155](https://github.com/adarcook/mosaic-android/actions/runs/38143333155), job114481488786. LLM testDebugUnitTest ו־assembleDebug עברו; 3 בדיקות build helper ו־4 pack tests עברו ב־CI. packaged dispatch SHA אומת כ־`1e3ea6dc7ae2d48b95f7147791b18c1de3095165b42470a547909f6e0d72c5ec`. digest של ZIP artifact LLM הוא `15295bf7f20923e86f544a3ea5c3948fc5a0a46cab483f833fc9db1156fb5781`; זה אינו SHA של APK. APK SHA מקומי/CI לא נמדד כאן. ASR עבר גם PCM/recovery/session-comparison gates. ה־legacy probe [38143333093](https://github.com/adarcook/mosaic-android/actions/runs/38143333093) עדיין נכשל ב־Environment import ambiguity בקוד probe שלא שונה, כפי שהיה קודם; אין לטעון שכל workflows עברו. Main Android Build עדיין רץ בבדיקה זו. אין תוצאת פיקסל עבור 0.7; acceptance remains Pending device.
 
 **החלטה:** מועמד לבנייה ובדיקת פיקסל בלבד, לא הצלחה מדודה. לא מתקינים pair מ־CI אם נחתם בשני debug keys שונים; בונים את שתי האפליקציות יחד ב־WSL באותו מפתח ו־install -r, בלי להסיר או להעתיק מודלים.
+
+### ASR-25 / VOICE-04 — הכנת ASR הסתיימה, המתנת release נכשלה, 11.10.2026 19:13 Asia/Jerusalem
+
+התקבל `voice-1791735095280-4e639d50-9c6d-488f-80c0-a876f39d8f85.jsonl`, 1,483 bytes, SHA-256 `9817fd394a041d6e0cde1ed7e8a8c4d0bfa8575544ed5b455c074124ab59dbc5`. start מזהה LLM0.7/ASR-25, mode=foreground_sequential_prepare, Android fingerprint וזהויות LLM/dispatch/Renikud תואמים לריצה הקודמת. ASR package version/PID ו־APK SHA אינם נרשמים; commit מקומי לא נמסר. reference ואודיו אינם קיימים בריצת הכנה; logcat לא צורף.
+
+ASR preparation הושלמה אחרי 4,939ms (verify2,495ms, load2,271ms), PSS656,422KiB, available RAM1,961,791,488bytes (כ־1.827GiB). worker_release_start נרשם ב־4,951ms; אחרי המתנה של 8,002ms הסתיים journal במצב error ב־12,953ms. **אין worker_release_end ואין phase LLM/TTS**. זו אינה תוצאת תמלול פנייה: לא הייתה הקלטה/inference. מדידת RAM האחרונה היא לפני בקשת release, לא אחריה; לא ניתן להוכיח שהתהליך נשאר חי או שה־RAM לא הוחזר. הכנה ושתי פניות לא עברו acceptance; ASR-25 נכשל בריצה זו.
+
+קוד 0.7 השתמש ב־isBinderAlive polling בלי הרשמת death recipient על Binder זה. ב־[AOSP BpBinder](https://android.googlesource.com/platform//frameworks/native/%2B/b51a9cc926a8f49db6c2c65a47ec4ea7d72b510b/libs/binder/BpBinder.cpp), isBinderAlive קורא mAlive; transact מול יעד מת או sendObituary מעדכנים אותו. לכן polling של snapshot אינו אישור פעיל לסגירת התהליך. [Android IBinder API](https://developer.android.com/reference/android/os/IBinder.html) מציע linkToDeath לצורך notification כשהתהליך נסגר. זו בעיה ממשית בתכנון ה־waiter והסבר אפשרי לתוצאה; היומן אינו מוכיח stale proxy כגורם היחיד. אין הצדקה להגדלת timeout בלבד או לדילוג לשלב הבא ללא ראיה.
+
+### ASR-26 / VOICE-05 — הודעת מות Binder במקום polling, 11.10.2026
+
+**השערה:** הרשמת linkToDeath לפני בקשת shutdown תמנע פספוס של תהליך שכבר נסגר ולא תחייב polling של mAlive. baseline `2fb29569d1966ce41a8e52d9589067c22bde9f2f` (ASR-25/LLM0.7); תיעוד אחרון `b44e5a9fa7a8d931da2176e244a2ca5ee6981fd2`. candidate באותו PR #35: LLM `0.8-worker-death` (versionCode8); ASR companion נשאר `0.13-sequential-companion`, ללא שינוי קוד/משקלים ב־ASR. commit ו־CI יתווספו אחרי פרסום. main ללא שינוי, PR פתוח ולא ממוזג; אין APK SHA או תוצאת מכשיר למועמד.
+
+**שינוי יחיד פונקציונלי:** WorkerRelease נרשם להודעת death לפני שליחת Message9. callback מועבר ל־main Handler ומשלים את המעבר פעם אחת בלבד; RemoteException בהרשמה (תהליך שכבר מת) הוא מסלול complete מפורש. cancel/timeout מסירים observer ו־timeout; death מאוחר/כפול אינו ממשיך ישיבה שבוטלה. שגיאת שליחת stop מתועדת ואינה מתירה מעבר בלי death. שגיאת registration אחרת עוצרת את הרצף אחרי ניסיון stop/unbind. timeout נשאר8s, ספי RAM והחלפת מנועים נשארים כמו ASR-25; אין bypass או הארכת timeout.
+
+**אבחון נוסף:** journal start מוסיף גרסת package ASR הנראית ללקוח. release_start רושם mechanism ו־binder_class; release_end מוסיף death_evidence (notification או already_dead_at_registration), RAM/lowMemory/זמן; timeout רושם worker_release_error עם RAM/lowMemory ו־binder_alive_snapshot אבחוני בלבד. shutdown failure נרשם בנפרד. מוות Binder אינו מוכיח החזרת כל זיכרון driver/מאיץ; סף טעינת המנוע הבא נשאר פעיל.
+
+**בקרות ו־acceptance:** המודלים, hashes, CPU/NPU backends, Beam5/2threads, prompt, TTS וכל הגדרות ASR-25 ללא שינוי. acceptance: הכנה מלאה, death_evidence ו־release לפני כל phase הבא, שתי פניות עם ניגון שלם באותו מסך; אין קריסה/קיפאון/אתחול/שלב כפול. receipt verification ו־load נמדדים בנפרד; אין יעד latency מוכח בניסוי lifecycle הזה. אין אודיו/reference חדש או השוואת איכות. rollback קוד waiter ל־0.7 משחזר את כשל ההמתנה שנמדד; baseline קול פונקציונלי נשאר ASR-23 `91227b76e070eb6fbca8ca86fbe92ceaaf248687` עם latency לא שימושי.
+
+**בדיקות:** 19 JUnit tests עברו מקומית: 7 חדשים עם endpoint/queue מדומים (הרשמה לפני stop, תהליך שכבר מת, timeout ו־death מאוחר, ביטול, שגיאת send, notification כפול, שגיאת registration) +12 tests הקיימים. הם מאמתים סדר ועיבוד callback בדיוק פעם אחת, **לא** Binder Android/הריגת תהליך אמיתיים; CI APK ובדיקת פיקסל עדיין Pending בעת כתיבה. מקומית אין SDK/JDK21 לבניית APK. מצב המועמד: נדרש build ואז device validation, לא הצלחה מדודה.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 
