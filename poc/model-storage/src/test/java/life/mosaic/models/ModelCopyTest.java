@@ -24,6 +24,10 @@ public final class ModelCopyTest {
         Path root = Files.createTempDirectory("mosaic-model-copy-"); File target = root.resolve("model.bin").toFile();
         try {
             String sha = hash(GOOD);
+            ModelCopy.verify(new ByteArrayInputStream(GOOD), GOOD.length, sha, () -> false);
+            try { ModelCopy.verify(new ByteArrayInputStream(new byte[GOOD.length]), GOOD.length, sha, () -> false);
+                throw new AssertionError("Accepted damaged independent source"); } catch (IOException expected) { }
+
             ModelCopy.install(new ByteArrayInputStream(GOOD), target, GOOD.length, sha, () -> false);
             if (!ModelCopy.valid(target, GOOD.length, sha, () -> false)) throw new AssertionError("Not verified");
             expectFailure(target, "corrupt data!!".getBytes(), GOOD.length, sha, false);

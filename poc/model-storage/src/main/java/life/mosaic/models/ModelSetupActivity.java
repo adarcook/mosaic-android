@@ -85,7 +85,14 @@ public final class ModelSetupActivity extends Activity {
             for (int i = 0; i < names.length; i++) {
                 show("בודק/מייבא " + (i + 1) + "/" + names.length + ": " + names[i] + "\nהמקור העצמאי אינו משתנה. הפעולה עשויה לקחת מספר דקות.");
                 File target = new File(destination, names[i]);
-                if (ModelCopy.valid(target, sizes[i], hashes[i], () -> cancelled)) continue;
+                if (ModelCopy.valid(target, sizes[i], hashes[i], () -> cancelled)) {
+                    // A good cache must never hide a corrupt supposedly durable original.
+                    try (InputStream input = getContentResolver().openInputStream(sources.get(names[i]))) {
+                        if (input == null) throw new IOException("קובץ המקור אינו זמין");
+                        ModelCopy.verify(input, sizes[i], hashes[i], () -> cancelled);
+                    }
+                    continue;
+                }
                 if (destination.getUsableSpace() < sizes[i] + 64 * 1024 * 1024L)
                     throw new IOException("אין מספיק מקום לעותק עבודה מאומת. המקור נשמר.");
                 try (InputStream input = getContentResolver().openInputStream(sources.get(names[i]))) {

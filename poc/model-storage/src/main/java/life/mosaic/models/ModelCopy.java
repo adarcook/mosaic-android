@@ -22,6 +22,18 @@ public final class ModelCopy {
     public static boolean valid(File file, long size, String hash, BooleanSupplier cancelled) throws Exception {
         return file.isFile() && file.length() == size && hash.equals(sha256(file, cancelled));
     }
+    public static void verify(InputStream input, long size, String hash, BooleanSupplier cancelled) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256"); long total = 0;
+        byte[] buffer = new byte[1024 * 1024]; int n;
+        while ((n = input.read(buffer)) != -1) {
+            if (cancelled.getAsBoolean()) throw new IOException("הייבוא נעצר");
+            total += n;
+            if (total > size) throw new IOException("קובץ המקור גדול מהצפוי");
+            digest.update(buffer, 0, n);
+        }
+        if (total != size || !hash.equals(hex(digest.digest())))
+            throw new IOException("גודל או SHA-256 של המקור אינם תואמים");
+    }
     public static void install(InputStream input, File target, long size, String hash,
                                BooleanSupplier cancelled) throws Exception {
         File temporary = new File(target.getParentFile(), target.getName() + ".import-part");

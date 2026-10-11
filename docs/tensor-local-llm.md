@@ -21,8 +21,8 @@
 |---|---|
 | baseline | `6639c00eb2ba2da1e2de35dfdca58e8a34b92773`, PR #34 פתוח |
 | ענף | `experiment/tensor-local-llm` |
-| ASR APK | `life.mosaic.tensorwhisper`, 0.9-local-llm-handoff |
-| LLM APK | `life.mosaic.tensorllm`, 0.1-gemma4-g5 |
+| ASR APK | `life.mosaic.tensorwhisper`, 0.10-independent-model-source |
+| LLM APK | `life.mosaic.tensorllm`, 0.2-independent-model-source |
 | מנוע | `com.google.ai.edge.litertlm:litertlm-android:0.18.0` |
 | Tensor dispatch | LiteRT v2.2.0 public runtime archive; SHA-256 `b4c8380df3e9652677dbb93a5aad4499eb756a9b7d9651a9baacb122faadbf0d` |
 | model repo | `litert-community/gemma-4-E2B-it-litert-lm` |
