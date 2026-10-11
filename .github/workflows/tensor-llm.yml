@@ -3,7 +3,7 @@ on:
   push:
     branches: ["experiment/tensor-local-llm"]
   pull_request:
-    paths: ["poc/tensor-llm/**", "scripts/prepare_tensor_llm.py", "scripts/build_tensor_apps.py", "scripts/tests/test_build_tensor_apps.py", ".github/workflows/tensor-llm.yml"]
+    paths: ["poc/tensor-llm/**", "poc/model-storage/**", "scripts/prepare_shared_model_folder.py", "scripts/prepare_tensor_llm.py", "scripts/build_tensor_apps.py", "scripts/tests/test_build_tensor_apps.py", ".github/workflows/tensor-llm.yml"]
 permissions:
   contents: read
 jobs:
@@ -18,6 +18,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Test independent model source cache integrity
+        run: |
+          mkdir -p /tmp/model-copy-tests
+          javac -d /tmp/model-copy-tests poc/model-storage/src/main/java/life/mosaic/models/ModelCopy.java poc/model-storage/src/test/java/life/mosaic/models/ModelCopyTest.java
+          java -cp /tmp/model-copy-tests life.mosaic.models.ModelCopyTest
+          python3 -m py_compile scripts/prepare_shared_model_folder.py
+
       - name: Test host setup and model separation
         run: python3 -m unittest discover -s scripts/tests -p test_build_tensor_apps.py -v
       - name: Prepare runtime, test import and build without model weights

@@ -2,12 +2,13 @@ plugins { id("com.android.application") version "8.7.3" }
 android {
     namespace = "life.mosaic.tensorllm"
     compileSdk = 35
+    sourceSets.getByName("main").java.srcDir("../model-storage/src/main/java")
     defaultConfig {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1-gemma4-g5"
+        versionCode = 2
+        versionName = "0.2-independent-model-source"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

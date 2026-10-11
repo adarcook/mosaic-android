@@ -149,6 +149,10 @@ public final class WhisperGateActivity extends Activity {
             Toast.makeText(this, "התוצאה הועתקה", Toast.LENGTH_SHORT).show();
         });
 
+        Button models = new Button(this); models.setText("מודלים — מקור עצמאי ב־Documents");
+        models.setOnClickListener(v -> { if (!running && !recording)
+            startActivity(new Intent(this, life.mosaic.models.ModelSetupActivity.class)); });
+        layout.addView(models);
         layout.addView(load);
         layout.addView(zeroRun);
         layout.addView(realAsr);

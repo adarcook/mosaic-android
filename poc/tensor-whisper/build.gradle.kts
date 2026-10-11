@@ -3,12 +3,13 @@ plugins { id("com.android.application") version "8.7.3" }
 android {
     namespace = "life.mosaic.tensorwhisper"
     compileSdk = 35
+    sourceSets.getByName("main").java.srcDir("../model-storage/src/main/java")
     defaultConfig {
         applicationId = "life.mosaic.tensorwhisper"
         minSdk = 31
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.9-local-llm-handoff"
+        versionCode = 10
+        versionName = "0.10-independent-model-source"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

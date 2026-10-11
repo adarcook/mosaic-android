@@ -6,6 +6,7 @@
         android:extractNativeLibs="true"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name="life.mosaic.models.ModelSetupActivity" android:exported="false" />
         <uses-native-library android:name="libedgetpu_litert.so" android:required="false" />
         <activity
             android:name=".WhisperGateActivity"

@@ -12,7 +12,7 @@ import java.io.InputStream;
 public final class LlmActivity extends Activity {
     private EditText transcript, question;
     private TextView status;
-    private Button ask, summarize, importFile, cancel;
+    private Button ask, summarize, importFile, cancel, models;
     private final Handler main = new Handler(Looper.getMainLooper());
     private String sourceHash = "manual";
     private int workerPid, generation;
@@ -26,6 +26,9 @@ public final class LlmActivity extends Activity {
         getExternalFilesDir(null);
         LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL); layout.setPadding(24, 70, 24, 24);
         TextView heading = new TextView(this); heading.setText("מוזאיק — שיחה מקומית\nGemma 4 E2B · Tensor G5\nבדוק את התמליל ואז בקש סיכום או שאל עליו. השאר את המסך פתוח בזמן העיבוד."); layout.addView(heading);
+        models = new Button(this); models.setText("מודלים — מקור עצמאי ב־Documents");
+        models.setOnClickListener(v -> startActivity(new Intent(this, life.mosaic.models.ModelSetupActivity.class)));
+        layout.addView(models);
         importFile = new Button(this); importFile.setText("פתיחת תמליל שמור"); importFile.setOnClickListener(v -> {
             Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
             startActivityForResult(picker, 42);
@@ -66,7 +69,7 @@ public final class LlmActivity extends Activity {
         }, "mosaic-transcript-import").start();
     }
     private void controls(boolean enabled) {
-        transcript.setEnabled(enabled); question.setEnabled(enabled); ask.setEnabled(enabled);
+        models.setEnabled(enabled); transcript.setEnabled(enabled); question.setEnabled(enabled); ask.setEnabled(enabled);
         summarize.setEnabled(enabled); importFile.setEnabled(enabled); cancel.setEnabled(running);
     }
     private void saveSource() { getPreferences(0).edit().putString("transcript", transcript.getText().toString()).putString("source_hash", sourceHash).apply(); }
