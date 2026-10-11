@@ -1,5 +1,7 @@
 # תמליל → LLM מקומי על Tensor G5 — LLM-01 / ASR-19
 
+> המסלול החדש לדיבור → LLM → BlueTTS מתואר ב־[local-voice-conversation.md](local-voice-conversation.md). מסך פתיחת תמליל שמור נשאר זמין מתוך מסך השיחה.
+
 ניסוי נפרד מעל ASR-18, לא שינוי בארכיטקטורת Room/Firebase/Core ולא שלב roadmap שהושלם.
 המודל הנבחר: **Gemma 4 E2B IT בקובץ AOT ייעודי ל־Tensor G5**. זהו מועמד למודל כללי מקומי לסיכום ושאלות, לא הבטחה לאיכות עברית או ליכולת כמו מודל ענן גדול. איכות, מהירות וזיכרון דורשים בדיקת Pixel.
 
@@ -11,7 +13,7 @@
 4. לחיצה על סיכום או שאלה מפעילה Gemma מקומי. אין הפעלה אוטומטית של הוראות מתוך תמליל.
 5. התשובה והמדדים נשמרים בקובץ פרטי `files/llm-sessions/llm-*.jsonl` באפליקציית ה־LLM. יומן ה־ASR המקורי נשאר ללא שינוי.
 
-יש שתי אפליקציות ניסוי כדי לבודד את גרסת LiteRT של Whisper מ־LiteRT-LM ומספריותיו. ל־LLM אין הרשאת אינטרנט, גישה להודעות, מיקרופון או כלים. ההעברה מקומית דרך URI עם grant לקריאה של JSONL אחד; אין העברת PCM או העלאה. ניתן גם לפתוח JSONL שהוצא קודם דרך בוחר קבצים, או לכתוב טקסט ידנית.
+יש שתי אפליקציות ניסוי כדי לבודד את גרסת LiteRT של Whisper מ־LiteRT-LM ומספריותיו. מסלול הארכיון אינו משתמש במיקרופון. בגרסת השיחה החדשה נוספה הרשאת מיקרופון בהסכמה עבור push-to-talk; אין הרשאת אינטרנט, גישה להודעות או כלים. ההעברה מקומית דרך URI עם grant לקריאה של JSONL אחד; אין העברת PCM או העלאה. ניתן גם לפתוח JSONL שהוצא קודם דרך בוחר קבצים, או לכתוב טקסט ידנית.
 
 בחירת `Backend.NPU(nativeLibraryDir)` מפורשת, עם model G5 מקובע ובלי fallback ל־CPU/GPU. היא מבקשת האצת TPU לרשת; tokenization, orchestration ו־sampling עדיין כוללים CPU. **Backend מבוקש אינו לבדו הוכחת ריצת מאיץ**: בדיקת הקבלה כוללת לוג dispatch ו־native initialization. אין להציג את המודל כ־TPU validated לפני הרצת מכשיר.
 
@@ -21,8 +23,8 @@
 |---|---|
 | baseline | `6639c00eb2ba2da1e2de35dfdca58e8a34b92773`, PR #34 פתוח |
 | ענף | `experiment/tensor-local-llm` |
-| ASR APK | `life.mosaic.tensorwhisper`, 0.10-independent-model-source |
-| LLM APK | `life.mosaic.tensorllm`, 0.3-g5-dispatch-compatibility |
+| ASR APK | `life.mosaic.tensorwhisper`, 0.11-voice-companion |
+| LLM APK | `life.mosaic.tensorllm`, 0.4-voice-turn |
 | מנוע | `com.google.ai.edge.litertlm:litertlm-android:0.18.0` |
 | Tensor dispatch candidate | Gallery 1.0.20 G5 APK member; SHA-256 `1e3ea6dc7ae2d48b95f7147791b18c1de3095165b42470a547909f6e0d72c5ec` |
 | model repo | `litert-community/gemma-4-E2B-it-litert-lm` |

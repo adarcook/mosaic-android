@@ -8,8 +8,8 @@ android {
         applicationId = "life.mosaic.tensorwhisper"
         minSdk = 31
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.10-independent-model-source"
+        versionCode = 11
+        versionName = "0.11-voice-companion"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

@@ -34,6 +34,7 @@ public final class LlmService extends Service {
                     || !Build.SOC_MODEL.toLowerCase(java.util.Locale.ROOT).contains("tensor g5"))
                 throw new IOException("ניסוי זה דורש Google Tensor G5");
             String text = data.getString("text", ""), question = data.getString("question", "");
+            boolean voice = data.getBoolean("voice", false);
             if (text.trim().isEmpty() || text.length() > ModelSpec.MAX_TEXT || question.length() > ModelSpec.MAX_QUESTION)
                 throw new IOException("תמליל או שאלה מעבר לגבולות הניסוי");
             File directory = new File(getFilesDir(), "llm-sessions");
@@ -44,6 +45,7 @@ public final class LlmService extends Service {
                     .put("dispatch_sha256", ModelSpec.DISPATCH_SHA256).put("requested_backend", "NPU").put("fallback", false)
                     .put("source_sha256", data.getString("source_sha256", "manual"))
                     .put("reviewed_text_sha256", hash(text.getBytes(StandardCharsets.UTF_8)))
+                    .put("voice_mode",voice).put("system_prompt_sha256",hash((voice?ModelSpec.VOICE_SYSTEM:ModelSpec.SYSTEM).getBytes(StandardCharsets.UTF_8)))
                     .put("text", text).put("question", question).put("context_tokens", "model_default").put("max_output_tokens", 512));
             File dispatch = new File(getApplicationInfo().nativeLibraryDir, "libLiteRtDispatch_GoogleTensor.so");
             if (!ModelSpec.DISPATCH_SHA256.equals(fileHash(dispatch)))
@@ -59,6 +61,7 @@ public final class LlmService extends Service {
                 while ((n = input.read(buffer)) != -1) digest.update(buffer, 0, n);
             }
             if (!ModelSpec.SHA256.equals(TranscriptSource.hex(digest.digest()))) throw new IOException("SHA-256 של המודל אינו תואם");
+            long verifyMs=SystemClock.elapsedRealtime()-verifyStart;
             append(journal, new JSONObject().put("type", "verified").put("model_sha256", ModelSpec.SHA256)
                     .put("verify_ms", SystemClock.elapsedRealtime() - verifyStart));
             send(reply, 2, "טוען Gemma 4 על TPU…", 0);
@@ -72,7 +75,7 @@ public final class LlmService extends Service {
             long loadMs = SystemClock.elapsedRealtime() - loadStart;
             append(journal, new JSONObject().put("type", "loaded").put("load_ms", loadMs));
             conversation = engine.createConversation(new ConversationConfig(
-                    Contents.Companion.of(ModelSpec.SYSTEM), Collections.emptyList(), Collections.emptyList(),
+                    Contents.Companion.of(voice ? ModelSpec.VOICE_SYSTEM : ModelSpec.SYSTEM), Collections.emptyList(), Collections.emptyList(),
                     new SamplerConfig(20, 0.9, 0.2, 0), false, Collections.emptyList(), Collections.emptyMap(),
                     null, false, 512, new ThinkingConfig(false), false, false, null));
             send(reply, 2, "מייצר תשובה מקומית…", 0);
@@ -83,6 +86,7 @@ public final class LlmService extends Service {
             final long[] firstChunkMs = {-1};
             String prompt = "התמליל לבדיקה:\n<transcript>\n" + text + "\n</transcript>\n"
                     + "בקשת המשתמש: " + (question.trim().isEmpty() ? "סכם את השיחה והצג נקודות עיקריות ומשימות שהוזכרו." : question);
+            if (voice) prompt = text;
             conversation.sendMessageAsync(prompt, new MessageCallback() {
                 @Override public void onMessage(com.google.ai.edge.litertlm.Message chunk) {
                     String value = chunk.toString();
@@ -104,9 +108,13 @@ public final class LlmService extends Service {
                     .put("generate_ms", generateMs).put("first_text_chunk_ms", firstChunkMs[0])
                     .put("pss_kb", memory.getTotalPss()).put("thermal_status", ((PowerManager)getSystemService(POWER_SERVICE)).getCurrentThermalStatus())
                     .put("cleanup_pending", true));
+            Bundle terminal = new Bundle(); terminal.putString("answer", response.toString());
+            terminal.putLong("verify_ms",verifyMs);terminal.putInt("worker_pss_kb",memory.getTotalPss());terminal.putInt("thermal_status",((PowerManager)getSystemService(POWER_SERVICE)).getCurrentThermalStatus());
+            terminal.putLong("load_ms", loadMs); terminal.putLong("generate_ms", generateMs);
+            terminal.putLong("first_text_chunk_ms", firstChunkMs[0]); terminal.putString("journal", journal.getName());
             send(reply, 4, response + "\n\nטעינה: " + loadMs + " ms | תשובה: " + generateMs
                     + " ms | טקסט ראשון: " + firstChunkMs[0] + " ms\nנשמר: " + journal.getName()
-                    + "\nBackend מבוקש: NPU; ללא fallback", 0);
+                    + "\nBackend מבוקש: NPU; ללא fallback", 0, terminal);
         } catch (Throwable error) {
             if (journal != null) try { append(journal, new JSONObject().put("type", "end").put("state", "error")
                     .put("error", error.toString()).put("cleanup_pending", true)); } catch (Exception ignored) { }
@@ -132,9 +140,12 @@ public final class LlmService extends Service {
         }
     }
     private static void send(Messenger reply, int what, String text, int pid) {
+        send(reply, what, text, pid, new Bundle());
+    }
+    private static void send(Messenger reply, int what, String text, int pid, Bundle bundle) {
         if (reply == null) return;
         android.os.Message message = android.os.Message.obtain(null, what); message.arg1 = pid;
-        Bundle bundle = new Bundle(); bundle.putString("text", text); message.setData(bundle);
+        bundle.putString("text", text); message.setData(bundle);
         try { reply.send(message); } catch (RemoteException ignored) { }
     }
 }

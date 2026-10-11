@@ -1,14 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:label="Mosaic Local LLM" android:allowBackup="false"
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="life.mosaic.permission.LOCAL_VOICE_ASR" />
+    <queries><package android:name="life.mosaic.tensorwhisper" /></queries>
+    <application android:label="מוזאיק — שיחה" android:allowBackup="false"
         android:extractNativeLibs="true" android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name="life.mosaic.models.ModelSetupActivity" android:exported="false" />
-        <uses-native-library android:name="libedgetpu_litert.so" android:required="false" />
-        <activity android:name=".LlmActivity" android:exported="true" android:hardwareAccelerated="false">
+        <activity android:name=".VoiceActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        <activity android:name=".TtsSetupActivity" android:exported="false" />
+        <service android:name=".TtsService" android:exported="false" android:process=":tts" />
+        <uses-native-library android:name="libedgetpu_litert.so" android:required="false" />
+        <activity android:name=".LlmActivity" android:exported="true" android:hardwareAccelerated="false">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

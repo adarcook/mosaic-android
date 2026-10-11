@@ -29,6 +29,9 @@ public final class LlmActivity extends Activity {
         models = new Button(this); models.setText("מודלים — מקור עצמאי ב־Documents");
         models.setOnClickListener(v -> startActivity(new Intent(this, life.mosaic.models.ModelSetupActivity.class)));
         layout.addView(models);
+        Button voice = new Button(this); voice.setText("דבר עם מוזאיק — תמלול, תשובה והקראה");
+        voice.setOnClickListener(v -> { if (!running && !importing) startActivity(new Intent(this, VoiceActivity.class)); });
+        layout.addView(voice);
         importFile = new Button(this); importFile.setText("פתיחת תמליל שמור"); importFile.setOnClickListener(v -> {
             Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
             startActivityForResult(picker, 42);
