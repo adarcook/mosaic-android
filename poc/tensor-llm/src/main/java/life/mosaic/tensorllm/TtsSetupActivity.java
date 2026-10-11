@@ -33,7 +33,7 @@ public final class TtsSetupActivity extends Activity {
         JSONObject manifest;try(InputStream input=getContentResolver().openInputStream(require(sources,"manifest.json"))){if(input==null)throw new IOException("אין manifest");manifest=TtsPack.manifest(input);}
         File root=new File(getExternalFilesDir(null),"blue-voice");if(!root.isDirectory()&&!root.mkdirs())throw new IOException("לא ניתן ליצור עותק עבודה");
         JSONObject files=manifest.getJSONObject("files");int index=0;
-        for(String name:files.keySet()){
+        for(java.util.Iterator<String> names=files.keys();names.hasNext();){String name=names.next();
             JSONObject spec=files.getJSONObject(name);long bytes=spec.getLong("bytes");String sha=spec.getString("sha256");File target=new File(root,name);show("בודק/מייבא "+(++index)+"/7: "+name);
             boolean valid=ModelCopy.valid(target,bytes,sha,()->cancelled);
             try(InputStream input=getContentResolver().openInputStream(require(sources,name))){if(input==null)throw new IOException("מקור אינו זמין");

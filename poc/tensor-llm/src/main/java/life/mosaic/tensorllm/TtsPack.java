@@ -33,7 +33,7 @@ final class TtsPack {
     static void verify(File root)throws Exception {
         JSONObject manifest;try(InputStream input=new FileInputStream(new File(root,"manifest.json"))){manifest=manifest(input);}
         JSONObject files=manifest.getJSONObject("files");
-        for(String name:files.keySet()){
+        for(java.util.Iterator<String> names=files.keys();names.hasNext();){String name=names.next();
             JSONObject spec=files.getJSONObject(name);
             if(!ModelCopy.valid(new File(root,name),spec.getLong("bytes"),spec.getString("sha256"), () -> false))throw new IOException("Missing/corrupt TTS file: "+name);
         }

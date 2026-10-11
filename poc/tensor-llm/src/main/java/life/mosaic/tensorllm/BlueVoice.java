@@ -18,8 +18,8 @@ final class BlueVoice implements AutoCloseable {
     private final Random random=new Random(123);
     private static final class Tensor { final float[] values;final long[] shape;Tensor(float[] v,long... s){values=v;shape=s;} }
     BlueVoice(File root)throws Exception {
-        fixture=new JSONObject(java.nio.file.Files.readString(new File(root,"reply.json").toPath()));
-        JSONObject vocab=new JSONObject(java.nio.file.Files.readString(new File(root,"vocab.json").toPath()));
+        fixture=new JSONObject(new String(java.nio.file.Files.readAllBytes(new File(root,"reply.json").toPath()),java.nio.charset.StandardCharsets.UTF_8));
+        JSONObject vocab=new JSONObject(new String(java.nio.file.Files.readAllBytes(new File(root,"vocab.json").toPath()),java.nio.charset.StandardCharsets.UTF_8));
         vocabulary=vocab.has("char_to_id")?vocab.getJSONObject("char_to_id"):vocab;
         rate=fixture.getInt("sample_rate");channels=fixture.getInt("ldim");factor=fixture.getInt("compress");
         frame=fixture.getInt("base_chunk_size")*factor;steps=fixture.getInt("steps");
