@@ -1,6 +1,6 @@
 # תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
 
-עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-22; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-23; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
 
 נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול. התקבל דיווח מכשיר ראשון על סיום מלא, ואומתו PCM ו־JSONL עם כיסוי מלא. נבדקה גם יציאה אחרי מקטע אחד והמשך מוצלח בלי gap או duplicate; שאר תרחישי הכשל עדיין Pending.
 
@@ -354,6 +354,42 @@ Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק 
 **Validation CI סופי:** על code commit `4493d2fbe352efa50c327fc46712e13b44185319` עברו [LLM/שיחה CI 38128699000](https://github.com/adarcook/mosaic-android/actions/runs/38128699000) ו־[ASR companion CI 38128698944](https://github.com/adarcook/mosaic-android/actions/runs/38128698944), כולל בדיקות קיימות/חדשות, Android/native/APK, dispatch verifier והעלאת artifacts. APKs נשלפו ונמדדו מקומית: שיחה 28,779,055 bytes SHA `f23e11184271dd386e5a660abd6fe416e75820696848e8a24e0c3c71b87cf53c`; ASR 8,340,973 bytes SHA `821909a5720c302d94e915d05b519c302d726dc5b8169a8efc1fabe8bb96b39d`. אלה APKs של CI, לא זהויות של build/חתימה מקומיים או מדידת הפיקסל. אריזת LLM כוללת ORT/LLM/dispatch עבור arm64 וייחוס רישוי, בלי model weights; Kotlin DebugProbesKt.bin הוא metadata של ספרייה, 1,728 bytes. SHA dispatch אומת שוב מתוך ה־APK שנשלף. המודלים עצמם לא הורדו/נטענו בסביבה זו. בדיקת probe הוותיקה [38128698967](https://github.com/adarcook/mosaic-android/actions/runs/38128698967) נכשלה ב־Environment ambiguous בקובץ ProbeService שלא שונה בניסוי; זו אינה טענה שכל workflows ב־PR ירוקים. היא אינה אחת משתי אפליקציות המסלול שנבנו לעיל.
 
 **קבלה והחלטה:** Pending device. דרושים: שני APKs באותה חתימה, source imports תקינים, פנייה קצרה עם transcript נכון → תשובה מתאימה → אותו תוכן בקול BlueTTS; פנייה שנייה שונה, ביטול/רקע בכל שלב, חסר/פגום model, יומן terminal עם זמני verify/load/inference/TTFT/G2P/acoustic/playback, מספרים/שמות/שלילות. יש למדוד cold latency ו־RAM אמיתי; לא לטעון שהמערכת מהירה עד מדידה. מגבלות: recording 12s, reply TTS 1,200 chars בלי truncation שקט, מקטעי 96chars/25s, סטטוס ריצה שהופרעה ללא auto-resume, ללא tools/message access או זיכרון שיחה. rollback ל־baseline מחזיר מסך תמלילים ו־LLM טקסט בלבד; מודלי המקור לא נמחקים. פרטי הכנה/בדיקה/ייחוס: [local-voice-conversation.md](local-voice-conversation.md).
+
+### ASR-22 / VOICE-01 — תוצאת מכשיר ראשונה, 11.10.2026 14:20 Asia/Jerusalem
+
+**תוצאה: ASR ו־LLM הושלמו; מסלול הקול נכשל ב־Playback timeout.** יומן גרסת `0.4-voice-turn`, מקור קוד branch באותו זמן `ea305d5968f4fab5d66f5a5b0eda7ba53e7aaa97`. SHA של APK שהמשתמש בנה לא נמסר; אין לזהותו עם APK ה־CI. Android fingerprint זהה לזה שמופיע ברשומת ASR-22. הגדרות Beam 5, ASR encoder/cross TPU ו־decoder CPU, Gemma TPU, BlueTTS/Renikud CPU נשמרו. דגמי המודל לא השתנו. ראיה חדשה זו מראה שה־dispatch המועמד אפשר טעינה ויצירת תשובה בפנייה אחת; אינה מוכיחה יציבות חוזרת או פתרון כל קריסות ה־ABI.
+
+| מדד | מילישניות | מקור / גבול המדידה |
+|---|---:|---|
+| אודיו שנקלט | 4,859.875 | משך 4.859875s, PCM16 mono 16kHz; PCM לא צורף |
+| ASR כולל | 12,732 | כולל אימות, טעינה, חישוב ותקורת worker/cleanup |
+| ASR verify / load | 2,865 / 2,519 | מדדי worker |
+| mel / encoder / cross / decode | 35 / 2,637 / 211 / 3,962 | compute 6,847; אין להסיק RTF שיחה רציפה מפנייה קצרה |
+| LLM כולל | 10,582 | כולל אימות וטעינה |
+| LLM verify / load / generate | 4,178 / 1,733 / 4,315 | first_text_chunk 1,958ms, ביחס לתחילת generation |
+| TTS verify / load | כ־2,148 / כ־4,980 | הפרשי phase timestamps, לא מדדי worker סופיים |
+| G2P / acoustic למקטע הראשון | כ־90 / כ־412 | הפרשי phase timestamps בלבד |
+| עצירת הקלטה עד ניסיון הניגון הראשון | 31,254 | ניסיון ניגון, אינו הוכחה לקול שנשמע |
+| פנייה כולל הקלטה עד כשל | 40,381 | המשתמש דיווח שלא נשמעה הקראה |
+
+זמן אימות מצטבר כ־9.191s וטעינה כ־9.232s. אלה גורמי latency מדודים; הגדלת TPU או שינוי Beam אינם מטפלים בהם. ASR PSS 121,938KiB, LLM PSS 369,635KiB, thermal_status=0; אלה snapshots ואינם peak RAM או הוכחה להיעדר throttling. תשובה נוצרה אך אין reference/WER/CER או בדיקת גל הקול. אין SIGSEGV חדש מזוהה בפנייה זו; SIGSEGV מ־11:39 בלוג הוא אירוע ASR-21 הישן, לא הכשל ב־14:20. פרטי נגן/אורך אודיו/route לא נרשמו ולכן גורם ה־timeout עדיין בגדר השערה.
+
+ראיות פרטיות בלבד (ללא תוכן תמליל בריפו):
+- `voice-1791717608465-b964a9b8-466c-4d0c-acea-fb9303496ea3.jsonl`, 4,239 bytes, SHA-256 `a94215404d7038c73903f3a79483ce27134fcc0a943a785693be3d6b9064bb1d`.
+- `mosaic-voice-logcat.txt`, 3,716,923 bytes, SHA-256 `d644ee120036074d4faa40d3e76ca7d351ca3635948dc5b41c05c327e4369deb`.
+- PCM identity מתוך journal: `768a4f21df85b518b75341148eb0c01959f3dc3cc147e53327bf1fed32b9c13d`; לא אומת מול PCM שלא נמסר.
+
+### ASR-23 / VOICE-02 — ניגון מקטעים קצרים ומדידה בעת כשל
+
+**השערה:** `AudioTrack.MODE_STREAM` הקודם הגדיר buffer של לפחות שנייה, ללא start threshold מפורש. Android מגדיר threshold לפי capacity; מקטע קצר ממנו עלול לא להתחיל למרות `play()` ו־write מוצלחים. פנייה זו יצרה מקטע ראשון קטן, אך מספר frames לא נשמר; אין הוכחה ישירה שה־head היה 0. מקור רשמי: [AudioTrack start threshold](https://developer.android.com/reference/android/media/AudioTrack#getStartThresholdInFrames()).
+
+Baseline ו־rollback: `ea305d5968f4fab5d66f5a5b0eda7ba53e7aaa97`, PR #35 פתוח, main לא השתנה. מועמד: commit שבו נוספה רשומה זו, APK `0.5-voice-playback` / versionCode 5; SHA APK ו־תוצאת Pixel Pending.
+
+**שינויים:** threshold מפורש של לכל היותר 20ms ומספר frames במקטע, write לא חוסם עם טיפול ב־partial/zero/negative returns ודדליין כולל מוגבל (משך המקטע +5s). שמירת frames, capacity, threshold, head, underruns, route ו־playback state; אירועי phase_detail ו־stage_end error משמרים Bundle metrics גם כשאין success. אימות SHA מלא בכל פנייה, טעינה קרה, PCM/Beam/threads, מודלי TPU/CPU, G2P, אקוסטיקה, chunking ו־prompt נשמרים ללא שינוי. הארכיון אינו משתנה. **אין טענת האצה של 18s אימות/טעינה בניסוי זה**; פריט נפרד להמשך לאחר קול תקין: cache אימות וטעינה עם invalidation ושמירת זהויות, תוך מדידת cold/warm RAM/latency.
+
+**בדיקות host:** 5 בדיקות JUnit עברו: מקטע קצר מבאפר של שנייה עם partial writes, מקטע זעיר, zero writes עם timeout מוגבל, threshold שאינו יכול להתחיל וכשל write. אלה בדיקות transport מדומה, לא Android AudioTrack/BlueTTS. Android CI ו־device acceptance מתווספים לאחר הבנייה; אין להסיק שיפור זמן או קול מהמבחנים.
+
+**קבלה:** בניית APK; אותו טקסט קצר מקבל ASR→LLM→קול שנשמע במלואו, כולל מקטע ראשון קצר ומקטעים הבאים. journal כולל head >= frames לכל מקטע ללא timeout; פנייה חוזרת, cancel/background וניתוב רמקול/אוזניות. בקלט חדש דרך מיקרופון אין A/B ביט־לביט; לבידוד נגן נדרשים frames קצרים מתועדים. מצב Pending device, rollback באותה חתימה ובגיבוי journals; אין שינוי/הורדה מחדש של מודלים.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 

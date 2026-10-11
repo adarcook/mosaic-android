@@ -92,3 +92,7 @@ python3 scripts/build_tensor_apps.py
 ## מקורות והייחוס
 
 BlueTTS acoustic port מבוסס על המימוש הקיים בריפו ועל [BlueTTS revision](https://github.com/maxmelichov/BlueTTS/tree/0e38dbf08ed53f85863d1eab092bd9572c53a503). Renikud frontend הותאם ל־Java מתוך [ה־wrapper המצורף למודל באותה revision](https://huggingface.co/notmax123/RenikudPlus/blob/679c56ca449d41873fb8ff7711ddf7563d28198f/renikud_onnx.py), SHA `2516953777db2bb7dc8bfa446df655ff5013bd82637345209c9fc4daedb18630`. ייחוס ReNikud: Maxim Melichov, Yakov Kolani, Morris Alper; [פרויקט המקור](https://github.com/renikud/renikud). קובצי רישיון ו־vocab metadata בלבד ב־`scripts/voice_metadata`, והייחוס נכלל גם ב־APK כ־assets; אין weights בריפו. בדיקות cascade משתמשות ב־32 fixtures סינתטיים שהופקו מפונקציית `_exact_map` המקורית, ללא טעינת weights, כדי לבדוק חוקיות עיצורים, cascade conditioning והטעם למילה.
+
+## עדכון 0.5 — ניגון ומדידת הכשל
+
+בתוצאת Pixel הראשונה של 0.4, ASR ו־Gemma הושלמו אך BlueTTS נכשל ב־Playback timeout. גרסת 0.5 קובעת start threshold שמאפשר למקטע קצר להתחיל, מגבילה גם כתיבה שנתקעת, ושומרת ביומן מדדי נגן ו־verify/load/G2P/acoustic גם בכשל. אין צורך לייבא מחדש את המודלים לאחר install -r. אימות וטעינה עדיין מתבצעים מחדש בכל פנייה; השיפור במהירות הכוללת טרם בוצע וניסוי הקול המתוקן דורש Pixel. פירוט התוצאה וההשערה: ASR-22 follow-up ו־ASR-23 ביומן הניסויים.
