@@ -22,14 +22,14 @@ public final class VoiceActivity extends Activity {
     private volatile AudioRecord recorder;
     private static final class Worker {Messenger remote;ServiceConnection connection;boolean bound;}
     private final java.util.Map<String,Worker> workers=new java.util.HashMap<>();
-    private final String sessionId=java.util.UUID.randomUUID().toString();
+    private String sessionId=java.util.UUID.randomUUID().toString();
     private final Runnable idleRelease=()->{clearWorkers();controls(true);status.setText("המנועים שוחררו אחרי שתי דקות ללא פנייה. לחץ הכנת מנועים כדי להמשיך.");};
     private int bindToken;private volatile int turn;
     private long turnStart,stageStart;private String stage="idle",recognized="",response="";
     private File journal,audioFile;private Runnable deadline;
     private final Runnable clock=new Runnable(){public void run(){if(active){status.setText("שלב: "+label(stage)+" · "+((SystemClock.elapsedRealtime()-stageStart)/1000)+" שניות · כולל: "+((SystemClock.elapsedRealtime()-turnStart)/1000)+" שניות\n"+(journal==null?"":journal.getName()));main.postDelayed(this,1000);}}};
     @Override public void onCreate(Bundle saved){super.onCreate(saved);LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(24,80,24,32);
-        TextView title=new TextView(this);title.setText("מוזאיק — דבר וקבל תשובה\nהכן מנועים פעם אחת, ואז דבר. עד 12 שניות בכל פנייה. המנועים נשארים בזיכרון כשהמסך פתוח.");title.setTextSize(22);layout.addView(title);
+        TextView title=new TextView(this);title.setText("מוזאיק — דבר וקבל תשובה\nהכן פעם אחת, ואז דבר. עד 12 שניות בכל פנייה. המנועים נטענים בתורם ומשתחררים בין השלבים.");title.setTextSize(22);layout.addView(title);
         setup=new Button(this);setup.setText("הכנת הקול BlueTTS");setup.setOnClickListener(v->startActivity(new Intent(this,TtsSetupActivity.class)));layout.addView(setup);
         archive=new Button(this);archive.setText("מודל LLM ותמלילים שמורים");archive.setOnClickListener(v->startActivity(new Intent(this,LlmActivity.class)));layout.addView(archive);
         warm=new Button(this);warm.setText("הכנת מנועים לשיחה");warm.setOnClickListener(v->begin(true));layout.addView(warm);
@@ -61,7 +61,7 @@ public final class VoiceActivity extends Activity {
             String id="voice-"+System.currentTimeMillis()+"-"+java.util.UUID.randomUUID();journal=new File(folder,id+".jsonl");audioFile=new File(folder,id+".pcm");
             turnStart=SystemClock.elapsedRealtime();active=true;turn++;recognized="";response="";transcript.setText("");answer.setText("");
             asr.setText("1 · תמלול — ממתין");llm.setText("2 · תשובת מודל — ממתין");tts.setText("3 · הקראה — ממתין");
-            event(new JSONObject().put("type","start").put("experiment","ASR-24 / VOICE-03").put("build",BuildConfig.VERSION_NAME).put("android_fingerprint",Build.FINGERPRINT).put("sample_rate",16000).put("beam",5).put("llm_model_sha256",ModelSpec.SHA256).put("dispatch_sha256",ModelSpec.DISPATCH_SHA256).put("tts_renikud_revision",TtsPack.REV).put("mode",warming?"foreground_warmup":"foreground_push_to_talk").put("foreground_session",sessionId));
+            event(new JSONObject().put("type","start").put("experiment","ASR-25 / VOICE-04").put("build",BuildConfig.VERSION_NAME).put("android_fingerprint",Build.FINGERPRINT).put("sample_rate",16000).put("beam",5).put("llm_model_sha256",ModelSpec.SHA256).put("dispatch_sha256",ModelSpec.DISPATCH_SHA256).put("tts_renikud_revision",TtsPack.REV).put("mode",warming?"foreground_sequential_prepare":"foreground_push_to_talk").put("foreground_session",sessionId));
             if(!getPreferences(0).edit().putBoolean("active",true).putString("journal",journal.getName()).putString("transcript","").putString("answer","").putString("result","השיחה התחילה ללא תוצאה סופית").commit())throw new IOException("לא ניתן לשמור מצב שיחה");
             controls(false);getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             if(warming){transition("asr","מכין מנוע תמלול…");Bundle data=new Bundle();data.putBoolean("prepare",true);bind(new Intent().setComponent(new ComponentName("life.mosaic.tensorwhisper","life.mosaic.tensorwhisper.VoiceAsrService")),data,120000);return;}
@@ -93,7 +93,7 @@ public final class VoiceActivity extends Activity {
         asrProgress.setVisibility(stage.equals("capture")||stage.equals("asr")?android.view.View.VISIBLE:android.view.View.GONE);llmProgress.setVisibility(stage.equals("llm")?android.view.View.VISIBLE:android.view.View.GONE);ttsProgress.setVisibility(stage.equals("tts")?android.view.View.VISIBLE:android.view.View.GONE);
         android.util.Log.i("MosaicVoice","stage="+stage+" state=running turn="+turn);stop.setText(recording?"סיום משפט":"ביטול הפעולה");
     }
-    private void bind(Intent intent,Bundle data,long budget){final int token=++bindToken;final int id=turn;final String expected=stage;
+    private void bind(Intent intent,Bundle data,long budget){data.putString("foreground_session",sessionId);final int token=++bindToken;final int id=turn;final String expected=stage;
         Worker worker=workers.get(expected);if(worker==null){worker=new Worker();workers.put(expected,worker);}final Worker selected=worker;
         Messenger reply=new Messenger(new Handler(Looper.getMainLooper(),msg->{if(!active||turn!=id||bindToken!=token||!stage.equals(expected))return true;
             if(msg.what==1){}else if(msg.what==4)completeStage(msg.getData());else if(msg.what==5){try{JSONObject failure=new JSONObject().put("type","stage_end").put("stage",expected).put("state","error").put("elapsed_ms",SystemClock.elapsedRealtime()-stageStart);for(String key:msg.getData().keySet())failure.put(key,msg.getData().get(key));event(failure);}catch(Exception e){finish("error","לא ניתן לשמור יומן: "+e.getMessage());return true;}finish("error",msg.getData().getString("text","שגיאה"));}
@@ -116,11 +116,16 @@ public final class VoiceActivity extends Activity {
             for(String key:data.keySet())if(!key.equals("text"))result.put(key,data.get(key));event(result);
             TextView card=stage.equals("asr")?asr:stage.equals("llm")?llm:tts;card.setText(label(stage)+" · הושלם · "+elapsed+" ms");card.setTextColor(Color.rgb(25,120,65));
             releaseStage();
+            disposeWorker(completed,()->continueStage(completed,data));
+        }catch(Exception e){finish("error",e.toString());}
+    }
+    private void continueStage(String completed,Bundle data){
+        try {
             if(prewarming){
                 if(!data.getBoolean("prepared",false))throw new IOException("עדכן את שתי האפליקציות לגרסת המנועים החמים");
                 if(completed.equals("asr")){transition("llm","מכין Gemma…");Bundle request=new Bundle();request.putBoolean("prepare",true);bind(new Intent(this,LlmService.class),request,240000);}
                 else if(completed.equals("llm")){transition("tts","מכין קול…");Bundle request=new Bundle();request.putBoolean("prepare",true);bind(new Intent(this,TtsService.class),request,240000);}
-                else{prepared=true;finish("complete","המנועים מוכנים. עכשיו אפשר לדבר; אין אימות וטעינה מחדש כל עוד המסך פתוח.");}
+                else{prepared=true;finish("complete","ההכנה הושלמה. אפשר לדבר; כל מנוע ייטען בתורו, ואימות הקבצים נשמר למסך הנוכחי.");}
                 return;
             }
             if(completed.equals("asr")){recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();transition("llm","פותח מודל…");Bundle request=new Bundle();request.putString("text",recognized);request.putBoolean("voice",true);request.putString("source_sha256",life.mosaic.models.ModelCopy.sha256(audioFile,()->false));bind(new Intent(this,LlmService.class),request,240000);}
@@ -129,7 +134,28 @@ public final class VoiceActivity extends Activity {
         }catch(Exception e){finish("error",e.toString());}
     }
     private void releaseStage(){bindToken++;if(deadline!=null)main.removeCallbacks(deadline);deadline=null;}
-    private void clearWorkers(){prepared=false;java.util.List<Worker> previous=new java.util.ArrayList<>(workers.values());workers.clear();for(Worker worker:previous){if(worker.remote!=null)try{worker.remote.send(android.os.Message.obtain(null,9));}catch(RemoteException ignored){}if(worker.bound)try{unbindService(worker.connection);}catch(IllegalArgumentException ignored){}}}
+    private void disposeWorker(String completed,Runnable next)throws Exception {
+        Worker worker=workers.remove(completed);
+        if(worker==null||worker.remote==null)throw new IOException("אין חיבור למנוע לשחרור");
+        IBinder binder=worker.remote.getBinder();long started=SystemClock.elapsedRealtime();final int id=turn;
+        event(new JSONObject().put("type","worker_release_start").put("stage",completed));
+        try{worker.remote.send(android.os.Message.obtain(null,9));}catch(RemoteException ignored){}
+        if(worker.bound){try{unbindService(worker.connection);}catch(IllegalArgumentException ignored){}worker.bound=false;}
+        Runnable wait=new Runnable(){public void run(){
+            if(!active||turn!=id)return;
+            if(binder.isBinderAlive()){
+                if(SystemClock.elapsedRealtime()-started>=8000){finish("error","המנוע לא השתחרר בזמן; השלב הבא לא נטען");return;}
+                main.postDelayed(this,50);return;
+            }
+            try{
+                android.app.ActivityManager.MemoryInfo memory=new android.app.ActivityManager.MemoryInfo();
+                ((android.app.ActivityManager)getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
+                event(new JSONObject().put("type","worker_release_end").put("stage",completed).put("binder_dead",true).put("elapsed_ms",SystemClock.elapsedRealtime()-started).put("available_memory_bytes",memory.availMem).put("low_memory",memory.lowMemory));
+                next.run();
+            }catch(Exception e){finish("error",e.toString());}
+        }};main.post(wait);
+    }
+    private void clearWorkers(){prepared=false;sessionId=java.util.UUID.randomUUID().toString();java.util.List<Worker> previous=new java.util.ArrayList<>(workers.values());workers.clear();for(Worker worker:previous){if(worker.remote!=null)try{worker.remote.send(android.os.Message.obtain(null,9));}catch(RemoteException ignored){}if(worker.bound)try{unbindService(worker.connection);}catch(IllegalArgumentException ignored){}}}
     private void finish(String state,String text){if(!active)return;String failedStage=stage;active=false;turn++;stopMic();releaseStage();if(!state.equals("complete"))clearWorkers();main.removeCallbacks(clock);
         try{event(new JSONObject().put("type","end").put("state",state).put("stage",failedStage).put("elapsed_ms",SystemClock.elapsedRealtime()-turnStart).put("message",text));}catch(Exception e){text+="\nלא ניתן לשמור יומן: "+e.getMessage();}
         if(!state.equals("complete")){TextView card=failedStage.equals("capture")||failedStage.equals("asr")?asr:failedStage.equals("llm")?llm:tts;card.setText(label(failedStage)+" · "+text);card.setTextColor(Color.rgb(170,45,45));}

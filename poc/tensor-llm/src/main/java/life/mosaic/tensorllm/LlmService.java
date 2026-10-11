@@ -35,7 +35,7 @@ public final class LlmService extends Service {
             if (!"Google".equalsIgnoreCase(Build.MANUFACTURER)
                     || !Build.SOC_MODEL.toLowerCase(java.util.Locale.ROOT).contains("tensor g5"))
                 throw new IOException("ניסוי זה דורש Google Tensor G5");
-            if(data.getBoolean("prepare",false)){Bundle ready=ensureEngine(reply,null);ready.putBoolean("prepared",true);life.mosaic.models.WarmMemory.add(this,ready);busy=false;send(reply,4,"מנוע Gemma מוכן",0,ready);return;}
+            if(data.getBoolean("prepare",false)){Bundle ready=ensureEngine(reply,null,data.getString("foreground_session",""));ready.putBoolean("prepared",true);life.mosaic.models.WarmMemory.add(this,ready);busy=false;send(reply,4,"מנוע Gemma מוכן",0,ready);return;}
             String text = data.getString("text", ""), question = data.getString("question", "");
             boolean voice = data.getBoolean("voice", false);
             if (text.trim().isEmpty() || text.length() > ModelSpec.MAX_TEXT || question.length() > ModelSpec.MAX_QUESTION)
@@ -50,7 +50,7 @@ public final class LlmService extends Service {
                     .put("reviewed_text_sha256", hash(text.getBytes(StandardCharsets.UTF_8)))
                     .put("voice_mode",voice).put("system_prompt_sha256",hash((voice?ModelSpec.VOICE_SYSTEM:ModelSpec.SYSTEM).getBytes(StandardCharsets.UTF_8)))
                     .put("text", text).put("question", question).put("context_tokens", "model_default").put("max_output_tokens", 512));
-            Bundle engineMetrics=ensureEngine(reply,journal);
+            Bundle engineMetrics=ensureEngine(reply,journal,data.getString("foreground_session",""));
             long verifyMs=engineMetrics.getLong("verify_ms"),loadMs=engineMetrics.getLong("load_ms");
             conversation = engine.createConversation(new ConversationConfig(
                     Contents.Companion.of(voice ? ModelSpec.VOICE_SYSTEM : ModelSpec.SYSTEM), Collections.emptyList(), Collections.emptyList(),
@@ -107,25 +107,20 @@ public final class LlmService extends Service {
         }
     }
     @Override public boolean onUnbind(Intent intent){android.os.Process.killProcess(android.os.Process.myPid());return false;}
-    private Bundle ensureEngine(Messenger reply,File journal)throws Exception {
+    private Bundle ensureEngine(Messenger reply,File journal,String session)throws Exception {
         Bundle metrics=new Bundle();metrics.putBoolean("engine_reused",engine!=null);metrics.putString("verification_mode",engine!=null?"loaded_engine_metadata":"full_sha256");
-        if(engine!=null){life.mosaic.models.WarmMemory.beforeLoad(this);snapshot.requireUnchanged();metrics.putLong("verify_ms",0);metrics.putLong("load_ms",0);return metrics;}
+        if(engine!=null){life.mosaic.models.WarmMemory.beforeInference(this);snapshot.requireUnchanged();metrics.putLong("verify_ms",0);metrics.putLong("load_ms",0);return metrics;}
         life.mosaic.models.WarmMemory.beforeLoad(this);
             File dispatch = new File(getApplicationInfo().nativeLibraryDir, "libLiteRtDispatch_GoogleTensor.so");
             File model = new File(getExternalFilesDir(null), ModelSpec.FILE);
             life.mosaic.models.FileSnapshot before=new life.mosaic.models.FileSnapshot(model,dispatch);
-            if (!ModelSpec.DISPATCH_SHA256.equals(fileHash(dispatch)))
-                throw new IOException("ספריית Tensor אינה תואמת לגרסת האפליקציה; בנה והתקן עם סקריפט הבנייה המעודכן");
-            android.util.Log.i("MosaicLocalLlm", "dispatch verified: Gallery 1.0.20 G5; engine=0.18.0");
-            if (model.length() != ModelSpec.BYTES) throw new IOException("קובץ Gemma 4 G5 חסר או בגודל לא תקין; העבר את המודל לפי המדריך");
-            send(reply, 2, "מאמת את המודל המקומי…", 0);
-            long verifyStart = SystemClock.elapsedRealtime();
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (InputStream input = new FileInputStream(model)) {
-                byte[] buffer = new byte[1024 * 1024]; int n;
-                while ((n = input.read(buffer)) != -1) digest.update(buffer, 0, n);
-            }
-            if (!ModelSpec.SHA256.equals(TranscriptSource.hex(digest.digest()))) throw new IOException("SHA-256 של המודל אינו תואם");
+            send(reply, 2, "בודק אימות מודלים…", 0);
+            long verifyStart=SystemClock.elapsedRealtime();
+            boolean cached=life.mosaic.models.SessionVerification.verify(new File(getFilesDir(),"voice-llm-verification.properties"),session,ModelSpec.SHA256+"|"+ModelSpec.DISPATCH_SHA256,new File[]{model,dispatch},()->{
+                if(model.length()!=ModelSpec.BYTES||!ModelSpec.SHA256.equals(fileHash(model)))throw new IOException("Gemma model identity mismatch");
+                if(!ModelSpec.DISPATCH_SHA256.equals(fileHash(dispatch)))throw new IOException("Tensor dispatch identity mismatch");
+            });
+            metrics.putString("verification_mode",cached?"session_receipt_metadata":"full_sha256");
             before.requireUnchanged();long verifyMs=SystemClock.elapsedRealtime()-verifyStart;
             if(journal!=null)append(journal, new JSONObject().put("type", "verified").put("model_sha256", ModelSpec.SHA256)
                     .put("verify_ms", SystemClock.elapsedRealtime() - verifyStart));

@@ -8,8 +8,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6-warm-session"
+        versionCode = 7
+        versionName = "0.7-sequential-session"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

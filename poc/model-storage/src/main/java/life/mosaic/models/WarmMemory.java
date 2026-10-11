@@ -12,7 +12,12 @@ public final class WarmMemory {
         ActivityManager.MemoryInfo info=new ActivityManager.MemoryInfo();
         ((ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE)).getMemoryInfo(info);
         if(info.lowMemory||info.availMem<2L*1024*1024*1024)
-            throw new IOException("אין מספיק זיכרון להכנת מנוע נוסף; סגור אפליקציות ונסה שוב");
+            throw new IOException("אין מספיק זיכרון לטעינת מנוע; ההכנה נעצרה: available_memory_bytes="+info.availMem+" low_memory="+info.lowMemory);
+    }
+    public static void beforeInference(Context context)throws IOException {
+        ActivityManager.MemoryInfo info=new ActivityManager.MemoryInfo();
+        ((ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE)).getMemoryInfo(info);
+        if(info.lowMemory||info.availMem<1024L*1024*1024)throw new IOException("אין מספיק זיכרון לעיבוד; הפעולה נעצרה: available_memory_bytes="+info.availMem+" low_memory="+info.lowMemory);
     }
     public static void add(Context context,Bundle data)throws IOException {
         Debug.MemoryInfo memory=new Debug.MemoryInfo();Debug.getMemoryInfo(memory);

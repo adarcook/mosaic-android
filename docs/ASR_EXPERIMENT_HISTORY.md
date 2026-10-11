@@ -1,6 +1,6 @@
 # תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
 
-עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-24; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-25; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
 
 נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול. התקבל דיווח מכשיר ראשון על סיום מלא, ואומתו PCM ו־JSONL עם כיסוי מלא. נבדקה גם יציאה אחרי מקטע אחד והמשך מוצלח בלי gap או duplicate; שאר תרחישי הכשל עדיין Pending.
 
@@ -462,6 +462,22 @@ Baseline/rollback מלא: `59e692ec0d01465bc7596e2b7d798c3e134427be` (ASR-23), P
 אחרי Gemma, המדידה האחרונה נמוכה מסף `beforeLoad` של 2 GiB בכ־604 MB (decimal). הזיכרון הזמין ירד בין שתי המדידות ב־1,077,649,408 bytes (1.004 GiB). זהו שינוי בזיכרון המערכת, **לא** מדידת צריכה בלעדית של Gemma; PSS של worker אינו חשבון מלא של זיכרון מאיץ/driver. אין מדידת RAM לפני ASR, ואין רישום `lowMemory` או RAM בנקודת השגיאה עצמה. לכן היומן תומך היטב בחסימה בגלל סף RAM, אך אינו מבודד איזה תנאי OR הופעל ברגע הקריאה. ASR ו־Gemma מוכנים ונשארים טעונים; TTS נפסל לפני אימות/טעינה. כל ההכנה הסתיימה במצב error אחרי 10,642 ms, ללא הקלטה או inference, ללא תוצאת TTS וללא ראיה לקריסה/OOM.
 
 **החלטה:** כשל הכנת שלושת המנועים יחד מאומת גם ב־journal. לא מורידים סף על סמך המדידה הזאת, במיוחד כאשר TTS FP32 הגיע בעבר ל־PSS של כ־1.56 GB בריצות 0.5. הניסוי הבא צריך להפריד אימות קבצים מחיי המנוע, לפנות ASR לפני טעינת Gemma ולפנות Gemma לפני טעינת BlueTTS, ולמדוד RAM/PSS ופנייה ראשונה/שנייה. זו הצעת ניסוי שטרם מומשה; אין לטעון לשיפור latency או לקבוע כבר שמנוע מסוים יכול להישאר resident. שחרור בפועל אחרי השגיאה ויציבות ממושכת עדיין לא נמדדו. הראיה הפרטית נשארת מחוץ ל־Git; שינוי התיעוד בלבד, PR #35 פתוח ולא ממוזג, main ללא שינוי.
+
+### ASR-25 / VOICE-04 — מנועים מתחלפים ואימות קבצים נפרד, 11.10.2026
+
+**השערה:** שחרור ASR לפני Gemma ושחרור Gemma לפני BlueTTS יאפשר הכנה ופניות בלי החזקת שלושת המנועים יחד. receipt פרטי של SHA עבור ישיבת המסך ימנע קריאה מלאה חוזרת גם לאחר הריגת worker. baseline קוד ASR-24 `c10e70f50536497677c45a2eb0a0db90b509a4a6`, תיעוד מדידת כשל `b97f82bffb39cb300290b9069097b18fdbfcd213`; rollback פונקציונלי ASR-23 `91227b76e070eb6fbca8ca86fbe92ceaaf248687` עם TTS שעבד אך latency לא שימושי. המועמד באותו PR #35, LLM `0.7-sequential-session` (7), ASR `0.13-sequential-companion` (13); commit קבוע יתווסף אחרי פרסום. main נשאר ללא שינוי. APK SHA ובדיקת מכשיר טרם נמדדו.
+
+**שינויים מדויקים:** controller מפנה worker בסיום כל שלב, כולל הכנה, ושומר רק תוצאה טקסטואלית/PCM/receipt. ממתין אסינכרונית למות Binder עד 8s; callbacks ישנים נפסלים וביטול/רקע עוצרים את המשך הרצף. רושם אירועי release, זמן, available RAM ו־lowMemory. session UUID מתחדש ברקע/ביטול/שגיאה/idle/הכנה חדשה. receipt נפרד בפרטי כל worker שורד restart של worker באותה ישיבה; קשור ל־session, חוזה hashes, canonical paths, size, modification/creation timestamps ו־fileKey, נכתב אטומית רק אחרי SHA מלא ובדיקת יציבות. חוסר session (מסלול archive הישן) מחייב SHA בכל טעינה. שינוי metadata או חוזה מחייב SHA מחדש; אין הגנה מוכחת מפני שינוי מכוון שמשמר את כל המטא־דאטה. engine_reused=false צפוי; verification_mode=session_receipt_metadata צפוי אחרי ההכנה; load_ms אינו אפס.
+
+סף **טעינה** נשאר 2 GiB/lowMemory; סף **inference לאחר טעינה** הופרד ל־1 GiB/lowMemory, זהה לסף post-load הקיים, כאשר לא מתווסף מנוע אחר. זהו גורם נוסף ששונה ויש להעריך את יציבותו; לא הורד סף הוספת מנוע. הודעת חסימה כוללת available RAM ו־lowMemory במקום עצה כללית לסגור אפליקציות. Binder מת אינו מדידה של החזרת כל RAM/TPU driver; יש למדוד RAM בשחרור ובטעינה שאחריו.
+
+**בקרות:** אין שינוי משקלים/quantization/graphs/dispatch/search/prompt/token budget. ASR encoder+cross=NPU, decoder=CPU Beam5/2threads; Gemma4 E2B=NPU runtime0.18.0 עם dispatch Gallery1.0.20; BlueTTS+RenikudFP32=CPU2threads. זהויות מפורטות ב־ASR-22–24. הקלטה foreground 16kHz mono PCM16 עד12s, אין Skills חדשים/הקראה streaming/wakeword. אין אודיו או reference חדש; אין A/B איכות או latency שנמדד.
+
+**תנאי קבלה לפני מכשיר:** הכנה מלאה ושתי פניות באותו מסך, end=complete בכל אחת כולל ניגון; אין crash/freezing/reboot; release לכל שלב לפני phase הבא; אימות receipt בפניות וטעינה בנפרד; RAM/logcat לצורך אבחון. על אותו מקור להשוות stop-to-first-play ו־ASR/LLM/TTS compute מול 0.5, בלי לטעון לזמן zero-load. יעד השלב הוא יציבות ותיקון residency; תגובת מוצר מהירה עדיין לא הושגה.
+
+**בדיקות מארח:** 12 JUnit tests עברו מקומית (4 חדשים ל־receipt: reuse בין תהליכים/ישיבה חדשה, חוזה/replacement, כשל/mutation, session חסר; 3 FileSnapshot ו־5 PlaybackLoop). 3 בדיקות build helper עברו. מקומית אין Android SDK/JDK21 לבניית APK; CI של שתי האפליקציות נדרש ונמצא Pending בעת כתיבת הרשומה. אין בדיקת process lifecycle אמיתית ב־JUnit; היא נדרשת במכשיר. ההנחיות המעודכנות ב־local-voice-conversation.md.
+
+**החלטה:** מועמד לבנייה ובדיקת פיקסל בלבד, לא הצלחה מדודה. לא מתקינים pair מ־CI אם נחתם בשני debug keys שונים; בונים את שתי האפליקציות יחד ב־WSL באותו מפתח ו־install -r, בלי להסיר או להעתיק מודלים.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 

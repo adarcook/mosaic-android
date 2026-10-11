@@ -22,17 +22,17 @@ public final class TtsService extends Service {
         long start=SystemClock.elapsedRealtime(),synthesisMs=0,playMs=0,g2pMs=0,acousticMs=0;long samples=0;Bundle metrics=new Bundle();
         try{
             File root=new File(getExternalFilesDir(null),"blue-voice");boolean reused=voice!=null;
-            long verifyMs=0,loadMs=0;
+            long verifyMs=0,loadMs=0;boolean verificationCached=false;
             if(voice==null){
                 life.mosaic.models.WarmMemory.beforeLoad(this);
                 File[] files=new File[]{new File(root,"manifest.json"),new File(root,"reply.json"),new File(root,"vocab.json"),new File(root,"renikud.onnx"),new File(root,"duration_predictor_style.onnx"),new File(root,"text_encoder.onnx"),new File(root,"vector_estimator.onnx"),new File(root,"vocoder.onnx")};
                 life.mosaic.models.FileSnapshot before=new life.mosaic.models.FileSnapshot(files);
-                send(reply,2,"מאמת חבילת BlueTTS…",null);TtsPack.verify(root);before.requireUnchanged();verifyMs=SystemClock.elapsedRealtime()-start;
+                send(reply,2,"מאמת חבילת BlueTTS…",null);verificationCached=life.mosaic.models.SessionVerification.verify(new File(getFilesDir(),"voice-tts-verification.properties"),request.getString("foreground_session",""),TtsPack.REV+"|"+new java.util.TreeMap<>(TtsPack.PINNED).toString(),files,()->TtsPack.verify(root));before.requireUnchanged();verifyMs=SystemClock.elapsedRealtime()-start;
                 long loadStart=SystemClock.elapsedRealtime();send(reply,2,"טוען קול והכנת הגייה מקומית…",null);voice=new BlueVoice(root);loadMs=SystemClock.elapsedRealtime()-loadStart;before.requireUnchanged();snapshot=before;
             }else snapshot.requireUnchanged();
-            metrics.putBoolean("engine_reused",reused);metrics.putString("verification_mode",reused?"loaded_engine_metadata":"full_sha256");metrics.putLong("verify_ms",verifyMs);metrics.putLong("load_ms",loadMs);
-            if(request.getBoolean("prepare",false)){metrics.putString("verification_mode",reused?"loaded_engine_metadata":"full_sha256");metrics.putBoolean("prepared",true);life.mosaic.models.WarmMemory.add(this,metrics);busy=false;send(reply,4,"מנוע הקול מוכן",metrics);return;}
-            life.mosaic.models.WarmMemory.beforeLoad(this);voice.resetNoise();String normalized=VoiceText.normalize(request.getString("answer",""));List<String> chunks=VoiceText.chunks(normalized);
+            metrics.putBoolean("engine_reused",reused);metrics.putString("verification_mode",reused?"loaded_engine_metadata":verificationCached?"session_receipt_metadata":"full_sha256");metrics.putLong("verify_ms",verifyMs);metrics.putLong("load_ms",loadMs);
+            if(request.getBoolean("prepare",false)){metrics.putString("verification_mode",reused?"loaded_engine_metadata":verificationCached?"session_receipt_metadata":"full_sha256");metrics.putBoolean("prepared",true);life.mosaic.models.WarmMemory.add(this,metrics);busy=false;send(reply,4,"מנוע הקול מוכן",metrics);return;}
+            life.mosaic.models.WarmMemory.beforeInference(this);voice.resetNoise();String normalized=VoiceText.normalize(request.getString("answer",""));List<String> chunks=VoiceText.chunks(normalized);
                 for(int i=0;i<chunks.size();i++){
                     final int chunk=i+1;for(String key:new java.util.ArrayList<>(metrics.keySet()))if(key.startsWith("playback_")||key.equals("chunk_playback_ms"))metrics.remove(key);
                     send(reply,2,"מכין הקראה "+chunk+"/"+chunks.size()+"…",null);long phase=SystemClock.elapsedRealtime();float[] audio=voice.synthesize(chunks.get(i), detail -> send(reply,2,detail+" · "+chunk+"/"+chunks.size(),null));synthesisMs+=SystemClock.elapsedRealtime()-phase;
