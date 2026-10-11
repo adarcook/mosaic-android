@@ -62,8 +62,8 @@ public final class ArchiveGateActivity extends Activity {
             android.net.Uri uri = android.net.Uri.parse("content://life.mosaic.tensorwhisper.archive/" + sessionIds[selected] + ".jsonl");
             Intent intent = new Intent(Intent.ACTION_SEND).setType("application/x-ndjson")
                     .setComponent(new ComponentName("life.mosaic.tensorllm", "life.mosaic.tensorllm.LlmActivity"))
-                    .putExtra(Intent.EXTRA_STREAM, uri).setClipData(ClipData.newRawUri("Mosaic transcript", uri))
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setClipData(ClipData.newRawUri("Mosaic transcript", uri));
             try { startActivity(intent); }
             catch (ActivityNotFoundException error) { status.setText("יש להתקין את Mosaic Local LLM לפי המדריך בריפו"); }
         });
