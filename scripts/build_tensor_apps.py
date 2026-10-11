@@ -78,6 +78,10 @@ def build(root: Path, modules: list[str], env: dict) -> None:
         tasks = ["testDebugUnitTest", "assembleDebug"] if module == "llm" else ["assembleDebug"]
         subprocess.run(["bash", str(root / "gradlew"), "-p", MODULES[module], *tasks],
                        cwd=root, env=env, check=True)
+        if module == "llm":
+            apk = root / MODULES[module] / "build/outputs/apk/debug/MosaicTensorLlm-debug.apk"
+            subprocess.run([sys.executable, str(root / "scripts/verify_tensor_llm_apk.py"), str(apk)],
+                           cwd=root, env=env, check=True)
 
 
 def main() -> int:

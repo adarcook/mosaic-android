@@ -7,15 +7,18 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2-independent-model-source"
+        versionCode = 3
+        versionName = "0.3-g5-dispatch-compatibility"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    packaging { jniLibs.useLegacyPackaging = true }
+    packaging {
+        jniLibs.useLegacyPackaging = true
+        jniLibs.keepDebugSymbols += "**/libLiteRtDispatch_GoogleTensor.so"
+    }
     buildFeatures { buildConfig = true }
     testOptions { unitTests.isReturnDefaultValues = true }
 }

@@ -22,9 +22,9 @@
 | baseline | `6639c00eb2ba2da1e2de35dfdca58e8a34b92773`, PR #34 פתוח |
 | ענף | `experiment/tensor-local-llm` |
 | ASR APK | `life.mosaic.tensorwhisper`, 0.10-independent-model-source |
-| LLM APK | `life.mosaic.tensorllm`, 0.2-independent-model-source |
+| LLM APK | `life.mosaic.tensorllm`, 0.3-g5-dispatch-compatibility |
 | מנוע | `com.google.ai.edge.litertlm:litertlm-android:0.18.0` |
-| Tensor dispatch | LiteRT v2.2.0 public runtime archive; SHA-256 `b4c8380df3e9652677dbb93a5aad4499eb756a9b7d9651a9baacb122faadbf0d` |
+| Tensor dispatch candidate | Gallery 1.0.20 G5 APK member; SHA-256 `1e3ea6dc7ae2d48b95f7147791b18c1de3095165b42470a547909f6e0d72c5ec` |
 | model repo | `litert-community/gemma-4-E2B-it-litert-lm` |
 | revision | `b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1` |
 | model file | `gemma-4-E2B-it_Google_Tensor_G5.litertlm` |
@@ -79,6 +79,20 @@ python3 scripts/prepare_tensor_llm.py --model-dir ~/mosaic-private/llm
 ```
 
 הסקריפט בלי `--model-dir` מכין רק את ספריית ה־dispatch הציבורית (גם ב־CI); משקלים אינם בתוך APK או Git. נדרשים כ־3.1GB פנויים במחשב ובטלפון, נוסף על המודלים הקיימים. קובץ `.part` במחשב מוחלף רק אחרי hash/size תקינים. אם Hugging Face מחזיר 401/403, היכנס לאתר ואשר את תנאי המודל אם נדרש; הסקריפט יכול לקרוא `HF_TOKEN` מהסביבה בלי להדפיס אותו. אין להכניס token לפקודה משותפת/לריפו. אין בקשת הרשמה חדשה ל־Tensor SDK: dispatch ציבורי ומודל מוכן.
+
+## תיקון מועמד אחרי קריסת native בפיקסל — LLM-02
+
+ריצת המכשיר הראשונה קרסה ב־SIGSEGV בתוך dispatch 2.2.0 בזמן יצירת הקשר NPU, לפני תשובה. הוחלפה רק ספריית dispatch לזו שב־[Gallery 1.0.20 ל־Tensor G5](https://github.com/google-ai-edge/gallery/releases/tag/1.0.20). זו בדיקת תאימות מועמדת, לא פתרון מאומת במכשיר. Maven LiteRT-LM 0.18.0 והמודל נשארים קבועים. JNI של Gallery עצמו לא נלקח; זהות native build שלו שונה מזו של Maven, ולכן איננו טוענים שהזוג כולו זהה ל־Gallery.
+
+ה־APK הציבורי (כ־61MB) ו־member dispatch מאומתים בשני hashes מקובעים בסקריפט. רק `.so` מחולץ. הסקריפט משתמש בספרייה מקומית קיימת אם hash נכון; הבנייה בודקת גם את ה־APK הסופי, והאפליקציה מסרבת לאתחל עם hash אחר. אין הורדה חדשה של Gemma ואין צורך לייבא אותו שוב.
+
+```bash
+git pull --ff-only origin experiment/tensor-local-llm
+python3 scripts/build_tensor_apps.py --only llm
+"$ADB" install -r "$(wslpath -w "$(realpath poc/tensor-llm/build/outputs/apk/debug/MosaicTensorLlm-debug.apk)")"
+```
+
+אחרי התקנה, נסה בקשה קטנה שהמידע שלה קיים בטקסט: `דנה אמרה שהפגישה ביום שלישי בשעה 14:30.` ושאלה `מתי הפגישה?`. לאפליקציה אין גישה להודעות שלך; טקסט כמו "יש לי הודעות חדשות" אינו מכיל שמות שולחים. אם initialize שוב נסגר, אסוף logcat ויומן LLM; אין צורך להסיר אפליקציה/משקלים. ה־journal כולל כעת `phase=engine_initialize` לפני הכניסה לקוד native, גם אם לא נשמר end בגלל אות קריסה.
 
 ## בדיקות שבוצעו
 

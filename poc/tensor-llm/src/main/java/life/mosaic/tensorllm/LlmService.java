@@ -40,10 +40,15 @@ public final class LlmService extends Service {
             if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("לא ניתן לשמור תשובה");
             journal = new File(directory, "llm-" + System.currentTimeMillis() + "-" + java.util.UUID.randomUUID() + ".jsonl");
             append(journal, new JSONObject().put("type", "start").put("build", BuildConfig.VERSION_NAME)
-                    .put("runtime", "0.18.0").put("requested_backend", "NPU").put("fallback", false)
+                    .put("runtime", "0.18.0").put("dispatch_source", "gallery-1.0.20-tensor-g5")
+                    .put("dispatch_sha256", ModelSpec.DISPATCH_SHA256).put("requested_backend", "NPU").put("fallback", false)
                     .put("source_sha256", data.getString("source_sha256", "manual"))
                     .put("reviewed_text_sha256", hash(text.getBytes(StandardCharsets.UTF_8)))
                     .put("text", text).put("question", question).put("context_tokens", "model_default").put("max_output_tokens", 512));
+            File dispatch = new File(getApplicationInfo().nativeLibraryDir, "libLiteRtDispatch_GoogleTensor.so");
+            if (!ModelSpec.DISPATCH_SHA256.equals(fileHash(dispatch)))
+                throw new IOException("ספריית Tensor אינה תואמת לגרסת האפליקציה; בנה והתקן עם סקריפט הבנייה המעודכן");
+            android.util.Log.i("MosaicLocalLlm", "dispatch verified: Gallery 1.0.20 G5; engine=0.18.0");
             File model = new File(getExternalFilesDir(null), ModelSpec.FILE);
             if (model.length() != ModelSpec.BYTES) throw new IOException("קובץ Gemma 4 G5 חסר או בגודל לא תקין; העבר את המודל לפי המדריך");
             send(reply, 2, "מאמת את המודל המקומי…", 0);
@@ -60,6 +65,9 @@ public final class LlmService extends Service {
             long loadStart = SystemClock.elapsedRealtime();
             engine = new Engine(new EngineConfig(model.getAbsolutePath(), new Backend.NPU(getApplicationInfo().nativeLibraryDir),
                     null, null, null, null, getCacheDir().getAbsolutePath()));
+            append(journal, new JSONObject().put("type", "phase").put("phase", "engine_initialize")
+                    .put("at_ms", System.currentTimeMillis()));
+            android.util.Log.i("MosaicLocalLlm", "phase=engine_initialize backend=NPU");
             engine.initialize();
             long loadMs = SystemClock.elapsedRealtime() - loadStart;
             append(journal, new JSONObject().put("type", "loaded").put("load_ms", loadMs));
@@ -108,6 +116,14 @@ public final class LlmService extends Service {
             if (conversation != null) try { conversation.close(); } catch (Throwable ignored) { }
             if (engine != null && engine.isInitialized()) try { engine.close(); } catch (Throwable ignored) { }
         }
+    }
+    private static String fileHash(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[1024 * 1024]; int n;
+            while ((n = input.read(buffer)) != -1) digest.update(buffer, 0, n);
+        }
+        return TranscriptSource.hex(digest.digest());
     }
     private static String hash(byte[] bytes) throws Exception { return TranscriptSource.hex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
     private static void append(File file, JSONObject event) throws Exception {

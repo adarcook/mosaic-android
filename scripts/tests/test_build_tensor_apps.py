@@ -44,8 +44,9 @@ class HostBuildTest(unittest.TestCase):
         with patch.object(builder.subprocess, "run") as run:
             builder.build(self.root, ["whisper", "llm"], {"ANDROID_HOME": "/sdk"})
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertEqual(len(commands), 4)
+        self.assertEqual(len(commands), 5)
         self.assertTrue(any("testDebugUnitTest" in command for command in commands))
+        self.assertTrue(any(any("verify_tensor_llm_apk.py" in arg for arg in command) for command in commands))
         self.assertFalse(any("--model-dir" in command for command in commands))
         self.assertEqual(model.read_bytes(), b"existing private weights")
 

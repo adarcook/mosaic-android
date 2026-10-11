@@ -9,9 +9,10 @@ from pathlib import Path
 import urllib.request
 from zipfile import ZipFile
 
-RUNTIME_URL = "https://github.com/google-ai-edge/LiteRT/releases/download/v2.2.0/litert_npu_runtime_libraries.zip"
-RUNTIME_SHA256 = "b4c8380df3e9652677dbb93a5aad4499eb756a9b7d9651a9baacb122faadbf0d"
-MEMBER = "google_tensor_runtime/src/main/jni/arm64-v8a/libLiteRtDispatch_GoogleTensor.so"
+RUNTIME_URL = "https://github.com/google-ai-edge/gallery/releases/download/1.0.20/ai-edge-gallery-tensor-g5.apk"
+RUNTIME_SHA256 = "c84e08213c31374e001c3079c5f5fb93bd1b9b7d329d4aa2d04a30fcf13dc59b"
+DISPATCH_SHA256 = "1e3ea6dc7ae2d48b95f7147791b18c1de3095165b42470a547909f6e0d72c5ec"
+MEMBER = "lib/arm64-v8a/libLiteRtDispatch_GoogleTensor.so"
 MODEL_REPO = "litert-community/gemma-4-E2B-it-litert-lm"
 MODEL_REVISION = "b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1"
 MODEL_FILE = "gemma-4-E2B-it_Google_Tensor_G5.litertlm"
@@ -32,15 +33,23 @@ def main() -> None:
     parser.add_argument("--module", type=Path, default=Path("poc/tensor-llm"))
     parser.add_argument("--model-dir", type=Path, help="Optional private destination for the 3.1 GB model")
     args = parser.parse_args()
-    data = urllib.request.urlopen(RUNTIME_URL, timeout=90).read()
-    if hashlib.sha256(data).hexdigest() != RUNTIME_SHA256:
-        raise RuntimeError("Dispatch archive SHA-256 mismatch")
-    with ZipFile(io.BytesIO(data)) as archive:
-        library = archive.read(MEMBER)
     destination = args.module / "src/main/jniLibs/arm64-v8a/libLiteRtDispatch_GoogleTensor.so"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(library)
-    print(f"Prepared Tensor dispatch 2.2.0: {destination}")
+    if destination.is_file() and file_hash(destination) == DISPATCH_SHA256:
+        print(f"Tensor dispatch already verified (Gallery 1.0.20 G5): {destination}")
+    else:
+        # Extract only dispatch, never Gallery's JNI, app code, signing key or models.
+        data = urllib.request.urlopen(RUNTIME_URL, timeout=90).read()
+        if hashlib.sha256(data).hexdigest() != RUNTIME_SHA256:
+            raise RuntimeError("Gallery runtime source archive SHA-256 mismatch")
+        with ZipFile(io.BytesIO(data)) as archive:
+            library = archive.read(MEMBER)
+        if hashlib.sha256(library).hexdigest() != DISPATCH_SHA256:
+            raise RuntimeError("Google Tensor dispatch SHA-256 mismatch")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary_library = destination.with_suffix(".so.part")
+        temporary_library.write_bytes(library)
+        temporary_library.replace(destination)
+        print(f"Prepared Tensor dispatch from Gallery 1.0.20 G5: {destination}")
     if args.model_dir is None:
         return
     args.model_dir.mkdir(parents=True, exist_ok=True)
