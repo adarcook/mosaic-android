@@ -35,7 +35,9 @@
 
 אין export/AOT חדש אצלנו: משתמשים בקובץ G5 שהופץ על ידי LiteRT Community. הקובץ הגנרי או GPU, ומודל ל־G6, אינם תחליף. ABI/runtime/model compatibility של השילוב המקובע עדיין נבחנת בפיקסל. מנוע Whisper ו־dispatch שלו נשארים ב־2.1.6 באפליקציה המקורית.
 
-## בנייה והתקנה ב־WSL
+## בנייה והתקנה ב־WSL ובמק
+
+המדריך המשותף לבנייה, הפרדת מודלים והעברת מפתח חתימה: [בניית APK בלי הורדת מודלים](tensor-apk-build.md).
 
 השתמש באותו signing key של APK ה־ASR הקודם. אין להסיר אותו.
 
@@ -53,10 +55,7 @@ java -version
 cd ~/git-workspaces/mosaic-android
 git fetch origin
 git switch experiment/tensor-local-llm
-python3 scripts/prepare_tensor_whisper_runtime.py
-python3 scripts/prepare_tensor_llm.py --model-dir ~/mosaic-private/llm
-./gradlew -p poc/tensor-whisper assembleDebug
-./gradlew -p poc/tensor-llm testDebugUnitTest assembleDebug
+python3 scripts/build_tensor_apps.py
 
 ADB=/mnt/c/Users/orele/AppData/Local/Android/Sdk/platform-tools/adb.exe
 "$ADB" install -r "$(wslpath -w "$(realpath poc/tensor-whisper/build/outputs/apk/debug/MosaicTensorWhisperGate-debug.apk)")"
@@ -64,7 +63,13 @@ ADB=/mnt/c/Users/orele/AppData/Local/Android/Sdk/platform-tools/adb.exe
 "$ADB" shell am start -n life.mosaic.tensorllm/.LlmActivity
 ```
 
-אחרי שהאפליקציה החדשה נפתחה פעם אחת (כדי ליצור את תיקיית המודל):
+רק בפעם הראשונה, אם המודל עדיין לא קיים במחשב/בפיקסל, הורד בנפרד (אינו חלק מהבנייה):
+
+```bash
+python3 scripts/prepare_tensor_llm.py --model-dir ~/mosaic-private/llm
+```
+
+אחרי שהאפליקציה החדשה נפתחה פעם אחת (כדי ליצור את תיקיית המודל), העבר פעם אחת לפיקסל:
 
 ```bash
 "$ADB" push "$(wslpath -w "$(realpath ~/mosaic-private/llm/gemma-4-E2B-it_Google_Tensor_G5.litertlm)")" \
