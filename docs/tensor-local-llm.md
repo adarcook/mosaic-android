@@ -39,6 +39,16 @@
 
 השתמש באותו signing key של APK ה־ASR הקודם. אין להסיר אותו.
 
+LiteRT-LM 0.18.0 פורסם עם class-file Java 21. לפני בניית LLM נדרש JDK 21 (גם כאשר source/target של קוד האפליקציה נשארים 17). ב־Ubuntu/WSL אפשר להתקין ולבחור אותו:
+
+```bash
+sudo apt-get update
+sudo apt-get install openjdk-21-jdk
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
+```
+
 ```bash
 cd ~/git-workspaces/mosaic-android
 git fetch origin

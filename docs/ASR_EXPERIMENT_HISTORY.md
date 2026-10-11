@@ -299,6 +299,8 @@ Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק 
 
 **הגדרות:** NPU ללא CPU/GPU fallback, text only, context לפי metadata; max output 512 tokens, thinking/speculation off, topK20/topP0.9/temperature0.2/seed0. תמליל 12,000 ושאלה 2,000 תווים לכל היותר (לא הבטחה להתאמה ל־token context), בלי truncation שקט. worker disposable ו־terminal לפני cleanup. כל שאלה מתחילה conversation חדש; journals נשמרים אך אין חיפוש/זיכרון בין שאלות במודל.
 
+**Validation host:** ארבע בדיקות import עברו מקומית; שני יומני ASR-18 הפרטיים נטענו עם hashes מדויקים; ארבע בדיקות comparison קיימות עברו, Python syntax ו־dispatch SHA עברו. בניית Gradle מקומית נחסמה בהורדת distribution ברשת הסביבה. CI הראשון ב־[run 38121491159](https://github.com/adarcook/mosaic-android/actions/runs/38121491159) נכשל כי LiteRT-LM 0.18.0 כולל bytecode Java 21 (65) מול javac17 (61); זו דרישת toolchain, לא כשל TPU במכשיר. ה־LLM CI והוראות ההקמה הועברו ל־JDK21. candidate initial commit `f0d404ea3958a202a1940a6132cdb357bfb31275`, [PR #35](https://github.com/adarcook/mosaic-android/pull/35).
+
 **קבלה:** APK/tests passing; ידנית תמליל עברי קטן, שמות/מספרים/שלילות, שאלה קיימת וחסרה; NPU dispatch/init בלוג, מדדי latency/memory אמיתיים; import של מקור ASR-18 קבוע עם source hash; יציאה/timeout בלי פגיעה במקור. host/CI/בדיקת מכשיר מתועדים בנפרד. המודל לא נטען במכשיר בשלב כתיבת הרשומה; compile/runtime compatibility ו־TPU execution pending. אין טענת איכות/מהירות חדשה או roadmap completion.
 
 **החלטה ו־rollback:** מועמד ניסוי בלבד; שימור שלב 9 בלי handoff או baseline 6639c00 עם אותו signing key. אין שינויים ב־Room/Firebase/Core, wake word, TTS או הרשאות WhatsApp/SMS. לא מבוצעות פעולות מתוך התמליל. [מדריך הקמה ובדיקת Pixel](tensor-local-llm.md) מפרט שתי התקנות, model push ושימור לוגים פרטיים.
