@@ -26,7 +26,8 @@ public final class TtsService extends Service {
             try(BlueVoice voice=new BlueVoice(root)){
                 long loadMs=SystemClock.elapsedRealtime()-loadStart;
                 for(int i=0;i<chunks.size();i++){
-                    send(reply,2,"מכין הקראה "+(i+1)+"/"+chunks.size()+"…",null);long phase=SystemClock.elapsedRealtime();float[] audio=voice.synthesize(chunks.get(i));synthesisMs+=SystemClock.elapsedRealtime()-phase;
+                    final int chunk=i+1;
+                    send(reply,2,"מכין הקראה "+chunk+"/"+chunks.size()+"…",null);long phase=SystemClock.elapsedRealtime();float[] audio=voice.synthesize(chunks.get(i), detail -> send(reply,2,detail+" · "+chunk+"/"+chunks.size(),null));synthesisMs+=SystemClock.elapsedRealtime()-phase;
                     g2pMs+=voice.lastG2pMs;acousticMs+=voice.lastAcousticMs;
                     send(reply,2,"מקריא "+(i+1)+"/"+chunks.size()+"…",null);phase=SystemClock.elapsedRealtime();play(audio,voice.rate);playMs+=SystemClock.elapsedRealtime()-phase;samples+=audio.length;
                 }

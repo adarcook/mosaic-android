@@ -3,6 +3,7 @@ android {
     namespace = "life.mosaic.tensorllm"
     compileSdk = 35
     sourceSets.getByName("main").java.srcDir("../model-storage/src/main/java")
+    sourceSets.getByName("main").assets.srcDir("../../scripts/voice_metadata")
     defaultConfig {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31

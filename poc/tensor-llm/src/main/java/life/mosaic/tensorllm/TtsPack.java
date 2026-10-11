@@ -18,6 +18,7 @@ final class TtsPack {
     static JSONObject manifest(InputStream input)throws Exception {
         byte[] bytes=input.readNBytes(65537);if(bytes.length>65536)throw new IOException("TTS manifest too large");
         JSONObject manifest=new JSONObject(new String(bytes,java.nio.charset.StandardCharsets.UTF_8));
+        if(manifest.getInt("format")!=1 || !"468da64b4a51795a7594a3637727dbaf876b6df2".equals(manifest.getString("blue_revision")) || !"libri_male_6209".equals(manifest.getString("voice")))throw new IOException("Unsupported BlueTTS pack contract");
         if(!REV.equals(manifest.getString("renikud_revision")))throw new IOException("Unsupported Renikud revision");
         JSONObject files=manifest.getJSONObject("files");
         if(files.length()!=7)throw new IOException("Expected seven TTS files");

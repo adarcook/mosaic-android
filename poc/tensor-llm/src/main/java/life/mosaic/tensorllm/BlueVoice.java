@@ -44,9 +44,14 @@ final class BlueVoice implements AutoCloseable {
         }finally{for(OnnxTensor t:tensors.values())t.close();}
     }
     float[] synthesize(String text)throws Exception {
+        return synthesize(text, phase -> {});
+    }
+    float[] synthesize(String text,java.util.function.Consumer<String> progress)throws Exception {
+        progress.accept("הכנת הגייה — RenikudPlus על CPU");
         long start=System.nanoTime();
         String ipa=java.text.Normalizer.normalize(frontend.phonemize(text),java.text.Normalizer.Form.NFKD).replaceAll("\\s+"," ").trim();
         lastG2pMs=(System.nanoTime()-start)/1000000;long acousticStart=System.nanoTime();
+        progress.accept("יצירת קול — BlueTTS על CPU");
         if(!ipa.matches(".*[.!?;:,]$"))ipa+=".";
         int[] points=ipa.codePoints().toArray();if(points.length<1||points.length>500)throw new IOException("Invalid phoneme length");
         long[] ids=new long[points.length];for(int i=0;i<ids.length;i++){

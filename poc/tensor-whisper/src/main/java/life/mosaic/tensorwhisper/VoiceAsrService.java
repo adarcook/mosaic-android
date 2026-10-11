@@ -44,7 +44,7 @@ public final class VoiceAsrService extends Service {
             try (WarmHybridEngine engine = new WarmHybridEngine(getExternalFilesDir(null), getApplicationInfo().nativeLibraryDir)) {
                 load = engine.loadMs;
                 send(reply, 2, "מתמלל בעברית…", null);
-                result = engine.transcribe(audio, 5);
+                result = engine.transcribe(audio, 5, phase -> send(reply, 2, phase, null));
             } // Release ASR before signalling that LLM may start.
             if (result.text.isBlank()) throw new IllegalStateException("לא התקבל תמלול");
             Bundle data = new Bundle(); data.putString("transcript", result.text);

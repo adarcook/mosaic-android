@@ -56,22 +56,29 @@ final class WarmHybridEngine implements AutoCloseable {
     }
 
     Result transcribe(float[] pcm, int beamSize) throws Exception {
+        return transcribe(pcm, beamSize, phase -> {});
+    }
+    Result transcribe(float[] pcm, int beamSize, java.util.function.Consumer<String> progress) throws Exception {
         Result result = new Result();
+        progress.accept("הכנת קלט mel על CPU");
         long start = SystemClock.elapsedRealtime(), phase = start;
         float[] mel = WhisperNative.INSTANCE.prepareEncoderInput(handle, pcm);
         result.melMs = SystemClock.elapsedRealtime() - phase;
+        progress.accept("encoder על TPU");
         phase = SystemClock.elapsedRealtime();
         encoderIn.get(0).writeFloat(mel);
         encoder.run(encoderIn, encoderOut, 0);
         float[] encoded = encoderOut.get(0).readFloat();
         if (encoded.length != 1500 * 1280) throw new IllegalStateException("Encoder output shape");
         result.encoderMs = SystemClock.elapsedRealtime() - phase;
+        progress.accept("cross-attention על TPU");
         phase = SystemClock.elapsedRealtime();
         crossIn.get(0).writeFloat(encoded);
         cross.run(crossIn, crossOut, 0);
         float[] cache = crossOut.get(0).readFloat();
         if (cache.length != 4 * 2 * 1500 * 1280) throw new IllegalStateException("Cross output shape");
         result.crossMs = SystemClock.elapsedRealtime() - phase;
+        progress.accept("decoder Beam " + beamSize + " על CPU");
         phase = SystemClock.elapsedRealtime();
         result.text = WhisperNative.INSTANCE.transcribeEncodedCrossBeam(handle, encoded, cache, beamSize, 60).trim();
         result.decodeMs = SystemClock.elapsedRealtime() - phase;
