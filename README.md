@@ -71,3 +71,5 @@ Start with the [Hebrew explanation and experiment history](docs/ASR_EXPERIMENT_H
 For each new experiment or later device result, update the history using the [record template](docs/ASR_EXPERIMENT_TEMPLATE.md) and follow [AGENTS.md](AGENTS.md).
 
 The [ASR-18 audio archive trial](docs/ivrit-whisper-audio-archive.md) adds durable local recording and resumable post-recording transcription. Device validation is pending; it is not background or realtime transcription support.
+
+The [local TPU LLM trial](docs/tensor-local-llm.md) connects completed ASR archives to a separate Gemma 4 E2B / Tensor G5 companion APK for local summaries and questions. Device acceleration and Hebrew quality remain pending.

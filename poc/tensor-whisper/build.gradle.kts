@@ -7,8 +7,8 @@ android {
         applicationId = "life.mosaic.tensorwhisper"
         minSdk = 31
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8-durable-audio-archive"
+        versionCode = 9
+        versionName = "0.9-local-llm-handoff"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

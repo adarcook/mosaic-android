@@ -1,6 +1,6 @@
 # תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
 
-עודכן: 9 באוקטובר 2026. נקודת הקוד המתועדת: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+עודכן: 11 באוקטובר 2026. נקודת הקוד המתועדת: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
 
 נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול. התקבל דיווח מכשיר ראשון על סיום מלא, ואומתו PCM ו־JSONL עם כיסוי מלא. נבדקה גם יציאה אחרי מקטע אחד והמשך מוצלח בלי gap או duplicate; שאר תרחישי הכשל עדיין Pending.
 
@@ -286,6 +286,22 @@ Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק 
 **timing:** compute של חמשת המקטעים שנשמרו מסתכם ב־45,888 ms; RTF=1.001921. Stop עד end: 67,225 ms, **כולל היציאה/שהות עד Resume**. load_ms לפני/אחרי היציאה: 1,690 / 1,611; model verification intervals: 3,366 / 2,691 ms. הזמן שכבר הושקע בניסיון index=1 שנקטע אינו נרשם כ־compute_ms של מקטע שמור, ולכן ה־RTF אינו העלות הכוללת של recovery. אין timestamp יציאה שמאפשר לכמת בנפרד את החישוב שנזרק. native_timings אינו total כמפורט לעיל.
 
 **החלטה:** בדיקת ההתאוששות המסוימת הזאת **עברה**: prefix שמור נשמר, החלון שלא הושלם חושב מחדש, ושאר הקובץ הושלם בלי duplicate/gap ביומן. לא נבדקו כאן הפסקת חשמל, פגיעה בקובץ, שינוי מודלים, קטיעה בזמן capture או שיחה ארוכה; אין להרחיב הצלחה זו לכל מקרי הכשל. דיוק מול אודיו ו־sustained realtime עדיין לא מאושרים. הבא: replay בנפרד של מקור PCM קבוע לצורך השוואת Beam/דיוק, ואז שימוש בתמליל המאושר לסיכום ושאלות LLM; שכבות אלה טרם מומשו.
+
+### ASR-19 / LLM-01 — חיבור תמליל ל־Gemma 4 על Tensor G5, 11.10.2026
+
+**אישור ומטרה:** המשתמש ביקש לחבר כעת LLM מקומי חזק שגם רץ על TPU. המועמד הראשון הוא Gemma 4 E2B IT בקובץ AOT ייעודי ל־G5; לא הוגדר כפתרון סופי ולא נבדקה עדיין איכות עברית. baseline `6639c00eb2ba2da1e2de35dfdca58e8a34b92773` (PR #34, לא main); candidate בענף `experiment/tensor-local-llm`. מדריך: [tensor-local-llm.md](tensor-local-llm.md).
+
+**Hypothesis:** LiteRT-LM עם model G5 ו־Backend.NPU מפורש יאפשר סיכום ושאלות על תמליל שמור בטלפון, בלי להעביר נתונים לשרת ובלי צורך בייצוא מודל חדש. בידוד ב־companion APK מונע התנגשות עם LiteRT 2.1.6 של Whisper. האצת רשת דורשת אישור device logs; CPU עדיין מבצע tokenization/orchestration/sampling.
+
+**שינוי:** ASR 0.9 מוסיף handoff של journal אחד לקריאה בלבד. APK נפרד life.mosaic.tensorllm בודק start v3 archive, indices/offsets רציפים ו־end complete, מציג raw segment text לבדיקת המשתמש, ומבצע סיכום או שאלה בלחיצה. תוצאות נשמרות מקומית עם source/reviewed-text/model hashes ומדדי verify/load/generate/first-text-chunk/PSS/thermal. אין הרשאת רשת, כלי פעולה או גישה להודעות. מערכת ה־ASR, משקלי Whisper ו־Beam נשארים קבועים; אין מבחן speedup ל־ASR בניסוי זה.
+
+**זהויות:** LiteRT-LM Android 0.18.0; dispatch public LiteRT 2.2.0 archive SHA `b4c8380df3e9652677dbb93a5aad4499eb756a9b7d9651a9baacb122faadbf0d`. Model repo litert-community/gemma-4-E2B-it-litert-lm, revision `b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1`, file gemma-4-E2B-it_Google_Tensor_G5.litertlm, 3,113,545,589 bytes; SHA `af1082986639ecde7db95d91be6fe54f8b6b458104734c5bafc204e69d6852dc` מתוך public LFS metadata, טרם חושב מקומית על המשקלים. הסקריפט והמכשיר דורשים hash זה אחרי הורדה/לפני טעינה. אין מודל בינארי בריפו.
+
+**הגדרות:** NPU ללא CPU/GPU fallback, text only, context לפי metadata; max output 512 tokens, thinking/speculation off, topK20/topP0.9/temperature0.2/seed0. תמליל 12,000 ושאלה 2,000 תווים לכל היותר (לא הבטחה להתאמה ל־token context), בלי truncation שקט. worker disposable ו־terminal לפני cleanup. כל שאלה מתחילה conversation חדש; journals נשמרים אך אין חיפוש/זיכרון בין שאלות במודל.
+
+**קבלה:** APK/tests passing; ידנית תמליל עברי קטן, שמות/מספרים/שלילות, שאלה קיימת וחסרה; NPU dispatch/init בלוג, מדדי latency/memory אמיתיים; import של מקור ASR-18 קבוע עם source hash; יציאה/timeout בלי פגיעה במקור. host/CI/בדיקת מכשיר מתועדים בנפרד. המודל לא נטען במכשיר בשלב כתיבת הרשומה; compile/runtime compatibility ו־TPU execution pending. אין טענת איכות/מהירות חדשה או roadmap completion.
+
+**החלטה ו־rollback:** מועמד ניסוי בלבד; שימור שלב 9 בלי handoff או baseline 6639c00 עם אותו signing key. אין שינויים ב־Room/Firebase/Core, wake word, TTS או הרשאות WhatsApp/SMS. לא מבוצעות פעולות מתוך התמליל. [מדריך הקמה ובדיקת Pixel](tensor-local-llm.md) מפרט שתי התקנות, model push ושימור לוגים פרטיים.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 

@@ -9,6 +9,7 @@ on:
       - "experiment/ivrit-continuous-asr-gate"
       - "experiment/ivrit-decoder-throughput"
       - "experiment/ivrit-durable-audio-recovery"
+      - "experiment/tensor-local-llm"
   pull_request:
     paths:
       - "poc/tensor-whisper/**"
