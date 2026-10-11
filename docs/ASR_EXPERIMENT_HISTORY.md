@@ -493,7 +493,7 @@ ASR preparation הושלמה אחרי 4,939ms (verify2,495ms, load2,271ms), PSS6
 
 ### ASR-26 / VOICE-05 — הודעת מות Binder במקום polling, 11.10.2026
 
-**השערה:** הרשמת linkToDeath לפני בקשת shutdown תמנע פספוס של תהליך שכבר נסגר ולא תחייב polling של mAlive. baseline `2fb29569d1966ce41a8e52d9589067c22bde9f2f` (ASR-25/LLM0.7); תיעוד אחרון `b44e5a9fa7a8d931da2176e244a2ca5ee6981fd2`. candidate באותו PR #35: LLM `0.8-worker-death` (versionCode8); ASR companion נשאר `0.13-sequential-companion`, ללא שינוי קוד/משקלים ב־ASR. commit ו־CI יתווספו אחרי פרסום. main ללא שינוי, PR פתוח ולא ממוזג; אין APK SHA או תוצאת מכשיר למועמד.
+**השערה:** הרשמת linkToDeath לפני בקשת shutdown תמנע פספוס של תהליך שכבר נסגר ולא תחייב polling של mAlive. baseline `2fb29569d1966ce41a8e52d9589067c22bde9f2f` (ASR-25/LLM0.7); תיעוד אחרון `b44e5a9fa7a8d931da2176e244a2ca5ee6981fd2`. candidate באותו PR #35: LLM `0.8-worker-death` (versionCode8); ASR companion נשאר `0.13-sequential-companion`, ללא שינוי קוד/משקלים ב־ASR. קוד המועמד `d6962a29610f0c3da63b3036338bdb2f7e8a0086`. main ללא שינוי, PR פתוח ולא ממוזג; אין APK SHA או תוצאת מכשיר למועמד.
 
 **שינוי יחיד פונקציונלי:** WorkerRelease נרשם להודעת death לפני שליחת Message9. callback מועבר ל־main Handler ומשלים את המעבר פעם אחת בלבד; RemoteException בהרשמה (תהליך שכבר מת) הוא מסלול complete מפורש. cancel/timeout מסירים observer ו־timeout; death מאוחר/כפול אינו ממשיך ישיבה שבוטלה. שגיאת שליחת stop מתועדת ואינה מתירה מעבר בלי death. שגיאת registration אחרת עוצרת את הרצף אחרי ניסיון stop/unbind. timeout נשאר8s, ספי RAM והחלפת מנועים נשארים כמו ASR-25; אין bypass או הארכת timeout.
 
@@ -502,6 +502,8 @@ ASR preparation הושלמה אחרי 4,939ms (verify2,495ms, load2,271ms), PSS6
 **בקרות ו־acceptance:** המודלים, hashes, CPU/NPU backends, Beam5/2threads, prompt, TTS וכל הגדרות ASR-25 ללא שינוי. acceptance: הכנה מלאה, death_evidence ו־release לפני כל phase הבא, שתי פניות עם ניגון שלם באותו מסך; אין קריסה/קיפאון/אתחול/שלב כפול. receipt verification ו־load נמדדים בנפרד; אין יעד latency מוכח בניסוי lifecycle הזה. אין אודיו/reference חדש או השוואת איכות. rollback קוד waiter ל־0.7 משחזר את כשל ההמתנה שנמדד; baseline קול פונקציונלי נשאר ASR-23 `91227b76e070eb6fbca8ca86fbe92ceaaf248687` עם latency לא שימושי.
 
 **בדיקות:** 19 JUnit tests עברו מקומית: 7 חדשים עם endpoint/queue מדומים (הרשמה לפני stop, תהליך שכבר מת, timeout ו־death מאוחר, ביטול, שגיאת send, notification כפול, שגיאת registration) +12 tests הקיימים. הם מאמתים סדר ועיבוד callback בדיוק פעם אחת, **לא** Binder Android/הריגת תהליך אמיתיים; CI APK ובדיקת פיקסל עדיין Pending בעת כתיבה. מקומית אין SDK/JDK21 לבניית APK. מצב המועמד: נדרש build ואז device validation, לא הצלחה מדודה.
+
+**CI ASR-26:** קוד `d6962a29610f0c3da63b3036338bdb2f7e8a0086` עבר [LLM run38154933325](https://github.com/adarcook/mosaic-android/actions/runs/38154933325), job114515851259: testDebugUnitTest ו־assembleDebug, dispatch SHA מאומת וזהה למועמד הקודם. ZIP artifact digest=`f0ed17810802e13885e6791597ad01c774b454e0a25ec9ea81dc7e46c0d7e8a4` (ZIP, לא APK SHA). [ASR run38154933296](https://github.com/adarcook/mosaic-android/actions/runs/38154933296) עבר גם הוא, למרות שקוד companion לא השתנה. legacy probe run38154933260 נכשל; main Android Build עדיין רץ בעת בדיקה זו, ואין לטעון שכל workflows עברו. אין תוצאת פיקסל/הכנה/קול/latency ב־0.8. APK SHA מקומי ו־CI לא נמדדו; המועמד מאושר רק להתקנה כ־device experiment. journal הבא צריך להוכיח release_end עם death_evidence לפני התחלת השלב הבא, והכנה מלאה ושתי פניות.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 
