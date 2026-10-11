@@ -77,7 +77,7 @@ python3 scripts/build_tensor_apps.py
 
 בדיקות host בודקות SHA, גודל, קלט קצר/גדול/פגום, ביטול, כשל מקור וחזרה לייבוא, תוך שימור עותק תקין. שתי הבניות והבדיקות עברו על code commit `582a6496d7df195e271b6cac603145939469613e`: [LLM APK](https://github.com/adarcook/mosaic-android/actions/runs/38124356245), [ASR APK](https://github.com/adarcook/mosaic-android/actions/runs/38124356274). קובצי ה־APK נמצאים ב־Artifacts של הריצות האלה. נבדקה גם סימולציית סקריפט ההעברה לשימור מקור/יעד בכשל; לא בוצעה העברה למכשיר בפועל. בדיקת מכשיר נדרשת ל־SAF, מקום פנוי, ייבוא, טעינת TPU ושימור המקור לאחר הסרה; CI אינו מחליף זאת.
 
-בדוק ייבוא וטעינה עם גרסאות `0.10-independent-model-source` (ASR) ו־`0.2-independent-model-source` (LLM) תחילה בלי להסיר. בדיקת התקנה מחדש אפשר לבצע ב־LLM אחרי גיבוי יומנים פרטיים; לא נדרש להסתכן בארכיון ASR כדי לבדוק את העיקרון.
+בדוק ייבוא וטעינה עם גרסאות `0.10-independent-model-source` (ASR) ו־`0.3-g5-dispatch-compatibility` (LLM; ראה [ניסוי ASR-21 / LLM-02](ASR_EXPERIMENT_HISTORY.md#asr-21--llm-02--קריסת-dispatch-בטעינת-gemma-ותיקון-תאימות-מועמד-11102026)) תחילה בלי להסיר. בדיקת התקנה מחדש אפשר לבצע ב־LLM אחרי גיבוי יומנים פרטיים; לא נדרש להסתכן בארכיון ASR כדי לבדוק את העיקרון.
 
 Rollback: המשך טעינה מקובצי העבודה הקיימים בגרסה הקודמת. אין שינוי במשקלים, גרפי TPU, Beam או תמלול. המקור ב־Documents נשאר גם ב־rollback.
 
