@@ -2,7 +2,7 @@
 
 ניסוי **ASR-22 / VOICE-01**, מעל ASR-21 / LLM-02. מסך הפתיחה של אפליקציית LLM הוא כעת מסך שיחה: לחיצה על **דבר עם מוזאיק**, הקלטה עד 12 שניות, **סיום משפט**, תמלול → תשובת Gemma → הכנת הגייה והקראה ב־BlueTTS. כל שלב מציג מצב, מחוון עבודה, זמן ותוצאה. המסלול של פתיחת תמליל שמור וסיכום/שאלה עליו נשאר בכפתור נפרד.
 
-הקוד מחובר; בדיקת שרשרת מלאה במכשיר עדיין Pending. בפרט, החלפת dispatch בניסוי הקודם נבנתה אך עדיין לא הוכחה בפיקסל אחרי ה־SIGSEGV. אין טענה שה־LLM כבר נטען או שהקול החדש נשמע כמו בדיקת הקול הקבועה.
+הקוד מחובר. שתי הבניות והבדיקות עברו על `4493d2fbe352efa50c327fc46712e13b44185319`: [שיחה/LLM](https://github.com/adarcook/mosaic-android/actions/runs/38128699000), [ASR companion](https://github.com/adarcook/mosaic-android/actions/runs/38128698944). בדיקת שרשרת מלאה במכשיר עדיין Pending. בפרט, החלפת dispatch בניסוי הקודם נבנתה אך עדיין לא הוכחה בפיקסל אחרי ה־SIGSEGV. אין טענה שה־LLM כבר נטען או שהקול החדש נשמע כמו בדיקת הקול הקבועה.
 
 ## מה רץ ואיפה
 
@@ -39,8 +39,9 @@ python3 scripts/prepare_blue_voice_pack.py --existing-pack ~/mosaic-private/blue
 אם חסר Renikud cache, הסקריפט נעצר לפני ההכנה ואומר מה חסר. אפשר להעביר `--renikud /path/to/cached/model.onnx`, למשל מה־cache הקיים ב־Windows. אם המודל לא ירד בעבר, להכנה חד־פעמית:
 
 ```bash
-python3 -m pip install huggingface-hub
-python3 scripts/prepare_blue_voice_pack.py --existing-pack ~/mosaic-private/blue-existing --download-g2p
+python3 -m venv ~/mosaic-private/voice-pack-venv
+~/mosaic-private/voice-pack-venv/bin/python -m pip install huggingface-hub
+~/mosaic-private/voice-pack-venv/bin/python scripts/prepare_blue_voice_pack.py --existing-pack ~/mosaic-private/blue-existing --download-g2p
 ```
 
 הפלט הוא חבילה שטוחה עם שבעה קבצים ו־manifest ב־`~/mosaic-private/blue-voice-pack`. אין שינוי במקורות. SHA/גודל של חמשת גרפי המודל ושל vocab ננעלו; style fixture הקיים מקבל זהות SHA בחבילת ההכנה. העברה למקור העצמאי בפיקסל:
