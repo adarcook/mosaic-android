@@ -43,6 +43,7 @@ final class BlueVoice implements AutoCloseable {
             try(OrtSession.Result result=session.run(tensors)){OnnxTensor t=(OnnxTensor)result.get(0);FloatBuffer b=t.getFloatBuffer();float[] a=new float[b.remaining()];b.get(a);return new Tensor(a,((TensorInfo)t.getInfo()).getShape());}
         }finally{for(OnnxTensor t:tensors.values())t.close();}
     }
+    void resetNoise(){random.setSeed(123);}
     float[] synthesize(String text)throws Exception {
         return synthesize(text, phase -> {});
     }

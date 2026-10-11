@@ -1,6 +1,6 @@
 # תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
 
-עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-23; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-24; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
 
 נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול. התקבל דיווח מכשיר ראשון על סיום מלא, ואומתו PCM ו־JSONL עם כיסוי מלא. נבדקה גם יציאה אחרי מקטע אחד והמשך מוצלח בלי gap או duplicate; שאר תרחישי הכשל עדיין Pending.
 
@@ -390,6 +390,44 @@ Baseline ו־rollback: `ea305d5968f4fab5d66f5a5b0eda7ba53e7aaa97`, PR #35 פתו
 **בדיקות host:** 5 בדיקות JUnit עברו: מקטע קצר מבאפר של שנייה עם partial writes, מקטע זעיר, zero writes עם timeout מוגבל, threshold שאינו יכול להתחיל וכשל write. אלה בדיקות transport מדומה, לא Android AudioTrack/BlueTTS. Android CI של commit `91227b76e070eb6fbca8ca86fbe92ceaaf248687` עבר: [LLM gate 38136101398](https://github.com/adarcook/mosaic-android/actions/runs/38136101398), job 114460167566. עברו testDebugUnitTest, assembleDebug, אימות dispatch ב־APK והעלאת artifact. ZIP digest (אינו SHA APK): `554c2e3541d1a927e1e8e7ef913d541b3ac067f21d051e6a61cb3f9974c6de7f`. ה־legacy tensor-probe נשאר כשל נפרד; אין טענת all-workflows-green. תוצאת Pixel למועמד עדיין Pending; אין להסיק שיפור זמן או קול מהמבחנים.
 
 **קבלה:** בניית APK; אותו טקסט קצר מקבל ASR→LLM→קול שנשמע במלואו, כולל מקטע ראשון קצר ומקטעים הבאים. journal כולל head >= frames לכל מקטע ללא timeout; פנייה חוזרת, cancel/background וניתוב רמקול/אוזניות. בקלט חדש דרך מיקרופון אין A/B ביט־לביט; לבידוד נגן נדרשים frames קצרים מתועדים. מצב Pending device, rollback באותה חתימה ובגיבוי journals; אין שינוי/הורדה מחדש של מודלים.
+
+### ASR-23 / VOICE-02 — תוצאת Pixel, 11.10.2026 14:45 Asia/Jerusalem
+
+**הושלמה פנייה מלאה, כולל קול שנשמע לפי המשתמש; המהירות נכשלה מבחינת שימוש בשיחה.** APK `0.5-voice-playback`; קוד `91227b76e070eb6fbca8ca86fbe92ceaaf248687`, head תיעוד `59e692ec0d01465bc7596e2b7d798c3e134427be`. SHA APK מקומי לא נמסר. journal חדש `voice-1791719104892-1e43a3f3-c5c9-41dc-ab10-687b4439330d.jsonl`, 7,185 bytes, SHA-256 `0523076f50bfb4dcfe5c678faa6a6e536295b029b2ef295f1961f18ee64b847b`. PCM לא צורף; זהותו המדווחת `513d95d8e1316385ec08f92c082cb95f62dea95acae4510de29c4d0a55c04d54`, משך 5.559875s. אותו Android fingerprint כמבחן הקודם. קריאה חדשה וטקסט אחר — אין A/B identical-input.
+
+| מדד | תוצאה |
+|---|---:|
+| ASR כולל / verify / load / compute | 12,671 / 2,604 / 2,243 / 7,201 ms |
+| ASR mel / encoder / cross / decode | 130 / 2,520 / 289 / 4,261 ms |
+| LLM כולל / verify / load / generate | 10,641 / 4,424 / 1,580 / 4,190 ms |
+| LLM first text chunk מתוך generation | 1,963 ms |
+| TTS כולל / verify / load / synthesis | 16,643 / 2,538 / 4,572 / 2,760 ms |
+| TTS G2P / acoustic / playback | 893 / 1,864 / 6,362 ms |
+| עצירת הקלטה עד ניסיון ניגון ראשון | 32,510 ms; route רמקול (type 2) |
+| סוף הפנייה כולל הקלטה | 45,813 ms |
+| אודיו שנוצר | 6.060408s |
+
+שני המקטעים הסתיימו: head=frames=172,032 ואחריו 95,232; threshold 882 frames מול capacity 44,100; underruns=1 בכל מקטע (יכול להיות בסוף; אינו לבדו ראיה לקטיעה). אין timeout. זה מוכיח הצלחת שני מקטעים ארוכים בפנייה זו, **לא** שחזור הגורם לכשל המקורי במקטע קצר. בדיקה ספציפית למקטע <1s, פניות חוזרות, ביטול ורקע עדיין חסרות. ASR/LLM/TTS PSS snapshots: 124,112 / 373,446 / 1,560,100KiB, thermal_status=0; מנוע ASR ו־LLM נסגרים בין שלבים בגרסה זו, אין אומדן ל־warm-resident memory מתוך סכום snapshots אלו. הקול נשמע אך phoneme/waveform parity ודיוק תוכן אקוסטי לא נמדדו.
+
+**פירוש:** 9,566ms אימות +8,395ms טעינה =17,961ms בכל פנייה. חשבון נגדי בלבד: הסרתם מתוך זמן עד קול ראשון הייתה משאירה כ־14.55s, בלי הבטחה כי שאר החישוב יישאר זהה. חישוב ASR עצמו 7.2s, LLM 4.19s ומקטע קול ראשון 1.765s. לכן warmup לבדו אינו יעד סופי של עוזר מהיר. LLM השיב שאין לו גישה לנתוני שיחות: לא היה כלי calls מחובר, ולכן אין זו הוכחה לכשל intent או לביצוע Skill.
+
+### ASR-24 / VOICE-03 — הכנה אחת ומנועים חמים למסלול פקודות
+
+**השערה:** מחזור השמדה/יצירה ואימות מלא של gigabytes בכל פנייה מוסיף ~18s לריצה שנמדדה. שמירת שלושת המנועים במהלך מסך foreground אמורה להסיר את העלות החוזרת, ללא הורדת מודלים חדשים או שינוי חיפוש/דיוק. זהו צעד ביניים; intent→Skills ו־LLM→TTS streaming אינם ממומשים כאן.
+
+Baseline/rollback מלא: `59e692ec0d01465bc7596e2b7d798c3e134427be` (ASR-23), PR #35 עדיין ניסוי פתוח, main `7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9` לא מוזג. מועמד: commit שבו נוספה רשומה זו, LLM `0.6-warm-session`/6 ו־ASR `0.12-warm-companion`/12, APK SHAs Pending. שני APKs באותה חתימה נדרשים.
+
+**גורמים שהשתנו:** לחיצה מפורשת על ‘הכנת מנועים לשיחה’ מאמתת כל SHA-256 מלא וטוענת ASR→Gemma→BlueTTS, בלי להפעיל inference/מיקרופון ובלי synthetic warmup. המנועים נשארים בתהליכים נפרדים; פניות רצות בסדר ASR→LLM→TTS, ורק מנוע LLM נשאר חם — כל Conversation חדש ונסגר לפני התשובה הסופית. טעינת מודלים/אימות אינם מועברים לתוך שיחה: warmup מתועד בקובץ נפרד עם mode ו־foreground_session, ויש למדוד גם את זמן ההכנה. `engine_reused=true`, `verification_mode=loaded_engine_metadata`, verify/load=0 בפנייה חוזרת, עלות metadata check נכללת בתקורת stage. יש callback token חדש בכל בקשה, כולל שימוש בחיבור Binder קיים; הצלחה שומרת workers, כשל/ביטול/רקע/שתי דקות idle מפנים את כולם. מצב מוכנות אינו משוחזר לאחר process death. הרשאת מיקרופון נאספת לפני warmup כדי ש־permission dialog לא יפנה את המנועים לאחר ההכנה.
+
+**גבולות אימות וזיכרון:** snapshot בזיכרון של canonical path/size/mtime/creation/file key נלקח לפני SHA/load ונבדק לאחריהם ובכל שימוש חוזר. שינוי/מחיקה/החלפה גורמים לכשל ושחרור, ונדרשת הכנה מלאה חדשה; אין receipt מתמיד שמדלג על SHA לאחר restart. זו בדיקת invalidation למנועים שכבר נטענו, לא בדיקת checksum לכל פנייה ולא חסינות לשינוי מכוון שמשחזר את כל metadata. המקורות העצמאיים אינם משתנים. לפני טעינה או inference נדרשים >=2GiB זמינים וללא lowMemory; לאחריהם >=1GiB. נשמר PSS ו־available_memory_bytes ב־warmup; לחץ זיכרון גורם לשחרור. הגבולות מצמצמים סיכון, אך אינם אישור שאין OOM: residency משותף של מנועי TPU/CPU ותקורות driver דורש Pixel. אין inference במקביל ואין ערבוב גרסאות LiteRT באותו process.
+
+**גורמים שנשמרו:** אותם דגמי Whisper/Gemma/Renikud/BlueTTS וה־dispatch; ASR Beam 5 ושני CPU threads, graph shapes/KV/Q5, prompt/sampler/output budget, chunking/normalization. רעש TTS seed123 מתאפס בתחילת כל פנייה כדי ששימוש במנוע חם לא ישנה מדיניות seed. מסלול הארכיון ותמלול מוקלט נשארים ללא שינוי. ה־LLM הטקסטואלי בארכיון נשאר disposable דרך controller הישן, אף שהמנוע בשירות משותף תומך כעת reuse. שחרור Conversation נמדד ומקבל phase לפניו: native hang בשלב זה מביא timeout והפניית workers, בלי המשך TTS.
+
+**בדיקות host:** 3 בדיקות FileSnapshot עברו: קובץ ללא שינוי בכמה פניות, שינוי/מחיקה/atomic replacement, קובץ חסר/ספרייה. יחד עם 5 PlaybackLoop tests עברו 8. אלה אינן בדיקות Android lifecycle, native reuse או איכות ASR. CI מלא ושימוש במכשיר Pending בזמן כתיבת המועמד.
+
+**קבלה ומדידה:** warmup אחד ואז לפחות שתי פניות בלי לצאת מהמסך; verify/load=0 ו־engine_reused=true בכל שלב, ראשונה/שנייה זמן עד טקסט וקול, ו־PSS/available RAM ללא הידרדרות; כניסה מחדש מחייבת SHA/load מלאים. ביטול/רקע/idle/death/שינוי קבצים בזמן session לא ממשיכים לפעולה הבאה. בדיקת resident ASR/Gemma TPU שניהם לפני TTS הכרחית. יעד ביניים: לפחות 30% ירידה ב־stop→first-play על קלט דומה, ללא ירידת תוכן שימושי; יעד מוצר <5s הוא יעד עתידי, לא תוצאה שנמדדה. לשמור journals פרטיים ולעשות השוואה זהה ככל האפשר; callback ניגון אינו בהכרח זמן קול פיזי. **החלטה: Pending device; אין טענת realtime.**
+
+חלוקת ארכיון מול פקודות, משמעות intent accuracy ותכנון Skills: [voice-command-and-recording-paths.md](voice-command-and-recording-paths.md).
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 
