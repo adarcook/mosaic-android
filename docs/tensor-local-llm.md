@@ -73,6 +73,15 @@ ADB=/mnt/c/Users/orele/AppData/Local/Android/Sdk/platform-tools/adb.exe
 
 הסקריפט בלי `--model-dir` מכין רק את ספריית ה־dispatch הציבורית (גם ב־CI); משקלים אינם בתוך APK או Git. נדרשים כ־3.1GB פנויים במחשב ובטלפון, נוסף על המודלים הקיימים. קובץ `.part` במחשב מוחלף רק אחרי hash/size תקינים. אם Hugging Face מחזיר 401/403, היכנס לאתר ואשר את תנאי המודל אם נדרש; הסקריפט יכול לקרוא `HF_TOKEN` מהסביבה בלי להדפיס אותו. אין להכניס token לפקודה משותפת/לריפו. אין בקשת הרשמה חדשה ל־Tensor SDK: dispatch ציבורי ומודל מוכן.
 
+## בדיקות שבוצעו
+
+על code commit `bc3996731a8816e509142f233952971e3301f200`:
+
+- [LLM CI 38121653848](https://github.com/adarcook/mosaic-android/actions/runs/38121653848): ארבע בדיקות import, Android compilation ו־APK עברו; artifact `mosaic-tensor-local-llm-apk`.
+- [ASR CI 38121653855](https://github.com/adarcook/mosaic-android/actions/runs/38121653855): window/archive/comparison tests ו־Android/JNI/native/APK עברו; artifact `tensor-whisper-hybrid-asr-apk`.
+- ארבע בדיקות import עברו גם מקומית, ושני ה־JSONL הפרטיים שהתקבלו ב־ASR-18 נטענו עם source hashes מדויקים. dispatch archive אומת מקומית. המשקלים עצמם לא הורדו/נטענו כאן.
+- [Draft PR #35](https://github.com/adarcook/mosaic-android/pull/35), לא מוזג. Pixel TPU load, עברית, latency ומדדי זיכרון עדיין Pending.
+
 ## בדיקת Pixel
 
 1. פתח Mosaic Local LLM וכתוב ידנית: `דנה אמרה שהפגישה ביום שלישי בשעה 14:30. יואב יכין את המסמך עד יום שני.` בקש סיכום, ואז שאל `מי מכין את המסמך ומתי?`.
