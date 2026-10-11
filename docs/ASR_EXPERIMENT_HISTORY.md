@@ -429,6 +429,16 @@ Baseline/rollback מלא: `59e692ec0d01465bc7596e2b7d798c3e134427be` (ASR-23), P
 
 חלוקת ארכיון מול פקודות, משמעות intent accuracy ותכנון Skills: [voice-command-and-recording-paths.md](voice-command-and-recording-paths.md).
 
+### ASR-23 / VOICE-02 — יומן נוסף של 0.5, 11.10.2026 15:37 Asia/Jerusalem
+
+התקבל `voice-1791722254783-f127abc2-b895-40fc-8aad-a28fa7f145ad.jsonl`: 7,264 bytes, SHA-256 `2614b9119f43ccf7a8827cf06011bd84dbe8b8a4585155d77053f0ec9ca4cbbf`. הרשומה מציינת במפורש **0.5-voice-playback / ASR-23**, לא 0.6/ASR-24. אין foreground_session או engine_reused; SHA/load מבוצעים בכל שלב. לכן אין כאן תוצאת המנועים החמים, ואין להסיק שהמועמד 0.6 נכשל או הצליח. גרסת האפליקציה שמותקנת כעת לא נבדקה דרך dumpsys; היומן מוכיח רק את גרסת הריצה שיצרה אותו. SHA של APK מקומי וקוד build מדויק לא נמסרו; זהויות המודלים/dispatch ו־Android fingerprint תואמות לריצה הקודמת של 0.5.
+
+אודיו 7.139875s, SHA מדווח `f073b1b4622366fe4cdc64859e81779c249915616fba19dd039d690f572d5b0b`; PCM לא צורף. ASR כולל 12,996ms, verify/load/compute=2,650/1,449/8,353ms; mel/encoder/cross/decode=28/2,524/228/5,571ms. LLM כולל 11,430ms, verify/load/generate=4,496/1,747/4,721ms; first_text_chunk=2,008ms מתוך generation. TTS כולל 17,472ms, verify/load/synthesis=2,456/4,638/2,963ms; G2P/acoustic/playback=1,110/1,850/7,058ms, אודיו שנוצר 6.757007s. **stop→first-play callback=33,634ms**, זמן כולל עם הקלטה 49,352ms. אימות 9,602ms +טעינה 7,834ms =17,436ms. הסרתם בחשבון בלבד תשאיר כ־16.2s; זו אינה מדידת warm latency.
+
+היומן מסתיים complete. שני מקטעים נוגנו עד head=frames=181,248 ו־116,736, רמקול route type2, threshold882/capacity44,100, underruns1 לכל מקטע; אין timeout ביומן. אין דיווח משתמש נלווה על איכות הקול בריצה זו ואין לוגcat חדש. PSS snapshots ASR/LLM/TTS=123,595/383,422/1,564,396KiB, thermal_status0 — אינם peak או resident memory של 0.6. טקסט/אודיו חדשים, ולכן אין השוואת מהירות/דיוק ביט־לביט או קביעה של regression מול הריצה הקודמת. אין reference/WER/CER, native parity חדש או הצלחת Skill; כלי הטלפון עדיין לא מחוברים.
+
+**החלטה:** עוד ראיה להשלמת ניגון ב־0.5 ולאיטיות ה־cold path. ASR-24 נשאר Pending device. הבא: לבדוק dumpsys של שני packages, לצפות LLM0.6/ASR0.12, להכין מנועים ואז לבצע שתי פניות באותו מסך ולבדוק engine_reused=true ו־verify/load=0. rollback וקוד הבסיס נשארים כפי שרשומים ב־ASR-23/24; אין שינוי מודלים או main.
+
 ### למה הריצה הרציפה האחרונה נעצרה?
 
 ב־ASR-16 הגיעו 11 שניות קול חדש בכל מחזור, אבל זמן העיבוד הממוצע היה כ־14.26 שניות. הפיגור גדל: לפי ניתוח השיחה, `15.8 → 19.3 → 23.3 → 28 → 29.9 → 31.9 → 33 s`. התור המוגבל התמלא והאפליקציה עצרה עם כיסוי לא מלא.
