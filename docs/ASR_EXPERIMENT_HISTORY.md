@@ -477,6 +477,8 @@ Baseline/rollback מלא: `59e692ec0d01465bc7596e2b7d798c3e134427be` (ASR-23), P
 
 **בדיקות מארח:** 12 JUnit tests עברו מקומית (4 חדשים ל־receipt: reuse בין תהליכים/ישיבה חדשה, חוזה/replacement, כשל/mutation, session חסר; 3 FileSnapshot ו־5 PlaybackLoop). 3 בדיקות build helper עברו. מקומית אין Android SDK/JDK21 לבניית APK; CI של שתי האפליקציות נדרש ונמצא Pending בעת כתיבת הרשומה. אין בדיקת process lifecycle אמיתית ב־JUnit; היא נדרשת במכשיר. ההנחיות המעודכנות ב־local-voice-conversation.md.
 
+**CI ראשון:** LLM [run 38143147043](https://github.com/adarcook/mosaic-android/actions/runs/38143147043) עבר קומפילציית production אך נעצר בקומפילציית בדיקות: `Files.writeString` אינו קיים ב־Android bootclasspath. הוחלף ב־Files.write עם UTF-8; 12 הבדיקות המקומיות עברו שוב. זו תקלת test API, לא תוצאת מכשיר. CI מחדש נדרש.
+
 **החלטה:** מועמד לבנייה ובדיקת פיקסל בלבד, לא הצלחה מדודה. לא מתקינים pair מ־CI אם נחתם בשני debug keys שונים; בונים את שתי האפליקציות יחד ב־WSL באותו מפתח ו־install -r, בלי להסיר או להעתיק מודלים.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
