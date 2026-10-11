@@ -505,6 +505,37 @@ ASR preparation הושלמה אחרי 4,939ms (verify2,495ms, load2,271ms), PSS6
 
 **CI ASR-26:** קוד `d6962a29610f0c3da63b3036338bdb2f7e8a0086` עבר [LLM run38154933325](https://github.com/adarcook/mosaic-android/actions/runs/38154933325), job114515851259: testDebugUnitTest ו־assembleDebug, dispatch SHA מאומת וזהה למועמד הקודם. ZIP artifact digest=`f0ed17810802e13885e6791597ad01c774b454e0a25ec9ea81dc7e46c0d7e8a4` (ZIP, לא APK SHA). [ASR run38154933296](https://github.com/adarcook/mosaic-android/actions/runs/38154933296) עבר גם הוא, למרות שקוד companion לא השתנה. legacy probe run38154933260 נכשל; main Android Build עדיין רץ בעת בדיקה זו, ואין לטעון שכל workflows עברו. אין תוצאת פיקסל/הכנה/קול/latency ב־0.8. APK SHA מקומי ו־CI לא נמדדו; המועמד מאושר רק להתקנה כ־device experiment. journal הבא צריך להוכיח release_end עם death_evidence לפני התחלת השלב הבא, והכנה מלאה ושתי פניות.
 
+### ASR-26 / VOICE-05 — פנייה מלאה, שחרור תקין אך latency לא שימושי, 11.10.2026 19:59 Asia/Jerusalem
+
+התקבל `voice-1791737778821-05f9b0c0-c5b1-4369-b82e-83ed5d829b3d.jsonl`, 10,366 bytes, SHA-256 `17e72481c9dc56ff89621f442e21ffab43f89463cb65c72cdc304efdd46aea62`. start מזהה LLM `0.8-worker-death`, ASR package `0.13-sequential-companion`, ASR-26/VOICE-05, foreground_push_to_talk וישיבת מסך משותפת ל־receipt. Android fingerprint וזהויות המודלים/dispatch/Renikud תואמים למועמד. קוד המועמד `d6962a29610f0c3da63b3036338bdb2f7e8a0086`; APK SHA וקוד build מקומי לא נמסרו. התקבל גם צילום `image(20261011-165907).png`, 174,875 bytes, SHA-256 `e7faeec0aedc874168133d6fab58237a09dad787c3576558aec3cc60f10b477b`, שמציג השלמת שלושת השלבים והתמליל/תשובה. התוכן הפרטי אינו מועתק לריפו.
+
+| מדד | תוצאת הפנייה |
+|---|---:|
+| אודיו שנקלט | 4.179875 s |
+| ASR stage | 8,536 ms |
+| ASR verify / load / compute | 18 / 2,842 / 5,245 ms |
+| ASR mel / encoder / cross / decode | 10 / 2,619 / 212 / 2,403 ms |
+| LLM stage | 7,081 ms |
+| LLM verify / load / generate | 5 / 1,753 / 4,819 ms |
+| LLM first chunk מתחילת generation | 1,775 ms |
+| TTS stage כולל ניגון | 18,495 ms |
+| TTS verify / load / synthesis | 36 / 5,167 / 3,907 ms |
+| TTS G2P / acoustic / playback | 1,262 / 2,640 / 8,888 ms |
+| משך קול שנוצר | 8.428844 s, שלושה מקטעים |
+| capture_end עד marker ראשון ‘מקריא’ | 23,321 ms |
+| capture_end עד end כולל ניגון ושחרור | 36,250 ms |
+| כל הפנייה כולל capture | 40,796 ms |
+
+בכל השלבים `verification_mode=session_receipt_metadata`, engine_reused=false: סכום אימות59ms, סכום טעינה9,762ms. אימות בין תהליכים אכן נמנע בריצה הזו, אך כל מנוע עדיין נטען. marker ‘מקריא’ מגיע לפני AudioTrack/playback ולכן אינו מדידה אקוסטית של הצליל הראשון; זהו proxy עקבי במדידות היומן. TTS18.495s כולל8.888s ניגון, ואינו כולו המתנה לתשובה. גם first_text_chunk_ms הוא ביחס ל־generation, לא לסיום הדיבור.
+
+שחרור ASR הושלם725ms, Gemma244ms, TTS1,131ms, כולם death_evidence=death_notification ו־binder_class=android.os.BinderProxy לפני phase הבא/end. סכום release2,100ms; מתוכם969ms לפני תחילת TTS. RAM אחרי השחרור: ASR3,333,812,224bytes, LLM3,684,192,256bytes, TTS5,040,529,408bytes; lowMemory=false בכל release. PSS בסיום stage: ASR874,919KiB, LLM375,558KiB, TTS1,569,615KiB. thermal_status=0 בשלושתם; אין להסיק מכך על תדרים. playback_head תואם chunk_frames בכל אחד משלושת המקטעים, route2, underrun1 למקטע; המשתמש אישר שעבד. אין crash/timeout בריצה הזו.
+
+PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3ebbacabed5bb4fe58d5b6294d22d`, לא אומת מקובץ. reference transcript, הכנה ו־journal של פנייה נוספת מאותה ישיבה לא צורפו; אין WER/intent accuracy או acceptance של שתי פניות/יציבות ממושכת. זו פנייה חדשה שאינה אותו אודיו של 0.5 ולכן לא A/B מהירות/איכות מבוקר. כעת יש ראיה לשחרור תקין ולפנייה מקצה לקצה במועמד, אך לא לביצוע Skill: אין עדיין חיבור לקריאת הודעות/שיחות, וה־LLM רק יצר תשובה טקסטואלית על מגבלתו.
+
+**החלטה:** לשמור את תיקון lifecycle ואת receipt כמועמד שעבר פנייה אחת; מהירות מוצר **נכשלה** לפי דיווח המשתמש ובמדידת23.321s עד marker ההקראה. אין עוד bottleneck משמעותי ב־SHA. צריך לטפל בעלויות load ו־inference עצמן: TTS load5.167s ו־ASR load2.842s +compute5.245s, לצד LLM load1.753s+generate4.819s. גם ביטול כל הטעינות הוא רק counterfactual, לא תוצאה מדודה, ולא יביא לבדו לתגובה מהירה.
+
+**המשך מוצע, עדיין לא ממומש:** ניסוי קול קטן יותר בזיכרון (תחילה G2P, כגורם נפרד) ובדיקת איכות/זמן/RAM לפני ניסיון לשמור CPU TTS בין פניות. אין הצדקה להשאיר שוב את חבילת FP32 המלאה יחד עם NPU engines ללא מדידה. במסלול פקודות בלבד למדוד decoder search מהיר יותר מול הצלחת intent/שמות/מספרים/שלילות; מסלול ארכיון שיחות נשאר נפרד. תשובות קצרות והקראת משפט ראשון עשויות לצמצם המתנה אך דורשות תכנון residency; אין לחפוף LLM/TTS כבדים בלי תקציב זיכרון מדוד. יעד עתידי3–5s עד תגובה מדוברת הוא יעד מוצר, לא יכולת שהושגה או הובטחה. נדרש אותו PCM להשוואות הבאות. אין שינוי קוד/מודלים ברשומת התוצאה הזאת; PR#35 פתוח, main ללא שינוי ו־rollback נשאר כמפורט ב־ASR-26.
+
 ### למה הריצה הרציפה האחרונה נעצרה?
 
 ב־ASR-16 הגיעו 11 שניות קול חדש בכל מחזור, אבל זמן העיבוד הממוצע היה כ־14.26 שניות. הפיגור גדל: לפי ניתוח השיחה, `15.8 → 19.3 → 23.3 → 28 → 29.9 → 31.9 → 33 s`. התור המוגבל התמלא והאפליקציה עצרה עם כיסוי לא מלא.
