@@ -3,12 +3,13 @@ plugins { id("com.android.application") version "8.7.3" }
 android {
     namespace = "life.mosaic.tensorwhisper"
     compileSdk = 35
+    sourceSets.getByName("main").java.srcDir("../model-storage/src/main/java")
     defaultConfig {
         applicationId = "life.mosaic.tensorwhisper"
         minSdk = 31
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8-durable-audio-archive"
+        versionCode = 13
+        versionName = "0.13-sequential-companion"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

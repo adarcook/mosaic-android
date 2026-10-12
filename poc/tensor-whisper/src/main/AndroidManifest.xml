@@ -1,11 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <permission android:name="life.mosaic.permission.LOCAL_VOICE_ASR" android:protectionLevel="signature" />
     <application
         android:label="Mosaic TPU ASR Gate"
         android:allowBackup="false"
         android:extractNativeLibs="true"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name="life.mosaic.models.ModelSetupActivity" android:exported="false" />
         <uses-native-library android:name="libedgetpu_litert.so" android:required="false" />
         <activity
             android:name=".WhisperGateActivity"
@@ -17,7 +19,10 @@
             </intent-filter>
         </activity>
         <activity android:name=".ArchiveGateActivity" android:exported="false" android:hardwareAccelerated="false" />
+        <provider android:name=".ArchiveShareProvider" android:authorities="life.mosaic.tensorwhisper.archive"
+            android:exported="false" android:grantUriPermissions="true" />
         <service android:name=".ArchiveGateService" android:exported="false" android:process=":archive" />
+        <service android:name=".VoiceAsrService" android:exported="true" android:permission="life.mosaic.permission.LOCAL_VOICE_ASR" android:process=":voice" />
         <activity android:name=".StreamingGateActivity" android:exported="false" android:hardwareAccelerated="false" />
         <service android:name=".StreamingGateService" android:exported="false" android:process=":stream" />
         <service

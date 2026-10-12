@@ -1,0 +1,38 @@
+name: Tensor local LLM gate
+on:
+  push:
+    branches: ["experiment/tensor-local-llm"]
+  pull_request:
+    paths: ["poc/tensor-llm/**", "poc/model-storage/**", "scripts/prepare_shared_model_folder.py", "scripts/prepare_tensor_llm.py", "scripts/prepare_blue_voice_pack.py", "scripts/voice_metadata/**", "scripts/tests/test_prepare_blue_voice_pack.py", "scripts/verify_tensor_llm_apk.py", "scripts/build_tensor_apps.py", "scripts/tests/test_build_tensor_apps.py", ".github/workflows/tensor-llm.yml"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Test independent model source cache integrity
+        run: |
+          mkdir -p /tmp/model-copy-tests
+          javac -d /tmp/model-copy-tests poc/model-storage/src/main/java/life/mosaic/models/ModelCopy.java poc/model-storage/src/test/java/life/mosaic/models/ModelCopyTest.java
+          java -cp /tmp/model-copy-tests life.mosaic.models.ModelCopyTest
+          python3 -m py_compile scripts/prepare_shared_model_folder.py
+
+      - name: Test host setup and model separation
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_build_tensor_apps.py -v
+          python3 -m unittest discover -s scripts/tests -p test_prepare_blue_voice_pack.py -v
+      - name: Prepare runtime, test import and build without model weights
+        run: python3 scripts/build_tensor_apps.py --only llm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mosaic-tensor-local-llm-apk
+          path: poc/tensor-llm/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

@@ -12,7 +12,7 @@ import android.widget.*;
 public final class ArchiveGateActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private TextView status, captureStatus;
-    private Button start, stop, resume;
+    private Button start, stop, resume, llm;
     private Spinner recordings;
     private String[] sessionIds = new String[0];
     private Spinner decoderProfile;
@@ -28,7 +28,7 @@ public final class ArchiveGateActivity extends Activity {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL); layout.setPadding(28, 80, 28, 30);
         TextView heading = new TextView(this);
-        heading.setText("ארכיון שיחה — עד 10 דקות\nהאודיו נשמר מקומית בזמן ההקלטה. התמלול מתחיל אחרי עצירה.\nהשאר את המסך פתוח; מעבר לרקע עוצר את הניסוי, ואפשר להשלים מהאודיו שנשמר.\nאודיו ותמליל נשארים במכשיר עד הסרה ידנית. אין העלאה או סיכום LLM בשלב זה.");
+        heading.setText("ארכיון שיחה — עד 10 דקות\nהאודיו נשמר מקומית בזמן ההקלטה. התמלול מתחיל אחרי עצירה.\nהשאר את המסך פתוח; מעבר לרקע עוצר את הניסוי, ואפשר להשלים מהאודיו שנשמר.\nאודיו ותמליל נשארים במכשיר עד הסרה ידנית. אפשר לשלוח תמליל שהושלם למודל המקומי.");
         layout.addView(heading);
         decoderProfile = new Spinner(this);
         decoderProfile.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
@@ -55,6 +55,19 @@ public final class ArchiveGateActivity extends Activity {
         });
         layout.addView(start); layout.addView(stop); layout.addView(copy);
         layout.addView(recordings); layout.addView(resume);
+        llm = new Button(this); llm.setText("סיכום ושאלות עם המודל המקומי");
+        llm.setOnClickListener(v -> {
+            int selected = recordings.getSelectedItemPosition();
+            if (running || selected < 0 || selected >= sessionIds.length) return;
+            android.net.Uri uri = android.net.Uri.parse("content://life.mosaic.tensorwhisper.archive/" + sessionIds[selected] + ".jsonl");
+            Intent intent = new Intent(Intent.ACTION_SEND).setType("application/x-ndjson")
+                    .setComponent(new ComponentName("life.mosaic.tensorllm", "life.mosaic.tensorllm.LlmActivity"))
+                    .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.setClipData(ClipData.newRawUri("Mosaic transcript", uri));
+            try { startActivity(intent); }
+            catch (ActivityNotFoundException error) { status.setText("יש להתקין את Mosaic Local LLM לפי המדריך בריפו"); }
+        });
+        layout.addView(llm);
         refreshRecordings();
         layout.addView(captureStatus); layout.addView(status);
         ScrollView scroll = new ScrollView(this); scroll.addView(layout); setContentView(scroll);
@@ -93,6 +106,7 @@ public final class ArchiveGateActivity extends Activity {
     private void begin(String savedSession) {
         running = true; lastSaved = ""; start.setEnabled(false); stop.setEnabled(false);
         decoderProfile.setEnabled(false); resume.setEnabled(false); recordings.setEnabled(false);
+        llm.setEnabled(false);
         final int beamSize = decoderProfile.getSelectedItemPosition() == 0 ? 5
                 : decoderProfile.getSelectedItemPosition() == 1 ? 2 : 1;
         final int attempt = ++generation;
@@ -169,6 +183,7 @@ public final class ArchiveGateActivity extends Activity {
         recordings.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
                 sessionIds.length == 0 ? new String[]{"אין עדיין הקלטות שמורות"} : labels.toArray(new String[0])));
         resume.setEnabled(!running && sessionIds.length > 0); recordings.setEnabled(!running);
+        llm.setEnabled(!running && sessionIds.length > 0);
     }
 
     @Override protected void onPause() {

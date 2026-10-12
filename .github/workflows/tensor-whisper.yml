@@ -9,9 +9,12 @@ on:
       - "experiment/ivrit-continuous-asr-gate"
       - "experiment/ivrit-decoder-throughput"
       - "experiment/ivrit-durable-audio-recovery"
+      - "experiment/tensor-local-llm"
   pull_request:
     paths:
       - "poc/tensor-whisper/**"
+      - "poc/model-storage/**"
+      - "scripts/prepare_shared_model_folder.py"
       - "poc/speech/**"
       - "scripts/*whisper*"
       - "scripts/compare_asr_sessions.py"
@@ -43,6 +46,13 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "ndk;27.0.12077973"             "cmake;3.22.1"
+
+      - name: Test independent model source cache integrity
+        run: |
+          mkdir -p /tmp/model-copy-tests
+          javac -d /tmp/model-copy-tests poc/model-storage/src/main/java/life/mosaic/models/ModelCopy.java poc/model-storage/src/test/java/life/mosaic/models/ModelCopyTest.java
+          java -cp /tmp/model-copy-tests life.mosaic.models.ModelCopyTest
+          python3 -m py_compile scripts/prepare_shared_model_folder.py
 
       - name: Test PCM windows and transcript boundary handling
         run: |

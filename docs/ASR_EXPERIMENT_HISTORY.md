@@ -1,6 +1,6 @@
 # תמלול עברית ב־Mosaic — הסבר התהליך ויומן הניסויים
 
-עודכן: 9 באוקטובר 2026. נקודת הקוד המתועדת: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
+עודכן: 11 באוקטובר 2026. המסמך כולל את ניסויי ASR-01 עד ASR-26; רשומות ASR-18–22 כוללות את ארכיון השיחה, LLM, אחסון עצמאי והחיבור לדיבור. נקודת ההשוואה ההיסטורית של ASR-17: [`5e94db1`](https://github.com/adarcook/mosaic-android/commit/5e94db1e5b5d3034b54a74c9ba09c67075c8482a), גרסת ניסוי 0.7, [PR #32](https://github.com/adarcook/mosaic-android/pull/32).
 
 נוסף ניסוי 0.8 (ASR-18) לשמירת אודיו והמשך תמלול. התקבל דיווח מכשיר ראשון על סיום מלא, ואומתו PCM ו־JSONL עם כיסוי מלא. נבדקה גם יציאה אחרי מקטע אחד והמשך מוצלח בלי gap או duplicate; שאר תרחישי הכשל עדיין Pending.
 
@@ -286,6 +286,261 @@ Beam search הוא אופן החיפוש אחרי הטקסט: Beam 5 מחזיק 
 **timing:** compute של חמשת המקטעים שנשמרו מסתכם ב־45,888 ms; RTF=1.001921. Stop עד end: 67,225 ms, **כולל היציאה/שהות עד Resume**. load_ms לפני/אחרי היציאה: 1,690 / 1,611; model verification intervals: 3,366 / 2,691 ms. הזמן שכבר הושקע בניסיון index=1 שנקטע אינו נרשם כ־compute_ms של מקטע שמור, ולכן ה־RTF אינו העלות הכוללת של recovery. אין timestamp יציאה שמאפשר לכמת בנפרד את החישוב שנזרק. native_timings אינו total כמפורט לעיל.
 
 **החלטה:** בדיקת ההתאוששות המסוימת הזאת **עברה**: prefix שמור נשמר, החלון שלא הושלם חושב מחדש, ושאר הקובץ הושלם בלי duplicate/gap ביומן. לא נבדקו כאן הפסקת חשמל, פגיעה בקובץ, שינוי מודלים, קטיעה בזמן capture או שיחה ארוכה; אין להרחיב הצלחה זו לכל מקרי הכשל. דיוק מול אודיו ו־sustained realtime עדיין לא מאושרים. הבא: replay בנפרד של מקור PCM קבוע לצורך השוואת Beam/דיוק, ואז שימוש בתמליל המאושר לסיכום ושאלות LLM; שכבות אלה טרם מומשו.
+
+### ASR-19 / LLM-01 — חיבור תמליל ל־Gemma 4 על Tensor G5, 11.10.2026
+
+**אישור ומטרה:** המשתמש ביקש לחבר כעת LLM מקומי חזק שגם רץ על TPU. המועמד הראשון הוא Gemma 4 E2B IT בקובץ AOT ייעודי ל־G5; לא הוגדר כפתרון סופי ולא נבדקה עדיין איכות עברית. baseline `6639c00eb2ba2da1e2de35dfdca58e8a34b92773` (PR #34, לא main); candidate בענף `experiment/tensor-local-llm`. מדריך: [tensor-local-llm.md](tensor-local-llm.md).
+
+**Hypothesis:** LiteRT-LM עם model G5 ו־Backend.NPU מפורש יאפשר סיכום ושאלות על תמליל שמור בטלפון, בלי להעביר נתונים לשרת ובלי צורך בייצוא מודל חדש. בידוד ב־companion APK מונע התנגשות עם LiteRT 2.1.6 של Whisper. האצת רשת דורשת אישור device logs; CPU עדיין מבצע tokenization/orchestration/sampling.
+
+**שינוי:** ASR 0.9 מוסיף handoff של journal אחד לקריאה בלבד. APK נפרד life.mosaic.tensorllm בודק start v3 archive, indices/offsets רציפים ו־end complete, מציג raw segment text לבדיקת המשתמש, ומבצע סיכום או שאלה בלחיצה. תוצאות נשמרות מקומית עם source/reviewed-text/model hashes ומדדי verify/load/generate/first-text-chunk/PSS/thermal. אין הרשאת רשת, כלי פעולה או גישה להודעות. מערכת ה־ASR, משקלי Whisper ו־Beam נשארים קבועים; אין מבחן speedup ל־ASR בניסוי זה.
+
+**זהויות:** LiteRT-LM Android 0.18.0; dispatch public LiteRT 2.2.0 archive SHA `b4c8380df3e9652677dbb93a5aad4499eb756a9b7d9651a9baacb122faadbf0d`. Model repo litert-community/gemma-4-E2B-it-litert-lm, revision `b3ca0d2f076785a8f4b2219ddbd2bdb99954eae1`, file gemma-4-E2B-it_Google_Tensor_G5.litertlm, 3,113,545,589 bytes; SHA `af1082986639ecde7db95d91be6fe54f8b6b458104734c5bafc204e69d6852dc` מתוך public LFS metadata, טרם חושב מקומית על המשקלים. הסקריפט והמכשיר דורשים hash זה אחרי הורדה/לפני טעינה. אין מודל בינארי בריפו.
+
+**הגדרות:** NPU ללא CPU/GPU fallback, text only, context לפי metadata; max output 512 tokens, thinking/speculation off, topK20/topP0.9/temperature0.2/seed0. תמליל 12,000 ושאלה 2,000 תווים לכל היותר (לא הבטחה להתאמה ל־token context), בלי truncation שקט. worker disposable ו־terminal לפני cleanup. כל שאלה מתחילה conversation חדש; journals נשמרים אך אין חיפוש/זיכרון בין שאלות במודל.
+
+**Validation host:** ארבע בדיקות import עברו מקומית; שני יומני ASR-18 הפרטיים נטענו עם hashes מדויקים; ארבע בדיקות comparison קיימות עברו, Python syntax ו־dispatch SHA עברו. בניית Gradle מקומית נחסמה בהורדת distribution ברשת הסביבה. CI הראשון ב־[run 38121491159](https://github.com/adarcook/mosaic-android/actions/runs/38121491159) נכשל כי LiteRT-LM 0.18.0 כולל bytecode Java 21 (65) מול javac17 (61); זו דרישת toolchain, לא כשל TPU במכשיר. ה־LLM CI והוראות ההקמה הועברו ל־JDK21. candidate initial commit `f0d404ea3958a202a1940a6132cdb357bfb31275`, [PR #35](https://github.com/adarcook/mosaic-android/pull/35).
+
+**Validation CI סופי:** ב־commit `bc3996731a8816e509142f233952971e3301f200` עברו [LLM build/tests/APK 38121653848](https://github.com/adarcook/mosaic-android/actions/runs/38121653848) ו־[ASR/JNI/native/APK 38121653855](https://github.com/adarcook/mosaic-android/actions/runs/38121653855), כולל artifacts. בכשל ASR הראשוני נתקלה קומפילציה בשרשור `Intent.setClipData` שמחזיר void; תוקן ל־statement נפרד. אלה כשלי build שתוקנו, לא תוצאות מודל/מכשיר. TPU init, איכות עברית, latency ו־RAM במכשיר עדיין Pending.
+
+**קבלה:** APK/tests passing; ידנית תמליל עברי קטן, שמות/מספרים/שלילות, שאלה קיימת וחסרה; NPU dispatch/init בלוג, מדדי latency/memory אמיתיים; import של מקור ASR-18 קבוע עם source hash; יציאה/timeout בלי פגיעה במקור. host/CI/בדיקת מכשיר מתועדים בנפרד. המודל לא נטען במכשיר בשלב כתיבת הרשומה; compile/runtime compatibility ו־TPU execution pending. אין טענת איכות/מהירות חדשה או roadmap completion.
+
+**החלטה ו־rollback:** מועמד ניסוי בלבד; שימור שלב 9 בלי handoff או baseline 6639c00 עם אותו signing key. אין שינויים ב־Room/Firebase/Core, wake word, TTS או הרשאות WhatsApp/SMS. לא מבוצעות פעולות מתוך התמליל. [מדריך הקמה ובדיקת Pixel](tensor-local-llm.md) מפרט שתי התקנות, model push ושימור לוגים פרטיים.
+
+**עדכון build portability, 11.10.2026:** המשתמש דיווח ש־Whisper `assembleDebug` הצליח מקומית, אבל `tensor-llm:testDebugUnitTest` נכשל ב־SDK location not found. לא דווחה ריצת LLM בפיקסל. baseline tooling `5f495524db90ce6b990216bcc4fe8d358c6bdd09`; candidate בהמשך אותו PR #35. נוספה פקודת `scripts/build_tensor_apps.py` למק/Linux/WSL שמאתרת SDK משותף, מעדכנת רק local.properties המקומיים, בודקת Java (21 ל־LLM, 17 ל־Whisper בלבד), מכינה runtime ציבורי ובונה APK בלי בקשת משקלים. הורדת Gemma עם `--model-dir` הופרדה מהבנייה הרגילה במדריך. המודלים כבר חיצוניים ל־APK; אין שינוי במשקלים, hash, גרפים, CPU/TPU, Beam או תוצאות תמלול. הוסבר שימור signing key במעבר מחשב כדי לעדכן בלי למחוק נתוני אפליקציה.
+
+**ראיות וקבלה לעדכון:** שלוש בדיקות host חדשות עברו: SDK קיים של Whisper משמש LLM תוך שימור הגדרות; ברירת מחדל macOS ונתיב מפורש שגוי; פקודות הבנייה אינן מבקשות משקלים ומשמרות קובץ מודל קיים. כיסוי כולל נתיב עם רווח ותו Unicode. ב־candidate tooling `cd9df39932fcc15a083fd24abb2458e80aa021a1` עברו בדיקות ההכנה, בדיקות import, בניית LLM והעלאת APK ב־[CI 38122620186](https://github.com/adarcook/mosaic-android/actions/runs/38122620186), באמצעות הפקודה החדשה וללא הורדת משקלים. בדיקת macOS אמיתי והתקנת עדכון בפיקסל עם אותו signing key Pending. קבלה: בנייה עם SDK של המארח ללא הורדת משקלים, ושימור קבצים אחרי עדכון באותה חתימה. החלטה: לשמור שינוי tooling כמועמד; אין טענת שיפור דיוק/מהירות. rollback: פקודות Gradle הקודמות עם sdk.dir מקומי מתאים; אין צורך למחוק מודלים. מדריך: [tensor-apk-build.md](tensor-apk-build.md).
+
+### ASR-20 — מקור מודלים עצמאי להתקנות ולמעבר מחשב, 11.10.2026
+
+**מטרה והשערה:** המשתמש ביקש להפריד מודלים מסקופ האפליקציה לפני המעבר למק עם רשת ארגונית מוגבלת. מקור עצמאי ב־Documents יאפשר שחזור מקומי אחרי הסרה/שינוי חתימה בלי הורדת משקלים. baseline `3d1f4e83664dbcbbdc5df20ef22b624a1616c1f4`; candidate בהמשך PR #35, ענף `experiment/tensor-local-llm`. מדריך [independent-model-storage.md](independent-model-storage.md).
+
+**גורם ששונה:** שני ה־APK מוסיפים מסך SAF משותף לבחירת תיקייה מקומית בתוך Documents וייבוא עותקי עבודה עם size/SHA מקובעים. סקריפט ADB מעתיק ומאמת מודלים שכבר בפיקסל או קובץ Gemma שכבר הורד במחשב אל `/sdcard/Documents/Mosaic/models`. מקור עצמאי אינו נכתב/נמחק מתוך האפליקציה. קבצים תקינים קיימים אינם מועתקים שוב; כתיבה זמנית bounded, בדיקת SHA, fsync והחלפה אטומית לכל קובץ מגנים על עותק תקין מכשל/ביטול. לא הוספו הרשאות אחסון רחבות, רשת או הורדת משקלים אוטומטית.
+
+**קבועים וזהויות:** ארבעת המודלים נשארים בדיוק כפי שנמדדו ב־ASR-18 ונבחרו ב־ASR-19. encoder SHA `28541df9741e207c14c3e6b20513fc27a278c5c5835c7fbe01304dbea9057108` נלקח מהיומן שנבדק; decoder/cross/Gemma hashes וגדלים מופיעים במדריכים/מסך הייבוא. Engine paths, CPU/TPU, קוונטיזציה, Beam, חלונות ו־journal contracts לא משתנים. ASR APK `0.10-independent-model-source`, LLM `0.2-independent-model-source`. המודלים עצמם אינם נשמרים ב־Git.
+
+**פשרה:** המקור העצמאי ועותקי העבודה צורכים יחד כ־10.08GB עבור ארבעת הקבצים (בנוסף לשאר נתוני המכשיר), ולעתים עוד מקום זמני בהחלפת קובץ. SAF direct/native loading בלי עותק לא מומש; תאימות אליו אינה מוכחת. הייבוא מחדש לאחר הסרה מקומי ודורש בחירה מחדש. חתימה קבועה עדיין נדרשת לעדכון בלי הסרה. שיחות/יומנים/PCM עדיין פרטיים ויימחקו בהסרת האפליקציה; נדרש גיבוי שלהם לפני בדיקה כזאת. בנייה במק חדש עדיין עשויה לדרוש הורדת תלויות ציבוריות, ולכן APK שנבנה היום הוא חלופה להתקנה בלי רשת בנייה.
+
+**בדיקות וראיות:** בדיקות Java host עברו להתקנה מאומתת, SHA/גודל פגומים, קלט קצר/גדול, ביטול, שגיאת I/O וחזרה לייבוא תוך שימור committed model. Python syntax עבר. על code commit `582a6496d7df195e271b6cac603145939469613e` עברו [LLM CI 38124356245](https://github.com/adarcook/mosaic-android/actions/runs/38124356245) ו־[ASR CI 38124356274](https://github.com/adarcook/mosaic-android/actions/runs/38124356274), כולל בדיקות integrity, בדיקות קיימות, קומפילציית מסך Android משותף ובניית/העלאת שני ה־APK. גם מקור עצמאי פגום נדחה בבדיקת host; קיום cache תקין אינו עוקף אימות מקור. בדיקת host מדומה של סקריפט ADB עברה להעתקה תקינה, דילוג על יעד תקין ודחיית העתקה פגומה תוך שימור המקור והיעד הקיים; זו סימולציה, לא ראיית מכשיר. לא בוצעה העברה לפיקסל של המשתמש, בחירת SAF או ריצת TPU חדשה בסביבה זו; אין טענת דיוק/מהירות/שימור נתונים ממדידת מכשיר.
+
+**קבלה, החלטה ו־rollback:** מקור ציבורי מאומת לפני מעבר מחשב; ייבוא ללא רשת; טעינת אותם models עם hash תואם; ביטול/כשל אינם מוחקים מקור/עותק תקין; מקור נשאר לאחר התקנה מחדש וניתן לייבוא. קבלה במכשיר Pending. שמירה כמועמד בלבד, ללא merge/roadmap completion. rollback לבסיס הקודם ממשיך להשתמש בעותקי העבודה הקיימים; המקור העצמאי נשאר.
+
+### ASR-21 / LLM-02 — קריסת dispatch בטעינת Gemma ותיקון תאימות מועמד, 11.10.2026
+
+**ראיית מכשיר:** צילום המשתמש הציג `תהליך המודל נסגר` בבקשת שאלה. התקבל logcat פרטי 6,078,604 bytes, SHA-256 `0562cfcaa08973c52fdeb3f69c2bc2f7feaf62d6b53b0983c82f9f41cc95af13`. ב־11:39:52.094 תהליך `life.mosaic.tensorllm:llm` קרס ב־SIGSEGV/SEGV_MAPERR בזמן engine initialize, לאחר זיהוי prefill_128, טעינת dispatch, SouthBound context created ו־Found GoogleTensorOptions. top frame: dispatch offset `0x21164`, BuildId `e18d0c28a74fbfbcff6aa59292b817b8`; caller JNI offset `0x1002524`, BuildId `3cfb2461223d025c2157f77d48bf7124`. לא נוצרה תשובה. הלוג אינו ראיית מחסור בזיכרון או כשל שמירת המודל; לפי סדר הקוד, model size/SHA gate הושלם לפני initialize. יומן LLM של בקשה זו לא התקבל. raw log/text אינם ב־Git.
+
+**פירוש והיפותזה:** הכשל מאומת בתוך dispatch בזמן יצירת הקשר NPU. חשד לתאימות binary/runtime; root cause ABI מדויק עדיין אינו מוכח. האזהרה הראשונית nativeCheckLoaded היא בדיקת loader שקדמה לטעינת JNI מוצלחת, ולא סוף הריצה. גם הודעת NPU registration חסר בסביבה משנית אינה סוף הריצה: initialization התקדם ל־dispatch. קריסת native אינה ניתנת לתפיסה ב־Java catch. פירוק הוראת הכשל הראה indirect vtable load, אך אינו לבדו הוכחת גרסת ABI שגויה.
+
+**baseline/candidate ושינוי יחיד במנוע:** baseline `f05f02f798f976901b3f0df31e9b1dec33501b9b` מעל code `582a6496d7df195e271b6cac603145939469613e`, PR #35. החלפת dispatch מ־public LiteRT 2.2.0 ZIP לספרייה המופצת ב־APK הרשמי Google AI Edge Gallery 1.0.20 ל־Tensor G5. Gallery מזהה engine 0.18.0 בתצורת המקור; המועמד משאיר Maven JNI/API 0.18.0, ולכן זה אינו claim של זוג בינארים זהה ל־Gallery. ב־APK הרשמי JNI BuildId `92ac77dc12e480389d1f46ba2d29a260`, שונה מ־Maven. אין החלפת JNI/מודל/CPU/TPU backend, ואין fallback. נוספו gate ל־dispatch SHA בזמן ריצה ובדיקת SHA בתוך ה־APK, metadata של מקור dispatch ו־phase durable לפני initialize. משקלים, prompts, sampling ותקציבים קבועים. גרסת LLM `0.3-g5-dispatch-compatibility`; Whisper ללא שינוי.
+
+**זהויות:** source `https://github.com/google-ai-edge/gallery/releases/download/1.0.20/ai-edge-gallery-tensor-g5.apk`, 60,879,495 bytes, SHA `c84e08213c31374e001c3079c5f5fb93bd1b9b7d329d4aa2d04a30fcf13dc59b`; member `lib/arm64-v8a/libLiteRtDispatch_GoogleTensor.so`, 546,232 bytes, SHA `1e3ea6dc7ae2d48b95f7147791b18c1de3095165b42470a547909f6e0d72c5ec`, BuildId `69ecad5f58c4e62fe141ef4928e27253`. source/member hashes חושבו מקומית; source הוא APK ציבורי בלי משקלי Gemma. הסקריפט מחלץ רק dispatch, לא JNI/קוד Gallery/חתימה. ספרייה קיימת עם SHA נכון ניתנת לשימוש ללא הורדה; APK verifier ו־runtime gate מונעים שימוש שקט בספרייה הישנה. רשת לצורך העדכון הראשון היא כ־61MB, לא הורדת מודל.
+
+**Validation והחלטה:** extraction/source/member hashes עברו; שלוש בדיקות build setup/separation עברו אחרי הוספת verifier; Python syntax/diff check עברו. בדיקת APK host עברה מול APK Gallery הרשמי; fixture עם dispatch הישן נדחה. על code commit `d8131699f6cc40442d3d567cdac478be0a62bd83` עברו בדיקות integrity/import/setup, בניית LLM, אימות SHA של dispatch ב־APK הסופי והעלאת artifact ב־[CI 38126505901](https://github.com/adarcook/mosaic-android/actions/runs/38126505901). אין הורדת משקלי מודל בבנייה. בדיקת הפיקסל עם המועמד Pending; אין טענה שהקריסה נפתרה עד טעינה/תשובה במכשיר. קבלה: candidate dispatch SHA/BuildId, initialize בלי SIGSEGV, loaded record ותשובה עברית קצרה, אחר כך בדיקת תמליל קבוע עם latency/memory. אם השילוב עדיין נכשל, התאמת native pair/מנוע היא ניסוי נוסף ולא הצלחה. rollback לקוד/driver הקודם לשחזור קריסה בלבד, או שימוש ב־ASR בלי הפעלת LLM; אין צורך למחוק/להעביר מודלים. נשאר draft, ללא merge או roadmap completion.
+
+### ASR-22 / VOICE-01 — מסך דיבור → LLM → BlueTTS דינמי, 11.10.2026
+
+**כוונה והיפותזה:** המשתמש ביקש לדבר למוזאיק, לקבל תשובת LLM ולהקריא אותה בקול BlueTTS הקיים, עם לוגים וייצוג חזותי של כל שלב. מסך שיחה וסדר עבודה יחיד יהפכו את הרכיבים למסלול ניתן לבדיקה; פיצול load/verify/compute/playback יראה היכן העיכוב בלי לייחס כל המתנה ל־ASR. זו אינטגרציה, לא ניסוי המאיץ מודל יחיד.
+
+**baseline/candidate:** baseline `c0d227baeff2b47f4b4139e091cf74c338a834f1` מעל code `d8131699f6cc40442d3d567cdac478be0a62bd83`, PR #35. candidate מסך שיחה `0.4-voice-turn`, ASR `0.11-voice-companion`; candidate ראשון `85b5f369735de5e4842930e0379e3b4f30232a59`; instrumentation/pack-contract follow-up `62e8979a7f491dcb95e87863c83d733b0b5f44b1`; Android API fix `4493d2fbe352efa50c327fc46712e13b44185319`. זהו code candidate שנבנה ואומת ב־CI להלן. main נשאר `7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9`; ניסויי ASR/LLM עדיין פתוחים ולא merged. קריסת ה־LLM בניסוי ASR-21 אובחנה; תיקון dispatch עדיין Pending Pixel גם כאן.
+
+**גורמים משתנים:** מסך שיחה כ־launcher; microphone push-to-talk עד 12s; שירות signature מוגבל שמפעיל את ASR ב־APK הקיים; העברה אוטומטית של תמליל כתוצאת דיבור לבקשת LLM; prompt שיחה קצר עם 512 output tokens, בלי context בין פניות; frontend RenikudPlus בפיקסל במקום fixture G2P קבוע מהמחשב; BlueTTS יוצר IDs/duration/noise/mask מתשובת המודל; normalization ראשוני של ספרות/אותיות לטיניות; CPU TTS/G2P שני תהליכונים במקום ארבע בבדיקה הקבועה. כל שלב סדרתי ומבודד, בלי ASR/LLM חמים במקביל. אין wake word/background/tools.
+
+**קבועים וזהויות:** שלושת מודלי ASR, whisper.cpp, mel מלא, TPU encoder/cross, Q5 Beam 5 CPU=2 נשארים כמו ASR-18; אין שינוי shape/cache/quantization. הקלטה קצרה חדשה אינה אותו מקור אודיו של בדיקות שיחה ארוכות; אין טענת השוואת דיוק/RTF. Gemma ו־Maven API/JNI 0.18.0 + dispatch SHA מה־Gallery נשארים כמו ASR-21. ארבעת גרפי BlueTTS revision `468da64b4a51795a7594a3637727dbaf876b6df2` וקול libri_male_6209 נשארים מהבדיקה הקיימת; hashes/גדלים ננעלו בסקריפט/מדריך. נוסף RenikudPlus FP32 revision `679c56ca449d41873fb8ff7711ddf7563d28198f`, 1,234,209,530 bytes SHA `c3a2bdc35afbf53f28cdece4672dcca9b530dfa43a0d65b4c5bbc47150b32d0d`; CPU ONNX Runtime 1.24.3, exact cascade MAP מתוך metadata כשקיים, ללא datastore. זה אותו model revision ששימש host G2P בהכנה הישנה, אבל pronunciation לטקסט חדש טרם נמדד. Runtime vocab SHA `13fba5e735222fcf30d9c062d898982a1ba86d481f11560fbbdf6e0af79417b3`; fixture style/config מקבל SHA מהחבילה הקיימת בהכנה המקומית, אין כאן המצאת זהות של fixture המשתמש.
+
+**שימור ומדידה:** המקורות ב־Documents/Mosaic/tts וב־Documents/Mosaic/models נשארים מחוץ לאפליקציות. Native-compatible copies מאומתים; extra TTS מקור+cache כ־3.0GB. build לא מוריד weights; הכנה מחפשת Renikud cache ויורדת לרשת רק עם flag מפורש. PCM ותוצאות פרטיים ב־files/voice-turns; stage events נכתבים ב־JSONL עם fsync. callbacks ישנים לא ממשיכים chain לאחר ביטול/מעבר לרקע; error stops next stage; raw answer מופרד מטקסט diagnostics כך שלא מקריאים timing/journal footer. ASR משחרר לפני result; תהליך LLM נסגר לפני TTS. gates ASR קיימים נשמרים; אין הסרה/מעקף parity. שתי ההתקנות דורשות אותה חתימה. wall כולל verify/load/cleanup/playback כשמתאים; כל תת־מדד מופיע בנפרד. PSS אחרי סיום שלב אינו peak; thermal_status אינו הוכחת האטה/היעדרה.
+
+**ראיות מקומיות:** ארבע בדיקות Python של pack copying/cache עברו: source שגוי שומר יעד committed, copy verified/repeat reuse, חסר cache לא מוריד, pinned cache reuse בלי import downloader. שלוש בדיקות build setup/model separation קיימות עברו. תשע בדיקות Java עברו (כולל שלוש בדיקות pack contract של revision/voice, משקל שגוי, נתיב נוסף ו־sidecar גדול): טקסט חופשי עם שלילה/ספרות/לטינית, מקטעים עם כיסוי טקסט, niqqud/symbols, גודל תשובה מוגבל, non-finite rejection ו־32 מקרי synthetic exact-MAP מול פונקציית המקור pinned. קומפילציית Java של frontend/acoustic/pack מול API ONNX Runtime 1.24.3 עברה. Fixtures אינם model inference/גל קול אמיתי, ולכן אין host acoustic/G2P model parity חדשה, או ראיית איכות מכשיר. Python syntax ו־diff check עברו. ה־ASR הראשון עבר build/native/APK ב־[CI 38128315472](https://github.com/adarcook/mosaic-android/actions/runs/38128315472) על candidate הראשון. LLM [CI 38128315442](https://github.com/adarcook/mosaic-android/actions/runs/38128315442) נכשל בקומפילציה כי `JSONObject.keySet` ו־`Files.readString` קיימים ב־host JDK אך לא ב־Android SDK API שנבנה; הוחלפו ב־`keys()` וב־`readAllBytes` + UTF-8. זה כשל API/build שתוקן, לא תוצאת G2P/TPU במכשיר. Android API fix נבנה בהמשך כמפורט להלן.
+
+**Validation CI סופי:** על code commit `4493d2fbe352efa50c327fc46712e13b44185319` עברו [LLM/שיחה CI 38128699000](https://github.com/adarcook/mosaic-android/actions/runs/38128699000) ו־[ASR companion CI 38128698944](https://github.com/adarcook/mosaic-android/actions/runs/38128698944), כולל בדיקות קיימות/חדשות, Android/native/APK, dispatch verifier והעלאת artifacts. APKs נשלפו ונמדדו מקומית: שיחה 28,779,055 bytes SHA `f23e11184271dd386e5a660abd6fe416e75820696848e8a24e0c3c71b87cf53c`; ASR 8,340,973 bytes SHA `821909a5720c302d94e915d05b519c302d726dc5b8169a8efc1fabe8bb96b39d`. אלה APKs של CI, לא זהויות של build/חתימה מקומיים או מדידת הפיקסל. אריזת LLM כוללת ORT/LLM/dispatch עבור arm64 וייחוס רישוי, בלי model weights; Kotlin DebugProbesKt.bin הוא metadata של ספרייה, 1,728 bytes. SHA dispatch אומת שוב מתוך ה־APK שנשלף. המודלים עצמם לא הורדו/נטענו בסביבה זו. בדיקת probe הוותיקה [38128698967](https://github.com/adarcook/mosaic-android/actions/runs/38128698967) נכשלה ב־Environment ambiguous בקובץ ProbeService שלא שונה בניסוי; זו אינה טענה שכל workflows ב־PR ירוקים. היא אינה אחת משתי אפליקציות המסלול שנבנו לעיל.
+
+**קבלה והחלטה:** Pending device. דרושים: שני APKs באותה חתימה, source imports תקינים, פנייה קצרה עם transcript נכון → תשובה מתאימה → אותו תוכן בקול BlueTTS; פנייה שנייה שונה, ביטול/רקע בכל שלב, חסר/פגום model, יומן terminal עם זמני verify/load/inference/TTFT/G2P/acoustic/playback, מספרים/שמות/שלילות. יש למדוד cold latency ו־RAM אמיתי; לא לטעון שהמערכת מהירה עד מדידה. מגבלות: recording 12s, reply TTS 1,200 chars בלי truncation שקט, מקטעי 96chars/25s, סטטוס ריצה שהופרעה ללא auto-resume, ללא tools/message access או זיכרון שיחה. rollback ל־baseline מחזיר מסך תמלילים ו־LLM טקסט בלבד; מודלי המקור לא נמחקים. פרטי הכנה/בדיקה/ייחוס: [local-voice-conversation.md](local-voice-conversation.md).
+
+### ASR-22 / VOICE-01 — תוצאת מכשיר ראשונה, 11.10.2026 14:20 Asia/Jerusalem
+
+**תוצאה: ASR ו־LLM הושלמו; מסלול הקול נכשל ב־Playback timeout.** יומן גרסת `0.4-voice-turn`, מקור קוד branch באותו זמן `ea305d5968f4fab5d66f5a5b0eda7ba53e7aaa97`. SHA של APK שהמשתמש בנה לא נמסר; אין לזהותו עם APK ה־CI. Android fingerprint זהה לזה שמופיע ברשומת ASR-22. הגדרות Beam 5, ASR encoder/cross TPU ו־decoder CPU, Gemma TPU, BlueTTS/Renikud CPU נשמרו. דגמי המודל לא השתנו. ראיה חדשה זו מראה שה־dispatch המועמד אפשר טעינה ויצירת תשובה בפנייה אחת; אינה מוכיחה יציבות חוזרת או פתרון כל קריסות ה־ABI.
+
+| מדד | מילישניות | מקור / גבול המדידה |
+|---|---:|---|
+| אודיו שנקלט | 4,859.875 | משך 4.859875s, PCM16 mono 16kHz; PCM לא צורף |
+| ASR כולל | 12,732 | כולל אימות, טעינה, חישוב ותקורת worker/cleanup |
+| ASR verify / load | 2,865 / 2,519 | מדדי worker |
+| mel / encoder / cross / decode | 35 / 2,637 / 211 / 3,962 | compute 6,847; אין להסיק RTF שיחה רציפה מפנייה קצרה |
+| LLM כולל | 10,582 | כולל אימות וטעינה |
+| LLM verify / load / generate | 4,178 / 1,733 / 4,315 | first_text_chunk 1,958ms, ביחס לתחילת generation |
+| TTS verify / load | כ־2,148 / כ־4,980 | הפרשי phase timestamps, לא מדדי worker סופיים |
+| G2P / acoustic למקטע הראשון | כ־90 / כ־412 | הפרשי phase timestamps בלבד |
+| עצירת הקלטה עד ניסיון הניגון הראשון | 31,254 | ניסיון ניגון, אינו הוכחה לקול שנשמע |
+| פנייה כולל הקלטה עד כשל | 40,381 | המשתמש דיווח שלא נשמעה הקראה |
+
+זמן אימות מצטבר כ־9.191s וטעינה כ־9.232s. אלה גורמי latency מדודים; הגדלת TPU או שינוי Beam אינם מטפלים בהם. ASR PSS 121,938KiB, LLM PSS 369,635KiB, thermal_status=0; אלה snapshots ואינם peak RAM או הוכחה להיעדר throttling. תשובה נוצרה אך אין reference/WER/CER או בדיקת גל הקול. אין SIGSEGV חדש מזוהה בפנייה זו; SIGSEGV מ־11:39 בלוג הוא אירוע ASR-21 הישן, לא הכשל ב־14:20. פרטי נגן/אורך אודיו/route לא נרשמו ולכן גורם ה־timeout עדיין בגדר השערה.
+
+ראיות פרטיות בלבד (ללא תוכן תמליל בריפו):
+- `voice-1791717608465-b964a9b8-466c-4d0c-acea-fb9303496ea3.jsonl`, 4,239 bytes, SHA-256 `a94215404d7038c73903f3a79483ce27134fcc0a943a785693be3d6b9064bb1d`.
+- `mosaic-voice-logcat.txt`, 3,716,923 bytes, SHA-256 `d644ee120036074d4faa40d3e76ca7d351ca3635948dc5b41c05c327e4369deb`.
+- PCM identity מתוך journal: `768a4f21df85b518b75341148eb0c01959f3dc3cc147e53327bf1fed32b9c13d`; לא אומת מול PCM שלא נמסר.
+
+### ASR-23 / VOICE-02 — ניגון מקטעים קצרים ומדידה בעת כשל
+
+**השערה:** `AudioTrack.MODE_STREAM` הקודם הגדיר buffer של לפחות שנייה, ללא start threshold מפורש. Android מגדיר threshold לפי capacity; מקטע קצר ממנו עלול לא להתחיל למרות `play()` ו־write מוצלחים. פנייה זו יצרה מקטע ראשון קטן, אך מספר frames לא נשמר; אין הוכחה ישירה שה־head היה 0. מקור רשמי: [AudioTrack start threshold](https://developer.android.com/reference/android/media/AudioTrack#getStartThresholdInFrames()).
+
+Baseline ו־rollback: `ea305d5968f4fab5d66f5a5b0eda7ba53e7aaa97`, PR #35 פתוח, main לא השתנה. מועמד: commit שבו נוספה רשומה זו, APK `0.5-voice-playback` / versionCode 5; SHA APK ו־תוצאת Pixel Pending.
+
+**שינויים:** threshold מפורש של לכל היותר 20ms ומספר frames במקטע, write לא חוסם עם טיפול ב־partial/zero/negative returns ודדליין כולל מוגבל (משך המקטע +5s). שמירת frames, capacity, threshold, head, underruns, route ו־playback state; אירועי phase_detail ו־stage_end error משמרים Bundle metrics גם כשאין success. אימות SHA מלא בכל פנייה, טעינה קרה, PCM/Beam/threads, מודלי TPU/CPU, G2P, אקוסטיקה, chunking ו־prompt נשמרים ללא שינוי. הארכיון אינו משתנה. **אין טענת האצה של 18s אימות/טעינה בניסוי זה**; פריט נפרד להמשך לאחר קול תקין: cache אימות וטעינה עם invalidation ושמירת זהויות, תוך מדידת cold/warm RAM/latency.
+
+**בדיקות host:** 5 בדיקות JUnit עברו: מקטע קצר מבאפר של שנייה עם partial writes, מקטע זעיר, zero writes עם timeout מוגבל, threshold שאינו יכול להתחיל וכשל write. אלה בדיקות transport מדומה, לא Android AudioTrack/BlueTTS. Android CI של commit `91227b76e070eb6fbca8ca86fbe92ceaaf248687` עבר: [LLM gate 38136101398](https://github.com/adarcook/mosaic-android/actions/runs/38136101398), job 114460167566. עברו testDebugUnitTest, assembleDebug, אימות dispatch ב־APK והעלאת artifact. ZIP digest (אינו SHA APK): `554c2e3541d1a927e1e8e7ef913d541b3ac067f21d051e6a61cb3f9974c6de7f`. ה־legacy tensor-probe נשאר כשל נפרד; אין טענת all-workflows-green. תוצאת Pixel למועמד עדיין Pending; אין להסיק שיפור זמן או קול מהמבחנים.
+
+**קבלה:** בניית APK; אותו טקסט קצר מקבל ASR→LLM→קול שנשמע במלואו, כולל מקטע ראשון קצר ומקטעים הבאים. journal כולל head >= frames לכל מקטע ללא timeout; פנייה חוזרת, cancel/background וניתוב רמקול/אוזניות. בקלט חדש דרך מיקרופון אין A/B ביט־לביט; לבידוד נגן נדרשים frames קצרים מתועדים. מצב Pending device, rollback באותה חתימה ובגיבוי journals; אין שינוי/הורדה מחדש של מודלים.
+
+### ASR-23 / VOICE-02 — תוצאת Pixel, 11.10.2026 14:45 Asia/Jerusalem
+
+**הושלמה פנייה מלאה, כולל קול שנשמע לפי המשתמש; המהירות נכשלה מבחינת שימוש בשיחה.** APK `0.5-voice-playback`; קוד `91227b76e070eb6fbca8ca86fbe92ceaaf248687`, head תיעוד `59e692ec0d01465bc7596e2b7d798c3e134427be`. SHA APK מקומי לא נמסר. journal חדש `voice-1791719104892-1e43a3f3-c5c9-41dc-ab10-687b4439330d.jsonl`, 7,185 bytes, SHA-256 `0523076f50bfb4dcfe5c678faa6a6e536295b029b2ef295f1961f18ee64b847b`. PCM לא צורף; זהותו המדווחת `513d95d8e1316385ec08f92c082cb95f62dea95acae4510de29c4d0a55c04d54`, משך 5.559875s. אותו Android fingerprint כמבחן הקודם. קריאה חדשה וטקסט אחר — אין A/B identical-input.
+
+| מדד | תוצאה |
+|---|---:|
+| ASR כולל / verify / load / compute | 12,671 / 2,604 / 2,243 / 7,201 ms |
+| ASR mel / encoder / cross / decode | 130 / 2,520 / 289 / 4,261 ms |
+| LLM כולל / verify / load / generate | 10,641 / 4,424 / 1,580 / 4,190 ms |
+| LLM first text chunk מתוך generation | 1,963 ms |
+| TTS כולל / verify / load / synthesis | 16,643 / 2,538 / 4,572 / 2,760 ms |
+| TTS G2P / acoustic / playback | 893 / 1,864 / 6,362 ms |
+| עצירת הקלטה עד ניסיון ניגון ראשון | 32,510 ms; route רמקול (type 2) |
+| סוף הפנייה כולל הקלטה | 45,813 ms |
+| אודיו שנוצר | 6.060408s |
+
+שני המקטעים הסתיימו: head=frames=172,032 ואחריו 95,232; threshold 882 frames מול capacity 44,100; underruns=1 בכל מקטע (יכול להיות בסוף; אינו לבדו ראיה לקטיעה). אין timeout. זה מוכיח הצלחת שני מקטעים ארוכים בפנייה זו, **לא** שחזור הגורם לכשל המקורי במקטע קצר. בדיקה ספציפית למקטע <1s, פניות חוזרות, ביטול ורקע עדיין חסרות. ASR/LLM/TTS PSS snapshots: 124,112 / 373,446 / 1,560,100KiB, thermal_status=0; מנוע ASR ו־LLM נסגרים בין שלבים בגרסה זו, אין אומדן ל־warm-resident memory מתוך סכום snapshots אלו. הקול נשמע אך phoneme/waveform parity ודיוק תוכן אקוסטי לא נמדדו.
+
+**פירוש:** 9,566ms אימות +8,395ms טעינה =17,961ms בכל פנייה. חשבון נגדי בלבד: הסרתם מתוך זמן עד קול ראשון הייתה משאירה כ־14.55s, בלי הבטחה כי שאר החישוב יישאר זהה. חישוב ASR עצמו 7.2s, LLM 4.19s ומקטע קול ראשון 1.765s. לכן warmup לבדו אינו יעד סופי של עוזר מהיר. LLM השיב שאין לו גישה לנתוני שיחות: לא היה כלי calls מחובר, ולכן אין זו הוכחה לכשל intent או לביצוע Skill.
+
+### ASR-24 / VOICE-03 — הכנה אחת ומנועים חמים למסלול פקודות
+
+**השערה:** מחזור השמדה/יצירה ואימות מלא של gigabytes בכל פנייה מוסיף ~18s לריצה שנמדדה. שמירת שלושת המנועים במהלך מסך foreground אמורה להסיר את העלות החוזרת, ללא הורדת מודלים חדשים או שינוי חיפוש/דיוק. זהו צעד ביניים; intent→Skills ו־LLM→TTS streaming אינם ממומשים כאן.
+
+Baseline/rollback מלא: `59e692ec0d01465bc7596e2b7d798c3e134427be` (ASR-23), PR #35 עדיין ניסוי פתוח, main `7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9` לא מוזג. מועמד: commit שבו נוספה רשומה זו, LLM `0.6-warm-session`/6 ו־ASR `0.12-warm-companion`/12, APK SHAs Pending. שני APKs באותה חתימה נדרשים.
+
+**גורמים שהשתנו:** לחיצה מפורשת על ‘הכנת מנועים לשיחה’ מאמתת כל SHA-256 מלא וטוענת ASR→Gemma→BlueTTS, בלי להפעיל inference/מיקרופון ובלי synthetic warmup. המנועים נשארים בתהליכים נפרדים; פניות רצות בסדר ASR→LLM→TTS, ורק מנוע LLM נשאר חם — כל Conversation חדש ונסגר לפני התשובה הסופית. טעינת מודלים/אימות אינם מועברים לתוך שיחה: warmup מתועד בקובץ נפרד עם mode ו־foreground_session, ויש למדוד גם את זמן ההכנה. `engine_reused=true`, `verification_mode=loaded_engine_metadata`, verify/load=0 בפנייה חוזרת, עלות metadata check נכללת בתקורת stage. יש callback token חדש בכל בקשה, כולל שימוש בחיבור Binder קיים; הצלחה שומרת workers, כשל/ביטול/רקע/שתי דקות idle מפנים את כולם. מצב מוכנות אינו משוחזר לאחר process death. הרשאת מיקרופון נאספת לפני warmup כדי ש־permission dialog לא יפנה את המנועים לאחר ההכנה.
+
+**גבולות אימות וזיכרון:** snapshot בזיכרון של canonical path/size/mtime/creation/file key נלקח לפני SHA/load ונבדק לאחריהם ובכל שימוש חוזר. שינוי/מחיקה/החלפה גורמים לכשל ושחרור, ונדרשת הכנה מלאה חדשה; אין receipt מתמיד שמדלג על SHA לאחר restart. זו בדיקת invalidation למנועים שכבר נטענו, לא בדיקת checksum לכל פנייה ולא חסינות לשינוי מכוון שמשחזר את כל metadata. המקורות העצמאיים אינם משתנים. לפני טעינה או inference נדרשים >=2GiB זמינים וללא lowMemory; לאחריהם >=1GiB. נשמר PSS ו־available_memory_bytes ב־warmup; לחץ זיכרון גורם לשחרור. הגבולות מצמצמים סיכון, אך אינם אישור שאין OOM: residency משותף של מנועי TPU/CPU ותקורות driver דורש Pixel. אין inference במקביל ואין ערבוב גרסאות LiteRT באותו process.
+
+**גורמים שנשמרו:** אותם דגמי Whisper/Gemma/Renikud/BlueTTS וה־dispatch; ASR Beam 5 ושני CPU threads, graph shapes/KV/Q5, prompt/sampler/output budget, chunking/normalization. רעש TTS seed123 מתאפס בתחילת כל פנייה כדי ששימוש במנוע חם לא ישנה מדיניות seed. מסלול הארכיון ותמלול מוקלט נשארים ללא שינוי. ה־LLM הטקסטואלי בארכיון נשאר disposable דרך controller הישן, אף שהמנוע בשירות משותף תומך כעת reuse. שחרור Conversation נמדד ומקבל phase לפניו: native hang בשלב זה מביא timeout והפניית workers, בלי המשך TTS.
+
+**בדיקות host:** 3 בדיקות FileSnapshot עברו: קובץ ללא שינוי בכמה פניות, שינוי/מחיקה/atomic replacement, קובץ חסר/ספרייה. יחד עם 5 PlaybackLoop tests עברו 8. אלה אינן בדיקות Android lifecycle, native reuse או איכות ASR. CI של `c10e70f50536497677c45a2eb0a0db90b509a4a6` עבר בשני APKs: [LLM run 38137577860](https://github.com/adarcook/mosaic-android/actions/runs/38137577860), job 114464515068; [ASR run 38137577839](https://github.com/adarcook/mosaic-android/actions/runs/38137577839), job 114464514907. עברו build/tests/native gates, אימות dispatch והעלאת שני artifacts. Android Build הראשי עבר, legacy tensor-probe נשאר כשל נפרד ללא שינוי; אין all-workflows-green. שני APKs הורדו לבדיקה: LLM 28,792,723 bytes, SHA-256 `ca9986471df12f2e3847a5af9cf615882a0b94aeb6808a4ab2e8e42c35bd0cea`; ASR 8,345,185 bytes, SHA-256 `f30674d8f2b92c4e4e6b048b040728c0ee87f7a17b615d573b73868b8dc42ee7`. לא נמצאו weights (.onnx/.litertlm/.tflite) ב־APKs וה־LLM dispatch SHA נשאר זהה. ZIP digests: LLM `3f1f39e759bb5bd0308ed37c178a179fe6c99f361263574e9e7d0da49bbf602c`, ASR `836e49560b8be11c66b90d151cd365a66ff8e2ebb49ff4299ab9e0059284793a`. אלו APKs של CI, לא APKs/חתימה שהמשתמש יבנה; יש לבנות שניים באותו מחשב עם אותו signing key. שימוש warm במכשיר ומהירות/זיכרון Pending.
+
+**קבלה ומדידה:** warmup אחד ואז לפחות שתי פניות בלי לצאת מהמסך; verify/load=0 ו־engine_reused=true בכל שלב, ראשונה/שנייה זמן עד טקסט וקול, ו־PSS/available RAM ללא הידרדרות; כניסה מחדש מחייבת SHA/load מלאים. ביטול/רקע/idle/death/שינוי קבצים בזמן session לא ממשיכים לפעולה הבאה. בדיקת resident ASR/Gemma TPU שניהם לפני TTS הכרחית. יעד ביניים: לפחות 30% ירידה ב־stop→first-play על קלט דומה, ללא ירידת תוכן שימושי; יעד מוצר <5s הוא יעד עתידי, לא תוצאה שנמדדה. לשמור journals פרטיים ולעשות השוואה זהה ככל האפשר; callback ניגון אינו בהכרח זמן קול פיזי. **החלטה: Pending device; אין טענת realtime.**
+
+חלוקת ארכיון מול פקודות, משמעות intent accuracy ותכנון Skills: [voice-command-and-recording-paths.md](voice-command-and-recording-paths.md).
+
+### ASR-23 / VOICE-02 — יומן נוסף של 0.5, 11.10.2026 15:37 Asia/Jerusalem
+
+התקבל `voice-1791722254783-f127abc2-b895-40fc-8aad-a28fa7f145ad.jsonl`: 7,264 bytes, SHA-256 `2614b9119f43ccf7a8827cf06011bd84dbe8b8a4585155d77053f0ec9ca4cbbf`. הרשומה מציינת במפורש **0.5-voice-playback / ASR-23**, לא 0.6/ASR-24. אין foreground_session או engine_reused; SHA/load מבוצעים בכל שלב. לכן אין כאן תוצאת המנועים החמים, ואין להסיק שהמועמד 0.6 נכשל או הצליח. גרסת האפליקציה שמותקנת כעת לא נבדקה דרך dumpsys; היומן מוכיח רק את גרסת הריצה שיצרה אותו. SHA של APK מקומי וקוד build מדויק לא נמסרו; זהויות המודלים/dispatch ו־Android fingerprint תואמות לריצה הקודמת של 0.5.
+
+אודיו 7.139875s, SHA מדווח `f073b1b4622366fe4cdc64859e81779c249915616fba19dd039d690f572d5b0b`; PCM לא צורף. ASR כולל 12,996ms, verify/load/compute=2,650/1,449/8,353ms; mel/encoder/cross/decode=28/2,524/228/5,571ms. LLM כולל 11,430ms, verify/load/generate=4,496/1,747/4,721ms; first_text_chunk=2,008ms מתוך generation. TTS כולל 17,472ms, verify/load/synthesis=2,456/4,638/2,963ms; G2P/acoustic/playback=1,110/1,850/7,058ms, אודיו שנוצר 6.757007s. **stop→first-play callback=33,634ms**, זמן כולל עם הקלטה 49,352ms. אימות 9,602ms +טעינה 7,834ms =17,436ms. הסרתם בחשבון בלבד תשאיר כ־16.2s; זו אינה מדידת warm latency.
+
+היומן מסתיים complete. שני מקטעים נוגנו עד head=frames=181,248 ו־116,736, רמקול route type2, threshold882/capacity44,100, underruns1 לכל מקטע; אין timeout ביומן. אין דיווח משתמש נלווה על איכות הקול בריצה זו ואין לוגcat חדש. PSS snapshots ASR/LLM/TTS=123,595/383,422/1,564,396KiB, thermal_status0 — אינם peak או resident memory של 0.6. טקסט/אודיו חדשים, ולכן אין השוואת מהירות/דיוק ביט־לביט או קביעה של regression מול הריצה הקודמת. אין reference/WER/CER, native parity חדש או הצלחת Skill; כלי הטלפון עדיין לא מחוברים.
+
+**החלטה:** עוד ראיה להשלמת ניגון ב־0.5 ולאיטיות ה־cold path. ASR-24 נשאר Pending device. הבא: לבדוק dumpsys של שני packages, לצפות LLM0.6/ASR0.12, להכין מנועים ואז לבצע שתי פניות באותו מסך ולבדוק engine_reused=true ו־verify/load=0. rollback וקוד הבסיס נשארים כפי שרשומים ב־ASR-23/24; אין שינוי מודלים או main.
+
+### ASR-24 / VOICE-03 — הכנה נעצרה בשער זיכרון, 11.10.2026 15:45 Asia/Jerusalem
+
+המשתמש דיווח שסגר את כל האפליקציות, ושלח צילום UI של הכנת המנועים החדשה. הצילום מציג שלב ASR הושלם 4,002ms, שלב Gemma הושלם 6,380ms, ואז TTS נכשל עם הודעת `WarmMemory.beforeLoad`: אין מספיק זיכרון להכנת מנוע נוסף. אלה **זמני הכנת מנועים**, לא תמלול/יצירת תשובה של פנייה. ההכנה לא הסתיימה, ולכן כפתור הדיבור נשאר כבוי; אין כאן warm-turn latency או תוצאת קול. זהו כשל קבלה של הכנה משותפת בריצה המצולמת, אף ש־CI עבר.
+
+לפי הקוד, אותה הודעה מתקבלת כש־availMem<2GiB **או** lowMemory=true, לפני טעינת BlueTTS. הצילום אינו חושף איזו משתי הבדיקות הופעלה או כמה RAM היה פנוי; אין לקבוע OOM/קריסה או לייחס זאת לאפליקציות רקע. ASR ו־Gemma נשארו resident בזמן ניסיון טעינת המנוע השלישי, ולכן אי אפשר להסיק מסגירת אפליקציות אחרות שהכנת שלושת המנועים יחד תתאים. אין הוכחה ששינוי הסף לבדו בטוח. תהליכים אמורים להשתחרר אחרי כשל לפי controller; שחרור בפועל לא נמדד בצילום.
+
+הצילום תואם UI של המועמד 0.6 (`c10e70f50536497677c45a2eb0a0db90b509a4a6`); גרסת package/APK SHA אינם מופיעים בו. ראיה פרטית: `image(20261011-124522).png`, 189,907 bytes, SHA-256 `ea8ba443cdc55bd2aad9b0b2f54f304ab1968a4783ae3ef5d68f6f2044cc0259`. מזהה journal שמופיע בצילום: `voice-1791722669434-4a2e03e4-0969-4800-a88d-38031c79c33c.jsonl`; הקובץ עדיין לא התקבל ולכן אין SHA, PSS או available_memory_bytes מדודים ממנו. אין audio/reference או logcat נלווה. אין שינוי ב־main או במודלים.
+
+**החלטה:** ASR-24 נכשל בהכנה בריצה המצולמת; הטענה שכל המנועים יכולים להישאר טעונים במכשיר זה אינה מאושרת. נדרש journal של ההכנה, ובפרט available_memory_bytes/PSS לאחר ASR/Gemma, לפני בחירת מדיניות residency חדשה. הכיוון הבא הוא פינוי מנועים לפי שלב והפרדת cache אימות משמירת מנוע native; עדיין אינו ממומש ואינו תוצאת ביצועים. הודעת ‘סגור אפליקציות’ כללית מדי למצב הזה; אינה אבחון שהמשתמש השאיר אפליקציות פתוחות. rollback נשאר ASR-23, עם ניגון שעבד אך latency לא מתאים למוצר.
+
+### ASR-24 / VOICE-03 — journal של כשל ההכנה, התקבל 11.10.2026 16:15 Asia/Jerusalem
+
+התקבל journal ההכנה מהצילום: `voice-1791722669434-4a2e03e4-0969-4800-a88d-38031c79c33c.jsonl`, 2,423 bytes, SHA-256 `c2446fa293e6550593597fcb36fe1942c5a7cbf0f31125dfa383608d9209acb0`. זו השלמת ראיה לאותה ריצה, לא ניסוי נוסף. הרשומה מאשרת `0.6-warm-session`, `ASR-24 / VOICE-03`, mode=`foreground_warmup`; זהויות LLM/dispatch/Renikud ו־Android fingerprint תואמות למועמד. commit/APK SHA מקומי וגרסת package ASR אינם נמסרים. baseline/rollback נשאר ASR-23; קוד המועמד `c10e70f50536497677c45a2eb0a0db90b509a4a6`, ללא שינוי מודלים או backend.
+
+| סיום שלב הכנה | זמן שלב | אימות SHA | טעינה | RAM זמין במערכת | PSS של worker |
+|---|---:|---:|---:|---:|---:|
+| ASR | 4,002 ms | 2,586 ms | 1,226 ms | 2,621,644,800 bytes (2.442 GiB) | 652,639 KiB |
+| Gemma | 6,380 ms | 4,375 ms | 1,676 ms | 1,543,995,392 bytes (1.438 GiB) | 130,442 KiB |
+| TTS | שגיאה אחרי 240 ms; worker 3 ms | לא התחיל | לא התחיל | לא נרשם בשער השגיאה | לא נרשם |
+
+אחרי Gemma, המדידה האחרונה נמוכה מסף `beforeLoad` של 2 GiB בכ־604 MB (decimal). הזיכרון הזמין ירד בין שתי המדידות ב־1,077,649,408 bytes (1.004 GiB). זהו שינוי בזיכרון המערכת, **לא** מדידת צריכה בלעדית של Gemma; PSS של worker אינו חשבון מלא של זיכרון מאיץ/driver. אין מדידת RAM לפני ASR, ואין רישום `lowMemory` או RAM בנקודת השגיאה עצמה. לכן היומן תומך היטב בחסימה בגלל סף RAM, אך אינו מבודד איזה תנאי OR הופעל ברגע הקריאה. ASR ו־Gemma מוכנים ונשארים טעונים; TTS נפסל לפני אימות/טעינה. כל ההכנה הסתיימה במצב error אחרי 10,642 ms, ללא הקלטה או inference, ללא תוצאת TTS וללא ראיה לקריסה/OOM.
+
+**החלטה:** כשל הכנת שלושת המנועים יחד מאומת גם ב־journal. לא מורידים סף על סמך המדידה הזאת, במיוחד כאשר TTS FP32 הגיע בעבר ל־PSS של כ־1.56 GB בריצות 0.5. הניסוי הבא צריך להפריד אימות קבצים מחיי המנוע, לפנות ASR לפני טעינת Gemma ולפנות Gemma לפני טעינת BlueTTS, ולמדוד RAM/PSS ופנייה ראשונה/שנייה. זו הצעת ניסוי שטרם מומשה; אין לטעון לשיפור latency או לקבוע כבר שמנוע מסוים יכול להישאר resident. שחרור בפועל אחרי השגיאה ויציבות ממושכת עדיין לא נמדדו. הראיה הפרטית נשארת מחוץ ל־Git; שינוי התיעוד בלבד, PR #35 פתוח ולא ממוזג, main ללא שינוי.
+
+### ASR-25 / VOICE-04 — מנועים מתחלפים ואימות קבצים נפרד, 11.10.2026
+
+**השערה:** שחרור ASR לפני Gemma ושחרור Gemma לפני BlueTTS יאפשר הכנה ופניות בלי החזקת שלושת המנועים יחד. receipt פרטי של SHA עבור ישיבת המסך ימנע קריאה מלאה חוזרת גם לאחר הריגת worker. baseline קוד ASR-24 `c10e70f50536497677c45a2eb0a0db90b509a4a6`, תיעוד מדידת כשל `b97f82bffb39cb300290b9069097b18fdbfcd213`; rollback פונקציונלי ASR-23 `91227b76e070eb6fbca8ca86fbe92ceaaf248687` עם TTS שעבד אך latency לא שימושי. המועמד באותו PR #35, LLM `0.7-sequential-session` (7), ASR `0.13-sequential-companion` (13); commit קבוע יתווסף אחרי פרסום. main נשאר ללא שינוי. APK SHA ובדיקת מכשיר טרם נמדדו.
+
+**שינויים מדויקים:** controller מפנה worker בסיום כל שלב, כולל הכנה, ושומר רק תוצאה טקסטואלית/PCM/receipt. ממתין אסינכרונית למות Binder עד 8s; callbacks ישנים נפסלים וביטול/רקע עוצרים את המשך הרצף. רושם אירועי release, זמן, available RAM ו־lowMemory. session UUID מתחדש ברקע/ביטול/שגיאה/idle/הכנה חדשה. receipt נפרד בפרטי כל worker שורד restart של worker באותה ישיבה; קשור ל־session, חוזה hashes, canonical paths, size, modification/creation timestamps ו־fileKey, נכתב אטומית רק אחרי SHA מלא ובדיקת יציבות. חוסר session (מסלול archive הישן) מחייב SHA בכל טעינה. שינוי metadata או חוזה מחייב SHA מחדש; אין הגנה מוכחת מפני שינוי מכוון שמשמר את כל המטא־דאטה. engine_reused=false צפוי; verification_mode=session_receipt_metadata צפוי אחרי ההכנה; load_ms אינו אפס.
+
+סף **טעינה** נשאר 2 GiB/lowMemory; סף **inference לאחר טעינה** הופרד ל־1 GiB/lowMemory, זהה לסף post-load הקיים, כאשר לא מתווסף מנוע אחר. זהו גורם נוסף ששונה ויש להעריך את יציבותו; לא הורד סף הוספת מנוע. הודעת חסימה כוללת available RAM ו־lowMemory במקום עצה כללית לסגור אפליקציות. Binder מת אינו מדידה של החזרת כל RAM/TPU driver; יש למדוד RAM בשחרור ובטעינה שאחריו.
+
+**בקרות:** אין שינוי משקלים/quantization/graphs/dispatch/search/prompt/token budget. ASR encoder+cross=NPU, decoder=CPU Beam5/2threads; Gemma4 E2B=NPU runtime0.18.0 עם dispatch Gallery1.0.20; BlueTTS+RenikudFP32=CPU2threads. זהויות מפורטות ב־ASR-22–24. הקלטה foreground 16kHz mono PCM16 עד12s, אין Skills חדשים/הקראה streaming/wakeword. אין אודיו או reference חדש; אין A/B איכות או latency שנמדד.
+
+**תנאי קבלה לפני מכשיר:** הכנה מלאה ושתי פניות באותו מסך, end=complete בכל אחת כולל ניגון; אין crash/freezing/reboot; release לכל שלב לפני phase הבא; אימות receipt בפניות וטעינה בנפרד; RAM/logcat לצורך אבחון. על אותו מקור להשוות stop-to-first-play ו־ASR/LLM/TTS compute מול 0.5, בלי לטעון לזמן zero-load. יעד השלב הוא יציבות ותיקון residency; תגובת מוצר מהירה עדיין לא הושגה.
+
+**בדיקות מארח:** 12 JUnit tests עברו מקומית (4 חדשים ל־receipt: reuse מקריאה חדשה ללא state בזיכרון/ישיבה חדשה, חוזה/replacement, כשל/mutation, session חסר; 3 FileSnapshot ו־5 PlaybackLoop). 3 בדיקות build helper עברו. מקומית אין Android SDK/JDK21 לבניית APK; CI של שתי האפליקציות נדרש ונמצא Pending בעת כתיבת הרשומה. אין בדיקת process lifecycle אמיתית ב־JUnit; היא נדרשת במכשיר. ההנחיות המעודכנות ב־local-voice-conversation.md.
+
+**CI ראשון:** LLM [run 38143147043](https://github.com/adarcook/mosaic-android/actions/runs/38143147043) עבר קומפילציית production אך נעצר בקומפילציית בדיקות: `Files.writeString` אינו קיים ב־Android bootclasspath. הוחלף ב־Files.write עם UTF-8; 12 הבדיקות המקומיות עברו שוב. זו תקלת test API, לא תוצאת מכשיר. CI מחדש נדרש.
+
+**CI אחרי התיקון:** commit `2fb29569d1966ce41a8e52d9589067c22bde9f2f` עבר את שתי בניות ה־APK: [LLM 38143333169](https://github.com/adarcook/mosaic-android/actions/runs/38143333169), job114481489061, ו־[ASR 38143333155](https://github.com/adarcook/mosaic-android/actions/runs/38143333155), job114481488786. LLM testDebugUnitTest ו־assembleDebug עברו; 3 בדיקות build helper ו־4 pack tests עברו ב־CI. packaged dispatch SHA אומת כ־`1e3ea6dc7ae2d48b95f7147791b18c1de3095165b42470a547909f6e0d72c5ec`. digest של ZIP artifact LLM הוא `15295bf7f20923e86f544a3ea5c3948fc5a0a46cab483f833fc9db1156fb5781`; זה אינו SHA של APK. APK SHA מקומי/CI לא נמדד כאן. ASR עבר גם PCM/recovery/session-comparison gates. ה־legacy probe [38143333093](https://github.com/adarcook/mosaic-android/actions/runs/38143333093) עדיין נכשל ב־Environment import ambiguity בקוד probe שלא שונה, כפי שהיה קודם; אין לטעון שכל workflows עברו. Main Android Build עדיין רץ בבדיקה זו. אין תוצאת פיקסל עבור 0.7; acceptance remains Pending device.
+
+**החלטה:** מועמד לבנייה ובדיקת פיקסל בלבד, לא הצלחה מדודה. לא מתקינים pair מ־CI אם נחתם בשני debug keys שונים; בונים את שתי האפליקציות יחד ב־WSL באותו מפתח ו־install -r, בלי להסיר או להעתיק מודלים.
+
+### ASR-25 / VOICE-04 — הכנת ASR הסתיימה, המתנת release נכשלה, 11.10.2026 19:13 Asia/Jerusalem
+
+התקבל `voice-1791735095280-4e639d50-9c6d-488f-80c0-a876f39d8f85.jsonl`, 1,483 bytes, SHA-256 `9817fd394a041d6e0cde1ed7e8a8c4d0bfa8575544ed5b455c074124ab59dbc5`. start מזהה LLM0.7/ASR-25, mode=foreground_sequential_prepare, Android fingerprint וזהויות LLM/dispatch/Renikud תואמים לריצה הקודמת. ASR package version/PID ו־APK SHA אינם נרשמים; commit מקומי לא נמסר. reference ואודיו אינם קיימים בריצת הכנה; logcat לא צורף.
+
+ASR preparation הושלמה אחרי 4,939ms (verify2,495ms, load2,271ms), PSS656,422KiB, available RAM1,961,791,488bytes (כ־1.827GiB). worker_release_start נרשם ב־4,951ms; אחרי המתנה של 8,002ms הסתיים journal במצב error ב־12,953ms. **אין worker_release_end ואין phase LLM/TTS**. זו אינה תוצאת תמלול פנייה: לא הייתה הקלטה/inference. מדידת RAM האחרונה היא לפני בקשת release, לא אחריה; לא ניתן להוכיח שהתהליך נשאר חי או שה־RAM לא הוחזר. הכנה ושתי פניות לא עברו acceptance; ASR-25 נכשל בריצה זו.
+
+קוד 0.7 השתמש ב־isBinderAlive polling בלי הרשמת death recipient על Binder זה. ב־[AOSP BpBinder](https://android.googlesource.com/platform//frameworks/native/%2B/b51a9cc926a8f49db6c2c65a47ec4ea7d72b510b/libs/binder/BpBinder.cpp), isBinderAlive קורא mAlive; transact מול יעד מת או sendObituary מעדכנים אותו. לכן polling של snapshot אינו אישור פעיל לסגירת התהליך. [Android IBinder API](https://developer.android.com/reference/android/os/IBinder.html) מציע linkToDeath לצורך notification כשהתהליך נסגר. זו בעיה ממשית בתכנון ה־waiter והסבר אפשרי לתוצאה; היומן אינו מוכיח stale proxy כגורם היחיד. אין הצדקה להגדלת timeout בלבד או לדילוג לשלב הבא ללא ראיה.
+
+### ASR-26 / VOICE-05 — הודעת מות Binder במקום polling, 11.10.2026
+
+**השערה:** הרשמת linkToDeath לפני בקשת shutdown תמנע פספוס של תהליך שכבר נסגר ולא תחייב polling של mAlive. baseline `2fb29569d1966ce41a8e52d9589067c22bde9f2f` (ASR-25/LLM0.7); תיעוד אחרון `b44e5a9fa7a8d931da2176e244a2ca5ee6981fd2`. candidate באותו PR #35: LLM `0.8-worker-death` (versionCode8); ASR companion נשאר `0.13-sequential-companion`, ללא שינוי קוד/משקלים ב־ASR. קוד המועמד `d6962a29610f0c3da63b3036338bdb2f7e8a0086`. main ללא שינוי, PR פתוח ולא ממוזג; אין APK SHA או תוצאת מכשיר למועמד.
+
+**שינוי יחיד פונקציונלי:** WorkerRelease נרשם להודעת death לפני שליחת Message9. callback מועבר ל־main Handler ומשלים את המעבר פעם אחת בלבד; RemoteException בהרשמה (תהליך שכבר מת) הוא מסלול complete מפורש. cancel/timeout מסירים observer ו־timeout; death מאוחר/כפול אינו ממשיך ישיבה שבוטלה. שגיאת שליחת stop מתועדת ואינה מתירה מעבר בלי death. שגיאת registration אחרת עוצרת את הרצף אחרי ניסיון stop/unbind. timeout נשאר8s, ספי RAM והחלפת מנועים נשארים כמו ASR-25; אין bypass או הארכת timeout.
+
+**אבחון נוסף:** journal start מוסיף גרסת package ASR הנראית ללקוח. release_start רושם mechanism ו־binder_class; release_end מוסיף death_evidence (notification או already_dead_at_registration), RAM/lowMemory/זמן; timeout רושם worker_release_error עם RAM/lowMemory ו־binder_alive_snapshot אבחוני בלבד. shutdown failure נרשם בנפרד. מוות Binder אינו מוכיח החזרת כל זיכרון driver/מאיץ; סף טעינת המנוע הבא נשאר פעיל.
+
+**בקרות ו־acceptance:** המודלים, hashes, CPU/NPU backends, Beam5/2threads, prompt, TTS וכל הגדרות ASR-25 ללא שינוי. acceptance: הכנה מלאה, death_evidence ו־release לפני כל phase הבא, שתי פניות עם ניגון שלם באותו מסך; אין קריסה/קיפאון/אתחול/שלב כפול. receipt verification ו־load נמדדים בנפרד; אין יעד latency מוכח בניסוי lifecycle הזה. אין אודיו/reference חדש או השוואת איכות. rollback קוד waiter ל־0.7 משחזר את כשל ההמתנה שנמדד; baseline קול פונקציונלי נשאר ASR-23 `91227b76e070eb6fbca8ca86fbe92ceaaf248687` עם latency לא שימושי.
+
+**בדיקות:** 19 JUnit tests עברו מקומית: 7 חדשים עם endpoint/queue מדומים (הרשמה לפני stop, תהליך שכבר מת, timeout ו־death מאוחר, ביטול, שגיאת send, notification כפול, שגיאת registration) +12 tests הקיימים. הם מאמתים סדר ועיבוד callback בדיוק פעם אחת, **לא** Binder Android/הריגת תהליך אמיתיים; CI APK ובדיקת פיקסל עדיין Pending בעת כתיבה. מקומית אין SDK/JDK21 לבניית APK. מצב המועמד: נדרש build ואז device validation, לא הצלחה מדודה.
+
+**CI ASR-26:** קוד `d6962a29610f0c3da63b3036338bdb2f7e8a0086` עבר [LLM run38154933325](https://github.com/adarcook/mosaic-android/actions/runs/38154933325), job114515851259: testDebugUnitTest ו־assembleDebug, dispatch SHA מאומת וזהה למועמד הקודם. ZIP artifact digest=`f0ed17810802e13885e6791597ad01c774b454e0a25ec9ea81dc7e46c0d7e8a4` (ZIP, לא APK SHA). [ASR run38154933296](https://github.com/adarcook/mosaic-android/actions/runs/38154933296) עבר גם הוא, למרות שקוד companion לא השתנה. legacy probe run38154933260 נכשל; main Android Build עדיין רץ בעת בדיקה זו, ואין לטעון שכל workflows עברו. אין תוצאת פיקסל/הכנה/קול/latency ב־0.8. APK SHA מקומי ו־CI לא נמדדו; המועמד מאושר רק להתקנה כ־device experiment. journal הבא צריך להוכיח release_end עם death_evidence לפני התחלת השלב הבא, והכנה מלאה ושתי פניות.
+
+### ASR-26 / VOICE-05 — פנייה מלאה, שחרור תקין אך latency לא שימושי, 11.10.2026 19:59 Asia/Jerusalem
+
+התקבל `voice-1791737778821-05f9b0c0-c5b1-4369-b82e-83ed5d829b3d.jsonl`, 10,366 bytes, SHA-256 `17e72481c9dc56ff89621f442e21ffab43f89463cb65c72cdc304efdd46aea62`. start מזהה LLM `0.8-worker-death`, ASR package `0.13-sequential-companion`, ASR-26/VOICE-05, foreground_push_to_talk וישיבת מסך משותפת ל־receipt. Android fingerprint וזהויות המודלים/dispatch/Renikud תואמים למועמד. קוד המועמד `d6962a29610f0c3da63b3036338bdb2f7e8a0086`; APK SHA וקוד build מקומי לא נמסרו. התקבל גם צילום `image(20261011-165907).png`, 174,875 bytes, SHA-256 `e7faeec0aedc874168133d6fab58237a09dad787c3576558aec3cc60f10b477b`, שמציג השלמת שלושת השלבים והתמליל/תשובה. התוכן הפרטי אינו מועתק לריפו.
+
+| מדד | תוצאת הפנייה |
+|---|---:|
+| אודיו שנקלט | 4.179875 s |
+| ASR stage | 8,536 ms |
+| ASR verify / load / compute | 18 / 2,842 / 5,245 ms |
+| ASR mel / encoder / cross / decode | 10 / 2,619 / 212 / 2,403 ms |
+| LLM stage | 7,081 ms |
+| LLM verify / load / generate | 5 / 1,753 / 4,819 ms |
+| LLM first chunk מתחילת generation | 1,775 ms |
+| TTS stage כולל ניגון | 18,495 ms |
+| TTS verify / load / synthesis | 36 / 5,167 / 3,907 ms |
+| TTS G2P / acoustic / playback | 1,262 / 2,640 / 8,888 ms |
+| משך קול שנוצר | 8.428844 s, שלושה מקטעים |
+| capture_end עד marker ראשון ‘מקריא’ | 23,321 ms |
+| capture_end עד end כולל ניגון ושחרור | 36,250 ms |
+| כל הפנייה כולל capture | 40,796 ms |
+
+בכל השלבים `verification_mode=session_receipt_metadata`, engine_reused=false: סכום אימות59ms, סכום טעינה9,762ms. אימות בין תהליכים אכן נמנע בריצה הזו, אך כל מנוע עדיין נטען. marker ‘מקריא’ מגיע לפני AudioTrack/playback ולכן אינו מדידה אקוסטית של הצליל הראשון; זהו proxy עקבי במדידות היומן. TTS18.495s כולל8.888s ניגון, ואינו כולו המתנה לתשובה. גם first_text_chunk_ms הוא ביחס ל־generation, לא לסיום הדיבור.
+
+שחרור ASR הושלם725ms, Gemma244ms, TTS1,131ms, כולם death_evidence=death_notification ו־binder_class=android.os.BinderProxy לפני phase הבא/end. סכום release2,100ms; מתוכם969ms לפני תחילת TTS. RAM אחרי השחרור: ASR3,333,812,224bytes, LLM3,684,192,256bytes, TTS5,040,529,408bytes; lowMemory=false בכל release. PSS בסיום stage: ASR874,919KiB, LLM375,558KiB, TTS1,569,615KiB. thermal_status=0 בשלושתם; אין להסיק מכך על תדרים. playback_head תואם chunk_frames בכל אחד משלושת המקטעים, route2, underrun1 למקטע; המשתמש אישר שעבד. אין crash/timeout בריצה הזו.
+
+PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3ebbacabed5bb4fe58d5b6294d22d`, לא אומת מקובץ. reference transcript, הכנה ו־journal של פנייה נוספת מאותה ישיבה לא צורפו; אין WER/intent accuracy או acceptance של שתי פניות/יציבות ממושכת. זו פנייה חדשה שאינה אותו אודיו של 0.5 ולכן לא A/B מהירות/איכות מבוקר. כעת יש ראיה לשחרור תקין ולפנייה מקצה לקצה במועמד, אך לא לביצוע Skill: אין עדיין חיבור לקריאת הודעות/שיחות, וה־LLM רק יצר תשובה טקסטואלית על מגבלתו.
+
+**החלטה:** לשמור את תיקון lifecycle ואת receipt כמועמד שעבר פנייה אחת; מהירות מוצר **נכשלה** לפי דיווח המשתמש ובמדידת23.321s עד marker ההקראה. אין עוד bottleneck משמעותי ב־SHA. צריך לטפל בעלויות load ו־inference עצמן: TTS load5.167s ו־ASR load2.842s +compute5.245s, לצד LLM load1.753s+generate4.819s. גם ביטול כל הטעינות הוא רק counterfactual, לא תוצאה מדודה, ולא יביא לבדו לתגובה מהירה.
+
+**המשך מוצע, עדיין לא ממומש:** ניסוי קול קטן יותר בזיכרון (תחילה G2P, כגורם נפרד) ובדיקת איכות/זמן/RAM לפני ניסיון לשמור CPU TTS בין פניות. אין הצדקה להשאיר שוב את חבילת FP32 המלאה יחד עם NPU engines ללא מדידה. במסלול פקודות בלבד למדוד decoder search מהיר יותר מול הצלחת intent/שמות/מספרים/שלילות; מסלול ארכיון שיחות נשאר נפרד. תשובות קצרות והקראת משפט ראשון עשויות לצמצם המתנה אך דורשות תכנון residency; אין לחפוף LLM/TTS כבדים בלי תקציב זיכרון מדוד. יעד עתידי3–5s עד תגובה מדוברת הוא יעד מוצר, לא יכולת שהושגה או הובטחה. נדרש אותו PCM להשוואות הבאות. אין שינוי קוד/מודלים ברשומת התוצאה הזאת; PR#35 פתוח, main ללא שינוי ו־rollback נשאר כמפורט ב־ASR-26.
+
+### ASR-26 — מעבר למק: מקורות מודלים עצמאיים נבדקו לפני התקנה בחתימה חדשה, 12.10.2026 Asia/Jerusalem
+
+המשתמש עבר למק עבודה ללא מפתח החתימה של WSL; מחוברים Pixel וסטיק Android ולכן יש לבחור serial מפורש ב־adb. זו בדיקת אחסון/זהות לפני התקנה, לא ניסוי מהירות חדש. פלט adb שסופק מראה את ארבעת קובצי Whisper/Gemma ב־`/sdcard/Documents/Mosaic/models`; SHA של כולם תואם את הזהויות המקובעות ב־ASR-22–26. הקול נמצא **בתיקיית משנה** `/sdcard/Documents/Mosaic/tts/blue-voice-pack`, לא ישירות ב־tts. קיימים manifest ועוד שבעה קבצים. hashes של RenikudFP32, ארבעת גרפי BlueTTS ו־vocab תואמים PINNED ב־TtsPack. hash שנמסר ל־manifest=`6bb24ec6e422929bf782c4c356cbf622607099252d2ea5357660a9f8f04ddc32`, reply=`39be2ff17a638a32398a780b31ba0de59942ef4e347d330a6397e4f965de38f8`. manifest/reply אינם pins כלליים: מבנה manifest והתאמת fixture לגודל/hash שלו ייבדקו בייבוא; אין לטעון שאומתו מתוך תוכן שלא התקבל. SHA הופק במכשיר ודווח על ידי המשתמש; הקבצים עצמם לא התקבלו ואין ארטיפקט מקור גולמי עם hash לאותו פלט.
+
+**החלטה:** אפשר לבנות את זוג האפליקציות באותו מפתח חדש במק ולהתקין מחדש אחרי גיבוי private files של שתיהן. מקור Documents אינו נמחק בהסרה; working copies, הקלטות/תמלילים, הגדרות ו־parity gate כן. יש לייבא מחדש Whisper/Gemma מהתיקייה העצמאית, קול מתיקיית המשנה, ולהשלים parity stage6 מחדש. אין מודלים להורדה במק, אך build עדיין צריך SDK/JDK21 ותלויות/runtime. אין עדות שהגיבוי, ההסרה, הייבוא או ההתקנה במק כבר בוצעו. גרסאות הקוד נשארות LLM0.8/ASR0.13; ניסוי שיפור קול נוסף טרם מומש. main ללא שינוי; PR#35 פתוח.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 
