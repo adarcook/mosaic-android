@@ -9,12 +9,24 @@ import static org.junit.Assert.*;
 
 public class SessionVerificationTest {
     private static void write(Path path,String value)throws IOException {Files.write(path,value.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
-    @Test public void receiptSurvivesWorkerRestartButNewSessionVerifiesAgain()throws Exception {
+    @Test public void receiptSurvivesWorkerRestartOnlyWithStableFileIdentity()throws Exception {
         Path root=Files.createTempDirectory("receipt");File model=root.resolve("model").toFile(),receipt=root.resolve("private/receipt").toFile();write(model.toPath(),"model");
         String session=UUID.randomUUID().toString();int[] calls={0};
+        boolean stableFileIdentity=Files.readAttributes(model.toPath(),java.nio.file.attribute.BasicFileAttributes.class).fileKey()!=null;
         assertFalse(SessionVerification.verify(receipt,session,"hash",new File[]{model},()->calls[0]++));
-        assertTrue(SessionVerification.verify(receipt,session,"hash",new File[]{model},()->fail("must not hash again")));
-        assertFalse(SessionVerification.verify(receipt,UUID.randomUUID().toString(),"hash",new File[]{model},()->calls[0]++));assertEquals(2,calls[0]);
+        assertEquals(stableFileIdentity,SessionVerification.verify(receipt,session,"hash",new File[]{model},()->calls[0]++));
+        assertFalse(SessionVerification.verify(receipt,UUID.randomUUID().toString(),"hash",new File[]{model},()->calls[0]++));
+        assertEquals(stableFileIdentity?2:3,calls[0]);
+        assertEquals(stableFileIdentity,receipt.exists());
+    }
+    @Test public void missingFileKeyNeverAllowsMetadataOnlyReceiptReuse()throws Exception {
+        Path root=Files.createTempDirectory("receipt");File model=root.resolve("model").toFile(),receipt=root.resolve("receipt").toFile();write(model.toPath(),"abc");
+        org.junit.Assume.assumeTrue(Files.readAttributes(model.toPath(),java.nio.file.attribute.BasicFileAttributes.class).fileKey()==null);
+        String session=UUID.randomUUID().toString();int[] calls={0};
+        assertFalse(SessionVerification.verify(receipt,session,"hash",new File[]{model},()->calls[0]++));
+        assertFalse(SessionVerification.verify(receipt,session,"hash",new File[]{model},()->calls[0]++));
+        assertEquals(2,calls[0]);
+        assertFalse(receipt.exists());
     }
     @Test public void changedContractOrAtomicReplacementInvalidatesReceipt()throws Exception {
         Path root=Files.createTempDirectory("receipt");File model=root.resolve("model").toFile(),receipt=root.resolve("receipt").toFile();write(model.toPath(),"abc");String session=UUID.randomUUID().toString();int[] calls={0};
