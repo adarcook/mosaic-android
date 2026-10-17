@@ -19,6 +19,6 @@ Whenever a change produces a **new Android version, APK, companion or tool imple
 5. **Only once the relevant GitHub gate is green**, provide optional local install/build instructions. A GitHub Actions APK is **not automatically safe** for `adb install -r`: compare signing certificates with the installed app. Never advise uninstall/reinstallation/data reset or moving model weights merely to work around signing incompatibility.
 6. On-device voice accuracy, Android Notification Listener permission flow, NPU/thermal, multi-turn stability, audio playback and lock-screen privacy still require separate **physical Pixel acceptance**. CI success is not device success.
 
-For the canonical and fuller cross-repository workflow, see [Mosaic development workflow](https://github.com/adarcook/mosaic-docs/blob/docs/require-github-ci-before-device-build/docs/DEVELOPMENT_WORKFLOW.md) (Draft until merged into docs `main`).
+For the canonical and fuller cross-repository workflow, see [Mosaic development workflow](https://github.com/adarcook/mosaic-docs/blob/main/docs/DEVELOPMENT_WORKFLOW.md) (Draft until merged into docs `main`).
 
 No credentials, private messages/transcripts, signing keys, SDK secrets or model weights go into Git.
