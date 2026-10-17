@@ -16,9 +16,9 @@ import org.json.JSONObject;
 /** Foreground warm session. Sequential turns, durable stages and isolated native runtimes. */
 public final class VoiceActivity extends Activity {
     private final Handler main=new Handler(Looper.getMainLooper());
-    private TextView asr,llm,tts,transcript,answer,status;private Button talk,stop,setup,export,archive,warm;private CheckBox beam2,zipformer;
+    private TextView asr,llm,tts,transcript,answer,status;private Button talk,stop,setup,export,archive,warm,notificationAccess,notificationCheck;private CheckBox beam2,zipformer;
     private ProgressBar asrProgress,llmProgress,ttsProgress;
-    private volatile boolean recording;private boolean active,foreground,prewarming,prepared;
+    private volatile boolean recording;private boolean active,foreground,prewarming,prepared,toolTurn;
     private volatile AudioRecord recorder;
     private static final class Worker {Messenger remote;ServiceConnection connection;boolean bound;}
     private final java.util.Map<String,Worker> workers=new java.util.HashMap<>();
@@ -42,6 +42,15 @@ public final class VoiceActivity extends Activity {
             if(prepared){main.removeCallbacks(idleRelease);clearWorkers();status.setText("המנוע השתנה. לחץ שוב 'הכנת מנועים לשיחה'.");}
             controls(!active);
         });layout.addView(zipformer);
+        notificationAccess=new Button(this);notificationAccess.setText("הרשאת קריאת התראות WhatsApp");
+        notificationAccess.setOnClickListener(v->startActivity(new Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        layout.addView(notificationAccess);
+        notificationCheck=new Button(this);notificationCheck.setText("בדיקת Tool: האם יש הודעת WhatsApp זמינה?");
+        notificationCheck.setOnClickListener(v->{if(active||!foreground)return;
+            WhatsAppNotificationTool.Result result=WhatsAppNotificationListener.readLatest(this);
+            status.setText("בדיקת כלי: "+result.status.name()+
+                (result.found()?" · נמצאה התראה. בדוק הקראה בפקודה קולית.":" · "+WhatsAppNotificationTool.spoken(result)));
+        });layout.addView(notificationCheck);
         warm=new Button(this);warm.setText("הכנת מנועים לשיחה");warm.setOnClickListener(v->begin(true));layout.addView(warm);
         talk=new Button(this);talk.setText("דבר עם מוזאיק");talk.setOnClickListener(v->requestMic());layout.addView(talk);
         stop=new Button(this);stop.setText("סיום משפט / ביטול");stop.setOnClickListener(v->{if(recording)stopMic();else if(active)finish("cancelled","הפעולה בוטלה");});stop.setEnabled(false);layout.addView(stop);
@@ -69,7 +78,7 @@ public final class VoiceActivity extends Activity {
             if(!new File(getExternalFilesDir(null),"blue-voice/manifest.json").isFile())throw new IOException("הכן את חבילת BlueTTS דרך ‘הכנת הקול’ תחילה");
             File folder=new File(getFilesDir(),"voice-turns");if(!folder.isDirectory()&&!folder.mkdirs())throw new IOException("לא ניתן לשמור שיחה");
             String id="voice-"+System.currentTimeMillis()+"-"+java.util.UUID.randomUUID();journal=new File(folder,id+".jsonl");audioFile=new File(folder,id+".pcm");
-            turnStart=SystemClock.elapsedRealtime();selectedAsrEngine=zipformer.isChecked()?life.mosaic.models.VoiceAsrBackend.ZIPFORMER:life.mosaic.models.VoiceAsrBackend.WHISPER;selectedBeam=beam2.isChecked()?life.mosaic.models.VoiceAsrBeam.EXPERIMENT:life.mosaic.models.VoiceAsrBeam.BASELINE;active=true;turn++;recognized="";response="";transcript.setText("");answer.setText("");
+            turnStart=SystemClock.elapsedRealtime();selectedAsrEngine=zipformer.isChecked()?life.mosaic.models.VoiceAsrBackend.ZIPFORMER:life.mosaic.models.VoiceAsrBackend.WHISPER;selectedBeam=beam2.isChecked()?life.mosaic.models.VoiceAsrBeam.EXPERIMENT:life.mosaic.models.VoiceAsrBeam.BASELINE;active=true;toolTurn=false;turn++;recognized="";response="";transcript.setText("");answer.setText("");
             asr.setText("1 · תמלול — ממתין");llm.setText("2 · תשובת מודל — ממתין");tts.setText("3 · הקראה — ממתין");
             event(new JSONObject().put("type","start").put("experiment",selectedAsrEngine.equals(life.mosaic.models.VoiceAsrBackend.ZIPFORMER)?"ASR-30 / VOICE-07":"ASR-26 / VOICE-05").put("build",BuildConfig.VERSION_NAME).put("asr_engine",selectedAsrEngine).put("asr_package_version",getPackageManager().getPackageInfo(life.mosaic.models.VoiceAsrBackend.packageName(selectedAsrEngine),0).versionName).put("android_fingerprint",Build.FINGERPRINT).put("sample_rate",16000).put("beam",selectedBeam).put("llm_model_sha256",ModelSpec.SHA256).put("dispatch_sha256",ModelSpec.DISPATCH_SHA256).put("tts_renikud_revision",TtsPack.REV).put("mode",warming?"foreground_sequential_prepare":"foreground_push_to_talk").put("foreground_session",sessionId));
             if(!getPreferences(0).edit().putBoolean("active",true).putString("journal",journal.getName()).putString("transcript","").putString("answer","").putString("result","השיחה התחילה ללא תוצאה סופית").commit())throw new IOException("לא ניתן לשמור מצב שיחה");
@@ -126,7 +135,7 @@ public final class VoiceActivity extends Activity {
     private void completeStage(Bundle data){String completed=stage;long elapsed=SystemClock.elapsedRealtime()-stageStart;
         try{
             JSONObject result=new JSONObject().put("type","stage_end").put("stage",stage).put("state","complete").put("elapsed_ms",elapsed);
-            for(String key:data.keySet())if(!key.equals("text"))result.put(key,data.get(key));event(result);
+            for(String key:data.keySet())if(!key.equals("text")&&!(toolTurn&&("normalized_text".equals(key)||"answer".equals(key))))result.put(key,data.get(key));event(result);
             TextView card=stage.equals("asr")?asr:stage.equals("llm")?llm:tts;card.setText(label(stage)+" · הושלם · "+elapsed+" ms");card.setTextColor(Color.rgb(25,120,65));
             releaseStage();
             disposeWorker(completed,()->continueStage(completed,data));
@@ -141,7 +150,21 @@ public final class VoiceActivity extends Activity {
                 else{prepared=true;finish("complete","ההכנה הושלמה. אפשר לדבר; כל מנוע ייטען בתורו, ואימות הקבצים נשמר למסך הנוכחי.");}
                 return;
             }
-            if(completed.equals("asr")){if(!life.mosaic.models.VoiceAsrBackend.matchesResult(selectedAsrEngine,data.getString("asr_engine",null),selectedBeam,data.getInt("beam_size",life.mosaic.models.VoiceAsrBeam.BASELINE)))throw new IOException("מנוע התמלול החזיר זהות או הגדרת Beam שגויה; בדוק גרסאות");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();transition("llm","פותח מודל…");Bundle request=new Bundle();request.putString("text",recognized);request.putBoolean("voice",true);request.putString("source_sha256",life.mosaic.models.ModelCopy.sha256(audioFile,()->false));bind(new Intent(this,LlmService.class),request,240000);}
+            if(completed.equals("asr")){if(!life.mosaic.models.VoiceAsrBackend.matchesResult(selectedAsrEngine,data.getString("asr_engine",null),selectedBeam,data.getInt("beam_size",life.mosaic.models.VoiceAsrBeam.BASELINE)))throw new IOException("מנוע התמלול החזיר זהות או הגדרת Beam שגויה; בדוק גרסאות");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();
+                if(WhatsAppReadIntent.matches(recognized)){
+                    toolTurn=true;
+                    WhatsAppNotificationTool.Result result=WhatsAppNotificationListener.readLatest(this);
+                    event(new JSONObject().put("type","tool_invocation").put("tool",WhatsAppNotificationTool.ID)
+                            .put("status",result.status.name()).put("read_only",true));
+                    response=WhatsAppNotificationTool.spoken(result);
+                    answer.setText("מוזאיק: "+response); // ephemeral; do not save notification text to preferences
+                    llm.setText("2 · כלי מקומי: "+WhatsAppNotificationTool.ID+" · "+result.status.name());
+                    transition("tts","מכין הקראת התראה…");Bundle toolRequest=new Bundle();
+                    toolRequest.putString("answer",response);
+                    bind(new Intent(this,TtsService.class),toolRequest,240000);
+                    return;
+                }
+                transition("llm","פותח מודל…");Bundle request=new Bundle();request.putString("text",recognized);request.putBoolean("voice",true);request.putString("source_sha256",life.mosaic.models.ModelCopy.sha256(audioFile,()->false));bind(new Intent(this,LlmService.class),request,240000);}
             else if(completed.equals("llm")){response=data.getString("answer","");if(response.isBlank())throw new IOException("תשובה ריקה");answer.setText("מוזאיק: "+response);getPreferences(0).edit().putString("answer",response).apply();transition("tts","מכין הקראה…");Bundle request=new Bundle();request.putString("answer",response);bind(new Intent(this,TtsService.class),request,240000);}
             else finish("complete","השיחה וההקראה הסתיימו");
         }catch(Exception e){finish("error",e.toString());}
@@ -188,12 +211,12 @@ public final class VoiceActivity extends Activity {
         asrProgress.setVisibility(android.view.View.GONE);llmProgress.setVisibility(android.view.View.GONE);ttsProgress.setVisibility(android.view.View.GONE);
         String result=text+"\n"+(journal==null?"":"נשמר: "+journal.getName());status.setText(result);getPreferences(0).edit().putBoolean("active",false).putString("result",result).putString("journal",journal==null?"":journal.getName()).apply();stage="idle";controls(true);if(prepared){main.removeCallbacks(idleRelease);main.postDelayed(idleRelease,120000);}getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
-    private void controls(boolean idle){zipformer.setEnabled(idle);beam2.setEnabled(idle&&!zipformer.isChecked());talk.setEnabled(idle&&prepared);warm.setEnabled(idle);setup.setEnabled(idle);archive.setEnabled(idle);export.setEnabled(idle);stop.setEnabled(!idle);}
+    private void controls(boolean idle){notificationAccess.setEnabled(idle);notificationCheck.setEnabled(idle);zipformer.setEnabled(idle);beam2.setEnabled(idle&&!zipformer.isChecked());talk.setEnabled(idle&&prepared);warm.setEnabled(idle);setup.setEnabled(idle);archive.setEnabled(idle);export.setEnabled(idle);stop.setEnabled(!idle);}
     private void event(JSONObject value)throws Exception{value.put("at_ms",System.currentTimeMillis()).put("since_start_ms",SystemClock.elapsedRealtime()-turnStart);try(FileOutputStream output=new FileOutputStream(journal,true)){output.write((value+"\n").getBytes(StandardCharsets.UTF_8));output.getFD().sync();}}
     private static String label(String stage){return switch(stage){case "capture"->"1 · הקלטה";case "asr"->"1 · תמלול";case "llm"->"2 · תשובת מודל";case "tts"->"3 · הקראה";default->"שיחה";};}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request!=72||result!=RESULT_OK||data==null||data.getData()==null||journal==null)return;
         try(InputStream input=new FileInputStream(journal);OutputStream output=getContentResolver().openOutputStream(data.getData())){if(output==null)throw new IOException("יעד אינו זמין");input.transferTo(output);status.setText("יומן השיחה יוצא. הוא כולל תמליל ותשובה אישיים.");}catch(Exception e){status.setText("הייצוא נכשל: "+e.getMessage());}}
     @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(level>=TRIM_MEMORY_RUNNING_LOW){if(active)finish("error","לחץ זיכרון במכשיר — המנועים שוחררו");else{main.removeCallbacks(idleRelease);clearWorkers();controls(true);status.setText("המנועים שוחררו בגלל לחץ זיכרון. הכן אותם שוב כדי להמשיך.");}}}
-    @Override protected void onResume(){super.onResume();foreground=true;controls(!active);}
-    @Override protected void onPause(){foreground=false;if(active)finish("cancelled","השיחה נעצרה במעבר לרקע; הנתונים שכבר נשמרו נשארו במכשיר");main.removeCallbacks(idleRelease);clearWorkers();super.onPause();}
+    @Override protected void onResume(){super.onResume();foreground=true;controls(!active);notificationAccess.setText(WhatsAppNotificationListener.hasAccess(this)?"גישה להתראות מאושרת — שינוי הרשאה":"אישור גישה להתראות WhatsApp");}
+    @Override protected void onPause(){foreground=false;if(active)finish("cancelled","השיחה נעצרה במעבר לרקע; הנתונים שכבר נשמרו נשארו במכשיר");if(toolTurn){answer.setText("");response="";}main.removeCallbacks(idleRelease);clearWorkers();super.onPause();}
 }
