@@ -8,8 +8,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.10-zipformer-voice-opt-in"
+        versionCode = 9
+        versionName = "0.11-tts-load-trial"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
