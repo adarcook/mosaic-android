@@ -48,3 +48,32 @@ Existing `life.mosaic.tensorwhisper` APK stays installed and unchanged.
 - Actual streamed live partial transcription in full voice interface, with background capture/worker IPC and bounded queue/timeout.
 - Controlled same-PCM quality/latency comparisons including Hebrew numbers/negation/mixed languages and device memory/thermal profiling over multiple turns.
 - Downstream first-token/first-audio latency optimization after reliable full-loop timing.
+
+
+## First Pixel full-loop validation — 2026-10-17
+
+**Status: one local device end-to-end turn completed successfully; subsequent repeated-turn and manual playback acceptance remain pending.** The user locally compiled the separate Zipformer and Mosaic voice APKs with Gradle, confirmed both APKs use the established device debug-signing certificate, passed the packaged Tensor dispatch verification, updated both via ADB, opted in to Zipformer, and reported successful engine preparation. A user-supplied **private** controller JSONL with 35 journal events recorded the first actual spoken turn. **This document contains only generalized operational metrics; no personal PCM, transcript, answers or user journal have been committed.**
+
+| Measurement | Real-device result |
+|---|---:|
+| Voice/Zipformer version | \`0.10-zipformer-voice-opt-in\` / \`0.2-zipformer-signed-voice-companion\` |
+| Chosen ASR path | \`zipformer\` (validated in start and stage end); \`zipformer2-66m-int8; cpu; buffered_after_capture\` |
+| Recorded audio duration | 4.239875 s |
+| Capture phase elapsed (start to capture_end marker) | 4.522 s |
+| ASR stage | **2.343 s** (verify **177 ms**, load **1,654 ms**, decode compute **303 ms**, including **263 ms** inside sherpa decode calls) |
+| ASR process release | **268 ms**, binder-death-confirmed |
+| LLM stage | **4.882 s** (load **1,522 ms**, generate **2,842 ms**, first-text-chunk **1,525 ms** as worker-reported metric) |
+| LLM process release | **270 ms**, binder-death-confirmed |
+| TTS stage | **11.200 s** (load **3,809 ms**; two speech chunks, cumulative playback reported **4,554 ms**) |
+| First TTS playback marker since turn start | **17.481 s** |
+| Capture-end → first TTS playback marker | **12.959 s** |
+| TTS process release | **732 ms**, binder-death-confirmed |
+| Full turn including input, processing, output playback and worker shutdown | **24.242 s**, state **complete** |
+| Thermal status | **0** at ASR, LLM, and TTS stage checkpoints |
+| Memory | No low-memory signal on any of three release acknowledgements; TTS worker PSS **~1.5 GiB**; no crash observed in log |
+
+The ASR transcript had a benign inflection error (imperative gender/segmentation), with intent preserved; the answer responded appropriately and generated two Hebrew TTS chunks. Android playback completion was logged for both chunks with playback status running and full head frames. There was one reported playback underrun counter reading per chunk; **user has not yet confirmed whether audible output had any gaps**, so this result does not establish flawless audio playback quality.
+
+**Baseline context:** Earlier separate Beam 2 journal observed ~24.030 s ASR, ~34.086 s after speech-end to TTS first playback marker, and ~47.164 s complete full turn. Current Zipformer run observes **2.343 s ASR** (~90.3% shorter), **12.959 s end-of-capture to playback marker** (~62.0% shorter), and **24.242 s complete turn** (~48.6% shorter). These use *different utterances*; not identical-PCM tests. Zipformer is still buffered **after** capture within the integrated app, in contrast to standalone live-streaming demo. The playback event time is an instrumented output marker, not independently measured acoustic onset.
+
+**Performance implications, not yet implemented:** Per-turn Zipformer worker reloaded 1,654 ms despite previous prepare because the lifecycle intentionally terminates the worker after prepare; any reuse optimization needs explicit memory and thermal gating rather than retaining overlapping native workers. The TTS phase (~11.2s, including ~3.8s voice pack load) is now the largest remaining stage, followed by Gemma (~4.9s). Prioritize stability, correct words, repeated-turn reliability and user confirmation of audible playback before altering sequencing, inter-process memory lifecycle or switching the full controller to chunked ASR IPC. The opt-in checkbox stays off by default; PR remains Draft, do not merge without explicit request.
