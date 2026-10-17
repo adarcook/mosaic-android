@@ -1,6 +1,6 @@
 # Hebrew streaming ASR — isolated Pixel 10 Pro gate
 
-Status: **Draft; not yet validated on-device**. Investigatory work tracked in #39. Stacked atop PR #40. This is **not** a change to the main Mosaic voice pipeline or the roadmap.
+Status: **Draft; Android CI compilation passed on 2026-10-17; not yet validated on-device**. Investigatory work tracked in #39. Stacked atop PR #40. This is **not** a change to the main Mosaic voice pipeline or the roadmap.
 
 ## Scope and safety
 
@@ -23,7 +23,7 @@ python scripts/prepare_zipformer_android_runtime.py
 .\gradlew.bat -p poc/zipformer-gate assembleDebug
 ```
 
-The last command produces `poc/zipformer-gate/build/outputs/apk/debug/zipformer-gate-debug.apk` (actual Gradle APK name may vary; list with `Get-ChildItem poc/zipformer-gate/build/outputs/apk/debug/*.apk`). The AAR is fetched by SHA outside Git. Never uninstall the Whisper or LLM APKs.
+The last command produces `poc/zipformer-gate/build/outputs/apk/debug/MosaicZipformerGate-debug.apk` (confirmed by Linux CI; verify locally with `Get-ChildItem poc/zipformer-gate/build/outputs/apk/debug/*.apk`). The AAR is fetched by SHA outside Git. Never uninstall the Whisper or LLM APKs.
 
 ## Copy already-downloaded model files to the Pixel
 
