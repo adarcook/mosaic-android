@@ -6,7 +6,11 @@ package life.mosaic.zipformergate
  * The samples are inference-only; original recorded PCM is never changed.
  */
 internal object ZipformerTailPadding {
-    const val TAIL_PADDING_MS = 500
+    // Pinned encoder: T=141 feature frames, decode_chunk_len=128 (10ms/frame).
+    // isReady requires processed + T < ready. A generic 500ms tail can leave
+    // the final real speech chunk undecoded; 2s covers the chunk plus lookahead.
+    // This is synthetic model input, not an additional microphone wait.
+    const val TAIL_PADDING_MS = 2_000
 
     fun finish(
         sampleRate: Int,

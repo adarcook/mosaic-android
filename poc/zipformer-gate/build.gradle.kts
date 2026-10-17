@@ -9,8 +9,8 @@ android {
         applicationId = "life.mosaic.zipformergate"
         minSdk = 31
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.4-zipformer-replay-diagnostic"
+        versionCode = 4
+        versionName = "0.5-zipformer-complete-tail"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

@@ -144,8 +144,8 @@ class ZipformerVoiceService : Service() {
                     partials++
                 }
                 // Unlike the microphone gate, this companion receives a completed PCM
-                // recording. sherpa-onnx's online example pads the final speech segment
-                // with 0.5s silence BEFORE inputFinished() to flush chunked decoding.
+                // recording. Flush the pinned encoder's full chunk plus lookahead
+                // BEFORE inputFinished(); generic 0.5s padding was insufficient.
                 // Padding is inference-only: do not modify the user's PCM or its hash.
                 val tailPaddingSamples = ZipformerTailPadding.finish(
                     SAMPLE_RATE,
