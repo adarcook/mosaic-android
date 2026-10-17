@@ -78,7 +78,7 @@ public final class WhatsAppNotificationListener extends NotificationListenerServ
                         item.getPostTime(),(n.flags&Notification.FLAG_GROUP_SUMMARY)!=0,isMessage));
             }
             return WhatsAppNotificationTool.selectLatest(candidates);
-        }catch(SecurityException|IllegalArgumentException|IllegalStateException failure){
+        }catch(RuntimeException failure){
             return WhatsAppNotificationTool.unavailable(WhatsAppNotificationTool.Status.READ_ERROR);
         }
     }
