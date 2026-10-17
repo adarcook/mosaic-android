@@ -10,7 +10,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1-zipformer-streaming-gate"
+        versionName = "0.2-zipformer-signed-voice-companion"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
