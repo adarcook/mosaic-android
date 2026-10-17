@@ -143,7 +143,16 @@ class ZipformerVoiceService : Service() {
                     }
                     partials++
                 }
-                stream.inputFinished()
+                // Unlike the microphone gate, this companion receives a completed PCM
+                // recording. sherpa-onnx's online example pads the final speech segment
+                // with 0.5s silence BEFORE inputFinished() to flush chunked decoding.
+                // Padding is inference-only: do not modify the user's PCM or its hash.
+                val tailPaddingSamples = ZipformerTailPadding.finish(
+                    SAMPLE_RATE,
+                    { samples, rate -> stream.acceptWaveform(samples, rate) },
+                    { stream.inputFinished() }
+                )
+                val finalizeStart = SystemClock.elapsedRealtime()
                 var finalCycles = 0
                 while (recognizer.isReady(stream)) {
                     require(++finalCycles <= 500) { "Zipformer finalization did not converge" }
@@ -166,6 +175,10 @@ class ZipformerVoiceService : Service() {
                     putLong("load_ms", loadMs)
                     putLong("compute_ms", SystemClock.elapsedRealtime() - started)
                     putLong("decode_ms", decodeMs)
+                    putInt("tail_padding_ms", ZipformerTailPadding.TAIL_PADDING_MS)
+                    putInt("tail_padding_samples", tailPaddingSamples)
+                    putLong("finalize_decode_ms", SystemClock.elapsedRealtime() - finalizeStart)
+                    putInt("finalize_decode_cycles", finalCycles)
                     putInt("input_frames", partials)
                     putInt("worker_pss_kb", memory.totalPss)
                     putInt("thermal_status", thermal)
