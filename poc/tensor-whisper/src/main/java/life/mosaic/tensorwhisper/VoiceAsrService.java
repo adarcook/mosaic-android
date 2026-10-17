@@ -17,7 +17,8 @@ public final class VoiceAsrService extends Service {
             busy = true;
             byte[] pcm = msg.getData().getByteArray("pcm16");boolean prepare=msg.getData().getBoolean("prepare",false);
             Messenger reply = msg.replyTo;String session=msg.getData().getString("foreground_session", "");
-            new Thread(() -> run(reply, pcm, prepare, session), "mosaic-voice-asr").start();
+            int beamSize = msg.getData().getInt("beam_size", 5);
+            new Thread(() -> run(reply, pcm, prepare, session, beamSize), "mosaic-voice-asr").start();
         }
         return true;
     }));
@@ -26,8 +27,10 @@ public final class VoiceAsrService extends Service {
     @Override public boolean onUnbind(Intent intent) {
         android.os.Process.killProcess(android.os.Process.myPid()); return false;
     }
-    private void run(Messenger reply, byte[] pcm, boolean prepare, String session) {
+    private void run(Messenger reply, byte[] pcm, boolean prepare, String session, int beamSize) {
         try {
+            // Fail closed on unsupported experiment values; older callers default to Beam 5.
+            if (beamSize != 2 && beamSize != 5) throw new IllegalArgumentException("Unsupported ASR beam size: " + beamSize);
             if (!getSharedPreferences("WhisperGateActivity", 0).getBoolean("crossParityPassedV1", false))
                 throw new IllegalStateException("השלם את בדיקת התאימות בשלב 6 באפליקציית התמלול תחילה");
             send(reply, 2, "טוען מנוע תמלול…", null);
@@ -49,14 +52,15 @@ public final class VoiceAsrService extends Service {
             if(pcm==null||pcm.length<16000||pcm.length>384000||pcm.length%2!=0)throw new IllegalArgumentException("נדרשת הקלטה של חצי שנייה עד 12 שניות");
             float[] audio=new float[pcm.length/2];ByteBuffer bytes=ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN);for(int i=0;i<audio.length;i++)audio[i]=bytes.getShort()/32768f;
             send(reply,2,"מתמלל בעברית — מנוע מוכן…",null);
-            WarmHybridEngine.Result result=engine.transcribe(audio,5,phase->send(reply,2,phase,null));
+            WarmHybridEngine.Result result=engine.transcribe(audio,beamSize,phase->send(reply,2,phase,null));
             if (result.text.isBlank()) throw new IllegalStateException("לא התקבל תמלול");
             Bundle data = new Bundle(); data.putString("transcript", result.text);
             data.putLong("verify_ms",verifyMs);data.putBoolean("engine_reused",reused);data.putString("verification_mode",reused?"loaded_engine_metadata":verificationCached?"session_receipt_metadata":"full_sha256");
             data.putLong("load_ms", load); data.putLong("compute_ms", result.totalMs);
             data.putLong("mel_ms", result.melMs); data.putLong("encoder_ms", result.encoderMs);
             data.putLong("cross_ms", result.crossMs); data.putLong("decode_ms", result.decodeMs);
-            data.putString("backend", "encoder/cross=NPU; decoder=CPU; beam=5");
+            data.putInt("beam_size", beamSize);
+            data.putString("backend", "encoder/cross=NPU; decoder=CPU; beam=" + beamSize);
             android.os.Debug.MemoryInfo memory=new android.os.Debug.MemoryInfo();android.os.Debug.getMemoryInfo(memory);data.putInt("worker_pss_kb",memory.getTotalPss());data.putInt("thermal_status",((PowerManager)getSystemService(POWER_SERVICE)).getCurrentThermalStatus());
             snapshot.requireUnchanged();life.mosaic.models.WarmMemory.add(this,data);busy=false;send(reply, 4, result.text, data);
         } catch (Throwable error) { busy=false;send(reply, 5, error.toString(), null); }
