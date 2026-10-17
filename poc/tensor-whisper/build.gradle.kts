@@ -9,7 +9,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = 13
-        versionName = "0.13-sequential-companion"
+        versionName = "0.14-voice-beam-trial"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
