@@ -43,3 +43,22 @@ Both debug APKs **must be built on the same Windows computer with the same debug
 ## Acceptance boundary
 
 Draft PR review and local Windows tests/compilation are only host-level checks. Device acceptance requires a correct ASR → Gemma → audible BlueTTS response on both settings, effective-beam journal verification, acceptable Hebrew word accuracy, memory/thermal checks and no regressions in worker release. The code does not add phone Skills or a wake word.
+
+## Pixel 10 Pro exploratory comparison — 2026-10-17
+
+The user tested both modes on the same Pixel 10 Pro with locally Windows-signed ASR `0.14-voice-beam-trial` and LLM `0.9-voice-beam-trial`. Two **private** 44-record JSONL journals were inspected; no personal audio, transcripts, answers or journal identifiers are committed. Both journals report `end.state=complete`, `start.beam` matching `stage_end(asr).beam_size` and the companion backend; transcript and Gemma response are identical in these two recordings. Three worker releases per run report Binder death; both runs show thermal status 0 and no low-memory state.
+
+| Metric | Beam 5 | Beam 2 |
+|---|---:|---:|
+| Recorded speech | 4.419875 s | 4.679875 s |
+| ASR total stage elapsed | 44,040 ms | 24,030 ms |
+| ASR compute | 41,144 ms | 21,342 ms |
+| CPU cache injection + decoding | 38,247 ms | 18,390 ms |
+| NPU encoder | 2,653 ms | 2,647 ms |
+| NPU cross K/V and transfers | 182 ms | 143 ms |
+| LLM stage | 5,645 ms | 3,821 ms |
+| TTS stage incl. playback | 12,992 ms | 12,739 ms |
+| Capture end to first TTS playback-start marker | 56,422 ms | 34,086 ms |
+| Full turn elapsed | 68,708 ms | 47,164 ms |
+
+Observed reductions: 19,857 ms (51.92%) in CPU decoder/cache stage, 20,010 ms (45.44%) ASR wall, 21,544 ms (31.36%) full turn. The first-playback marker is a journal event, **not** an acoustic measurement. The LLM stage also varied by ~1.8 s despite matching input text, so full-turn improvement cannot be attributed entirely to Beam size. Audio durations and SHA values differ; this is **not** a same-PCM controlled A/B. Only one short and relatively easy phrase was tested in each mode. Further trials should cover names, numbers, Hebrew negation, natural requests and multiple sequential turns, ideally identical PCM replay. No real-time or production-accuracy claim, no acceptance/merge yet. Baseline remains Beam 5 unless explicitly checked.
