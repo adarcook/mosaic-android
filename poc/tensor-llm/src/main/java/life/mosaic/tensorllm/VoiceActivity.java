@@ -25,7 +25,7 @@ public final class VoiceActivity extends Activity {
     private String sessionId=java.util.UUID.randomUUID().toString();
     private final Runnable idleRelease=()->{clearWorkers();controls(true);status.setText("המנועים שוחררו אחרי שתי דקות ללא פנייה. לחץ הכנת מנועים כדי להמשיך.");};
     private int bindToken;private volatile int turn;
-    private long turnStart,stageStart;private int selectedBeam=5;private String stage="idle",recognized="",response="";
+    private long turnStart,stageStart;private int selectedBeam=life.mosaic.models.VoiceAsrBeam.BASELINE;private String stage="idle",recognized="",response="";
     private File journal,audioFile;private Runnable deadline;private WorkerRelease pendingRelease;
     private final Runnable clock=new Runnable(){public void run(){if(active){status.setText("שלב: "+label(stage)+" · "+((SystemClock.elapsedRealtime()-stageStart)/1000)+" שניות · כולל: "+((SystemClock.elapsedRealtime()-turnStart)/1000)+" שניות\n"+(journal==null?"":journal.getName()));main.postDelayed(this,1000);}}};
     @Override public void onCreate(Bundle saved){super.onCreate(saved);LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(24,80,24,32);
@@ -62,7 +62,7 @@ public final class VoiceActivity extends Activity {
             if(!new File(getExternalFilesDir(null),"blue-voice/manifest.json").isFile())throw new IOException("הכן את חבילת BlueTTS דרך ‘הכנת הקול’ תחילה");
             File folder=new File(getFilesDir(),"voice-turns");if(!folder.isDirectory()&&!folder.mkdirs())throw new IOException("לא ניתן לשמור שיחה");
             String id="voice-"+System.currentTimeMillis()+"-"+java.util.UUID.randomUUID();journal=new File(folder,id+".jsonl");audioFile=new File(folder,id+".pcm");
-            turnStart=SystemClock.elapsedRealtime();selectedBeam=beam2.isChecked()?2:5;active=true;turn++;recognized="";response="";transcript.setText("");answer.setText("");
+            turnStart=SystemClock.elapsedRealtime();selectedBeam=beam2.isChecked()?life.mosaic.models.VoiceAsrBeam.EXPERIMENT:life.mosaic.models.VoiceAsrBeam.BASELINE;active=true;turn++;recognized="";response="";transcript.setText("");answer.setText("");
             asr.setText("1 · תמלול — ממתין");llm.setText("2 · תשובת מודל — ממתין");tts.setText("3 · הקראה — ממתין");
             event(new JSONObject().put("type","start").put("experiment","ASR-26 / VOICE-05").put("build",BuildConfig.VERSION_NAME).put("asr_package_version",getPackageManager().getPackageInfo("life.mosaic.tensorwhisper",0).versionName).put("android_fingerprint",Build.FINGERPRINT).put("sample_rate",16000).put("beam",selectedBeam).put("llm_model_sha256",ModelSpec.SHA256).put("dispatch_sha256",ModelSpec.DISPATCH_SHA256).put("tts_renikud_revision",TtsPack.REV).put("mode",warming?"foreground_sequential_prepare":"foreground_push_to_talk").put("foreground_session",sessionId));
             if(!getPreferences(0).edit().putBoolean("active",true).putString("journal",journal.getName()).putString("transcript","").putString("answer","").putString("result","השיחה התחילה ללא תוצאה סופית").commit())throw new IOException("לא ניתן לשמור מצב שיחה");
@@ -131,7 +131,7 @@ public final class VoiceActivity extends Activity {
                 else{prepared=true;finish("complete","ההכנה הושלמה. אפשר לדבר; כל מנוע ייטען בתורו, ואימות הקבצים נשמר למסך הנוכחי.");}
                 return;
             }
-            if(completed.equals("asr")){if(selectedBeam!=data.getInt("beam_size",5))throw new IOException("גרסאות Whisper ו-Mosaic אינן תואמות לניסוי Beam; עדכן את שתיהן");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();transition("llm","פותח מודל…");Bundle request=new Bundle();request.putString("text",recognized);request.putBoolean("voice",true);request.putString("source_sha256",life.mosaic.models.ModelCopy.sha256(audioFile,()->false));bind(new Intent(this,LlmService.class),request,240000);}
+            if(completed.equals("asr")){if(selectedBeam!=data.getInt("beam_size",life.mosaic.models.VoiceAsrBeam.BASELINE))throw new IOException("גרסאות Whisper ו-Mosaic אינן תואמות לניסוי Beam; עדכן את שתיהן");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();transition("llm","פותח מודל…");Bundle request=new Bundle();request.putString("text",recognized);request.putBoolean("voice",true);request.putString("source_sha256",life.mosaic.models.ModelCopy.sha256(audioFile,()->false));bind(new Intent(this,LlmService.class),request,240000);}
             else if(completed.equals("llm")){response=data.getString("answer","");if(response.isBlank())throw new IOException("תשובה ריקה");answer.setText("מוזאיק: "+response);getPreferences(0).edit().putString("answer",response).apply();transition("tts","מכין הקראה…");Bundle request=new Bundle();request.putString("answer",response);bind(new Intent(this,TtsService.class),request,240000);}
             else finish("complete","השיחה וההקראה הסתיימו");
         }catch(Exception e){finish("error",e.toString());}
