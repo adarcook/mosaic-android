@@ -9,7 +9,7 @@ android {
         minSdk = 31
         targetSdk = 35
         versionCode = 8
-        versionName = "0.9-voice-beam-trial"
+        versionName = "0.10-zipformer-voice-opt-in"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
