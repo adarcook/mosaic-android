@@ -542,6 +542,28 @@ PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3e
 
 **החלטה:** אפשר לבנות את זוג האפליקציות באותו מפתח חדש במק ולהתקין מחדש אחרי גיבוי private files של שתיהן. מקור Documents אינו נמחק בהסרה; working copies, הקלטות/תמלילים, הגדרות ו־parity gate כן. יש לייבא מחדש Whisper/Gemma מהתיקייה העצמאית, קול מתיקיית המשנה, ולהשלים parity stage6 מחדש. אין מודלים להורדה במק, אך build עדיין צריך SDK/JDK21 ותלויות/runtime. אין עדות שהגיבוי, ההסרה, הייבוא או ההתקנה במק כבר בוצעו. גרסאות הקוד נשארות LLM0.8/ASR0.13; ניסוי שיפור קול נוסף טרם מומש. main ללא שינוי; PR#35 פתוח.
 
+### ASR-20 — התקנה מחדש בדסקטופ ושחזור מקומי, 17.10.2026 (Asia/Jerusalem)
+
+זו ראיית הקמה מאוחרת ל־ASR-20, לא ניסוי פענוח חדש. ההשערה: מקורות עצמאיים וגיבוי פרטי מאפשרים מעבר מחשב/חתימה בלי להוריד משקלים מחדש. הקוד שנבנה והותקן הוא `7f883a15101cb31c138559e65f1d7c887a29b018`, בענף `experiment/zipformer-voice-loop-opt-in`, [PR #42](https://github.com/adarcook/mosaic-android/pull/42). נבדקו origin/main=`7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9` וה־PRs הקשורים; #42 עדיין פתוח ו־Draft. אין merge או השלמת roadmap. זהות commit של ה־APKs הישנים אינה מאומתת.
+
+**גורמים שהשתנו וקבלה:** סביבת Windows חדשה עם JDK 22 ו־Gradle 8.9, חתימה חדשה והתקנה נקייה של שלוש חבילות הניסוי אחרי גיבוי ה־APKs וכל נתוניהן הפרטיים. תעודת החתימה הישנה SHA-256=`ddcd0a67735d21987d3e0360521f5c06a806c30b3f62a4286bbbc1952d6b9a6d`; שלושת ה־APKs החדשים חתומים יחד ב־`ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35`. מפתח הדסקטופ גובה מחוץ לריפו. תנאי הקבלה להקמה: מקור עצמאי נשמר, גודל/SHA תקינים, ייבוא מקומי והכנה סדרתית מלאה. קבלת תמלול/קול אינה נכללת בבדיקת ההכנה.
+
+| APK מקומי | bytes | SHA-256 |
+|---|---:|---|
+| Zipformer `0.4-zipformer-replay-diagnostic` | 15,661,448 | `de298a41d402c0a8f6d4c3c99bccfd8e30f8e4f7bfd53a8a708eaf57bfb32690` |
+| Whisper `0.14-voice-beam-trial` | 8,350,785 | `067aeb0e9b1c0ed25bd99924832f37add526c7efd8a4e54c30397dc471576b90` |
+| Voice `0.10-zipformer-voice-opt-in` | 28,802,023 | `9aef7997c346942cd992642c798a80824effecd86d46c8acfc90a94bf765d5c7` |
+
+**שחזור בפועל:** מקורות Whisper/Gemma ו־BlueTTS נשארו ב־Documents ונבדקו מול SHA/גדלים מקובעים. מודלי Zipformer וה־lock שוחזרו מהגיבוי הפרטי, אומתו ונכתבו עם `run-as` תחת UID האפליקציה. ניסיון העתקת working copies חיצוניים דרך shell הצליח בבדיקת SHA אך נכשל בגישה מהאפליקציה: BlueTTS לא היה נגיש ו־Gemma החזיר `EACCES`. לכן הועברו העותקים האלה הצידה, ו־Gemma, שלושת קובצי Whisper ו־BlueTTS יובאו דרך מסכי SAF המובנים. כל מסך דיווח שהייבוא הושלם. אין להסתפק ב־SHA מוצלח של adb כהוכחת גישה של המנוע. המקורות העצמאיים לא שונו; BlueTTS כתב manifest קנוני חדש לעותק העבודה בלבד.
+
+**קבועים ושחזור:** Pixel 10 Pro / Tensor G5, fingerprint=`google/blazer/blazer:17/CP3A.261005.005/16271449:user/release-keys`. אותן זהויות Whisper/Gemma/BlueTTS המפורטות למעלה ובקוד; Zipformer revision=`ee769a2a13b887f91572eec349458bfb0fe79e7a`. Zipformer INT8 על CPU; Gemma על Tensor G5 NPU; Renikud/BlueTTS על CPU; Whisper שומר encoder והכנת K/V על TPU ו־decoder Q5 על CPU, אך לא הורץ כאן. אין שינוי במשקלים, shapes, cache layout, quantization, Beam, חלונות, tail padding או קוד capture. אין GPU. נבחר Zipformer במסך; לא שוחזרו preferences או parity gate ישנים.
+
+**תוצאות נפרדות:** שלוש הבניות המקומיות הצליחו בתור ההקמה הקודם. דוחות JUnit המקומיים נבדקו שוב: 6 בדיקות Zipformer ו־40 בדיקות LLM, אפס failures/errors/skipped; אין טענת CI חדשה. אחרי הייבוא, `foreground_sequential_prepare` הסתיים ב־`complete`, סה״כ **15,573ms**: ASR **1,951ms** (verify 200/load 1,582), LLM **6,196ms** (verify 4,233/load 1,629), TTS **6,002ms** (verify 2,259/load 3,481). זמני שחרור **196/220/963ms**, בכל שלב `binder_dead=true` עם `death_notification`. אלה זמני אימות/טעינה ושחרור, ללא audio capture, decoding, generation או playback. אין השוואת מהירות על אודיו, WER, sustained throughput או מסקנה תרמית.
+
+**ראיות פרטיות:** ארכיון `desktop-reinstall-20261017` מחוץ ל־Git כולל גיבויי הנתונים וה־APKs הישנים, מפתח הדסקטופ ודוח שחזור. גיבוי Zipformer ששימש לשחזור: 72,332,288 bytes, SHA=`573acbf912d386582eebaede5d09064f2db2f5a36303f63709d983ba7073430e`. יומן ההכנה הסופי: 3,956 bytes, SHA=`08171312c4fa7280da5956446eb3d927ce5da635810fe685e106fe59a62d6c93`. שמירתו הסתיימה אחרי terminal complete; hash של יומן חלקי אינו זהות הראיה הסופית.
+
+**החלטה, מגבלות ו־rollback:** הקמה/ייבוא והכנת מסלול Zipformer עברו. בדיקת דיבור חדשה, ניגון, פניות חוזרות, replay של אותו PCM ובעיית המילה האחרונה עדיין Pending; גם parity stage6 של Whisper נדרש מחדש לפני השימוש במסלול ההיברידי. אין סימון של תיקון דיוק. נקודת שחזור: אותו commit, שלושת ה־APKs/מפתח הדסקטופ ומקורות המודלים הפרטיים; עדכונים הבאים ב־`install -r` עם אותה תעודה. ראה [מדריך האחסון](independent-model-storage.md#מעבר-לדסקטופ-windows--לקח-מהתקנת-17102026).
+
 ### ASR-27 — Session receipt ללא fileKey ב־Windows (16.10.2026 Asia/Jerusalem)
 
 | שדה | ערך |
