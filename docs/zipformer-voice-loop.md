@@ -77,3 +77,30 @@ The ASR transcript had a benign inflection error (imperative gender/segmentation
 **Baseline context:** Earlier separate Beam 2 journal observed ~24.030 s ASR, ~34.086 s after speech-end to TTS first playback marker, and ~47.164 s complete full turn. Current Zipformer run observes **2.343 s ASR** (~90.3% shorter), **12.959 s end-of-capture to playback marker** (~62.0% shorter), and **24.242 s complete turn** (~48.6% shorter). These use *different utterances*; not identical-PCM tests. Zipformer is still buffered **after** capture within the integrated app, in contrast to standalone live-streaming demo. The playback event time is an instrumented output marker, not independently measured acoustic onset.
 
 **Performance implications, not yet implemented:** Per-turn Zipformer worker reloaded 1,654 ms despite previous prepare because the lifecycle intentionally terminates the worker after prepare; any reuse optimization needs explicit memory and thermal gating rather than retaining overlapping native workers. The TTS phase (~11.2s, including ~3.8s voice pack load) is now the largest remaining stage, followed by Gemma (~4.9s). Prioritize stability, correct words, repeated-turn reliability and user confirmation of audible playback before altering sequencing, inter-process memory lifecycle or switching the full controller to chunked ASR IPC. The opt-in checkbox stays off by default; PR remains Draft, do not merge without explicit request.
+
+
+## Tail-word clipping investigation — 2026-10-17
+
+After the first successful spoken turn, the user observed the last word being cut off in **two subsequent integrated Zipformer turns**. This is a **regression observation**, not evidence the recognizer has acceptable accuracy. Preserve opt-in status and do not integrate into production or merge. No private transcripts uploaded.
+
+### Investigated causes
+
+- The existing controller terminates \`AudioRecord\` promptly in \`stopMic()\`, so capture-level truncation remains a possible separate issue. No behavior change to Whisper or the capture loop is attempted in this slice to avoid confounding.
+- The opt-in Zipformer service consumed recorded PCM in 100ms frames, immediately called \`OnlineStream.inputFinished()\`, and then decoded ready frames. sherpa-onnx's own online transcription reference implementation recommends injecting **0.5 seconds of zero samples before signaling input finished** to flush the final online segment. Without this, a chunked transducer may return incomplete last tokens. Reference: https://github.com/k2-fsa/sherpa-onnx/blob/master/sherpa-onnx/python/sherpa_onnx/online_recognizer.py ; additional websocket reference uses 0.3s (https://github.com/k2-fsa/sherpa-onnx/blob/master/python-api-examples/streaming_server.py).
+- Model errors and immediate-stop mic buffer issues are *still possible*. This change is a controlled fix attempt, not a proven diagnosis.
+
+### Minimal fix (Zipformer companion only)
+
+- New \`ZipformerTailPadding.finish()\`: pass exactly **8,000 float32 zeros (500ms at 16kHz)** to the native stream, then call \`inputFinished()\`. This alters **only decoder input, not recorded audio**: unchanged PCM file, unchanged audio SHA, unchanged 12s microphone recording cap.
+- The private \`stage_end(asr)\` journal now records \`tail_padding_ms=500\`, \`tail_padding_samples=8000\`, \`finalize_decode_cycles\`, and \`finalize_decode_ms\`.
+- JVM regression tests check exact length/zero values, callback order (accept before finish) and non-16kHz rejection. CI now runs \`testDebugUnitTest\` before APK assembly. ZIP gate APK version \`0.3-zipformer-tail-flush\`, versionCode 2.
+- Existing Whisper, LLM APK, Gemma, BlueTTS and prior installed model files are **untouched**.
+
+### Pixel validation
+
+1. Fetch branch and build **only** \`poc/zipformer-gate\` locally, then confirm signing certificate as previously checked. Update **only** \`life.mosaic.zipformergate\` using \`adb install -r\`; do not uninstall or clear app data.
+2. In Mosaic voice, keep Zipformer opt-in enabled and press **הכנת מנועים לשיחה** if requested. Speak an ending-sensitive harmless request, say the last word fully, then tap **סיום משפט**; check exact last word in transcript.
+3. Repeat once. Export the **latest controller voice JSONL** privately if failure recurs. Confirm \`asr_engine=zipformer\`, \`tail_padding_samples=8000\`, and check last-word transcription, compute/flush latency and full-loop playback.
+4. If last word still missing, preserve the original PCM and test **the same capture** against an offline diagnostic path with/without padding before changing stop behavior. Never upload the private audio to GitHub. Next likely slice is capture-thread-owned graceful stop (rather than stopping AudioRecord from UI), plus tests; don't claim which layer failed without evidence.
+
+User acceptance is still required. **Do not merge** the draft PR.
