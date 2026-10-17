@@ -31,6 +31,6 @@ jobs:
       - name: Compile separate Zipformer voice companion APK
         run: |
           chmod +x gradlew
-          ./gradlew -p poc/zipformer-gate assembleDebug
+          ./gradlew -p poc/zipformer-gate testDebugUnitTest assembleDebug
       - name: Compile and test LLM voice controller
         run: ./gradlew -p poc/tensor-llm testDebugUnitTest compileDebugJavaWithJavac
