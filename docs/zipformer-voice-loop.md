@@ -103,4 +103,10 @@ After the first successful spoken turn, the user observed the last word being cu
 3. Repeat once. Export the **latest controller voice JSONL** privately if failure recurs. Confirm \`asr_engine=zipformer\`, \`tail_padding_samples=8000\`, and check last-word transcription, compute/flush latency and full-loop playback.
 4. If last word still missing, preserve the original PCM and test **the same capture** against an offline diagnostic path with/without padding before changing stop behavior. Never upload the private audio to GitHub. Next likely slice is capture-thread-owned graceful stop (rather than stopping AudioRecord from UI), plus tests; don't claim which layer failed without evidence.
 
+### Real-device outcome of the tail-padding fix
+
+**FAILED acceptance on Pixel 10 Pro:** The user rebuilt `poc/zipformer-gate` locally (`BUILD SUCCESSFUL`) and installed it by `adb install -r` (`Success`). In the subsequent explicitly requested last-token test ending with the number **five**, Zipformer **still clipped the final word**. Thus the 500ms virtual-silence fix alone is not sufficient. Do **not** mark last-word accuracy fixed and do not merge this experimental PR.
+
+**Next necessary isolation before another code modification:** extract the latest local `files/voice-turns/voice-*.pcm` capture from the debuggable `life.mosaic.tensorllm` app with ADB `run-as`, decode it as signed 16-bit little-endian 16kHz mono WAV **on the user's own computer**, and listen specifically for whether the last word is acoustically present. Keep private speech off GitHub. If WAV ends prematurely, investigate UI-thread `stopMic()` which immediately invokes `AudioRecord.stop()`; if WAV audibly contains the full last word, investigate Zipformer chunk-tail/decoding/model handling instead. No current evidence yet distinguishes these causes.
+
 User acceptance is still required. **Do not merge** the draft PR.
