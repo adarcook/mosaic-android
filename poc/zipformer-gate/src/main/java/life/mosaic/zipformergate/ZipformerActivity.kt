@@ -462,7 +462,7 @@ class ZipformerActivity : Activity() {
                     .put("input_sha256", sha).put("pcm_seconds", pcm.size / 32_000.0)
                     .put("decoder", "online_greedy_int8_cpu").put("mode", "fixed_pcm_replay"))
 
-                val summary = StringBuilder("אותו WAV: " + String.format(Locale.US, "%.2f", pcm.size / 32_000.0) + " שניות\\n")
+                val summary = StringBuilder("אותו WAV: " + String.format(Locale.US, "%.2f", pcm.size / 32_000.0) + " שניות\n")
                 for (tailMs in listOf(0, 500, 1000, 2000)) {
                     val started = SystemClock.elapsedRealtime()
                     val stream = engine.createStream()
@@ -495,7 +495,7 @@ class ZipformerActivity : Activity() {
                     } finally {
                         stream.release()
                     }
-                    summary.append("\\n").append(tailMs).append("ms → ").append(resultText.ifBlank { "(ריק)" })
+                    summary.append("\n").append(tailMs).append("ms → ").append(resultText.ifBlank { "(ריק)" })
                 }
                 runOnUiThread {
                     transcript.text = summary.toString()
