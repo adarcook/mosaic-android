@@ -17,7 +17,7 @@ public final class VoiceAsrService extends Service {
             busy = true;
             byte[] pcm = msg.getData().getByteArray("pcm16");boolean prepare=msg.getData().getBoolean("prepare",false);
             Messenger reply = msg.replyTo;String session=msg.getData().getString("foreground_session", "");
-            int beamSize = msg.getData().getInt("beam_size", 5);
+            int beamSize = msg.getData().getInt("beam_size", life.mosaic.models.VoiceAsrBeam.BASELINE);
             new Thread(() -> run(reply, pcm, prepare, session, beamSize), "mosaic-voice-asr").start();
         }
         return true;
@@ -30,7 +30,7 @@ public final class VoiceAsrService extends Service {
     private void run(Messenger reply, byte[] pcm, boolean prepare, String session, int beamSize) {
         try {
             // Fail closed on unsupported experiment values; older callers default to Beam 5.
-            if (beamSize != 2 && beamSize != 5) throw new IllegalArgumentException("Unsupported ASR beam size: " + beamSize);
+            life.mosaic.models.VoiceAsrBeam.requireSupported(beamSize);
             if (!getSharedPreferences("WhisperGateActivity", 0).getBoolean("crossParityPassedV1", false))
                 throw new IllegalStateException("השלם את בדיקת התאימות בשלב 6 באפליקציית התמלול תחילה");
             send(reply, 2, "טוען מנוע תמלול…", null);
