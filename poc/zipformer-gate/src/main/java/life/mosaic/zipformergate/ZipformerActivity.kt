@@ -26,6 +26,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.io.FileWriter
 import java.security.MessageDigest
 import java.util.Locale
@@ -41,6 +44,7 @@ class ZipformerActivity : Activity() {
         private const val PICK_FOLDER = 100
         private const val SAVE_JOURNAL = 101
         private const val MICROPHONE_PERMISSION = 102
+        private const val PICK_REPLAY_WAV = 103
         private const val SAMPLE_RATE = 16_000
         private const val MAX_AUDIO_SECONDS = 30
         private const val MODEL_REV = "ee769a2a13b887f91572eec349458bfb0fe79e7a"
@@ -63,6 +67,7 @@ class ZipformerActivity : Activity() {
     private lateinit var prepareButton: Button
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
+    private lateinit var replayButton: Button
     private lateinit var exportButton: Button
     private var busy = false  // UI-thread-owned
     private var loaded = false  // UI-thread-owned
@@ -109,7 +114,16 @@ class ZipformerActivity : Activity() {
         prepareButton = button("2. טעינת מנוע Streaming") { prepare() }
         startButton = button("3. דבר — הצג תמלול בזמן אמת") { startRecording() }
         stopButton = button("סיום משפט") { stopRequested.set(true); status.text = "מסיים פענוח…" }
+        replayButton = button("בדיקת WAV קיים — השוואת סוף משפט") {
+            if (busy || !loaded) return@button
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*" // WAV may be audio/wav, audio/x-wav, or octet-stream.
+            }
+            startActivityForResult(intent, PICK_REPLAY_WAV)
+        }
         transcript = label("התמלול יופיע כאן בזמן הדיבור.", 22f)
+        transcript.setTextIsSelectable(true)
         metrics = label("מדידות טרם נאספו.", 16f)
         exportButton = button("ייצוא יומן הניסוי האחרון") { exportJournal() }
         updateButtons()
@@ -132,6 +146,7 @@ class ZipformerActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK || data?.data == null) return
         when (requestCode) {
+            PICK_REPLAY_WAV -> replayWav(data.data!!)
             PICK_FOLDER -> {
                 if (busy || loaded) return
                 setBusy(true)
@@ -417,6 +432,83 @@ class ZipformerActivity : Activity() {
         }
     }
 
+    /** Compare the same user-selected PCM WAV with varying inference-only silence tails.
+     *  No speech is uploaded; the original file is read-only.
+     */
+    private fun replayWav(uri: Uri) {
+        if (busy || !loaded) return
+        setBusy(true)
+        transcript.text = "משווה תמלולים של אותה הקלטה…"
+        worker.execute {
+            try {
+                val engine = recognizer ?: error("טען תחילה את המודל")
+                val raw = ByteArrayOutputStream()
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val chunk = ByteArray(8_192)
+                    while (true) {
+                        val n = input.read(chunk)
+                        if (n < 0) break
+                        raw.write(chunk, 0, n)
+                        require(raw.size() <= DiagnosticWav.MAX_WAV_BYTES) { "WAV file exceeds diagnostic limit" }
+                    }
+                } ?: error("אין גישה לקובץ האודיו שנבחר")
+                val pcm = DiagnosticWav.readPcm16(raw.toByteArray())
+                val sha = MessageDigest.getInstance("SHA-256").digest(pcm)
+                    .joinToString("") { "%02x".format(it.toInt() and 255) }
+                journalFolder.mkdirs()
+                val journal = File(journalFolder, "zipformer-replay-" + System.currentTimeMillis() + ".jsonl")
+                latestJournal = journal
+                write(journal, JSONObject().put("event", "replay_start")
+                    .put("input_sha256", sha).put("pcm_seconds", pcm.size / 32_000.0)
+                    .put("decoder", "online_greedy_int8_cpu").put("mode", "fixed_pcm_replay"))
+
+                val summary = StringBuilder("אותו WAV: " + String.format(Locale.US, "%.2f", pcm.size / 32_000.0) + " שניות\n")
+                for (tailMs in listOf(0, 500, 1000, 2000)) {
+                    val started = SystemClock.elapsedRealtime()
+                    val stream = engine.createStream()
+                    var cycles = 0
+                    var finalCycles = 0
+                    var resultText = ""
+                    try {
+                        val bytes = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
+                        val frame = FloatArray(1_600)
+                        while (bytes.hasRemaining()) {
+                            val n = minOf(frame.size, bytes.remaining() / 2)
+                            for (i in 0 until n) frame[i] = bytes.short / 32768f
+                            stream.acceptWaveform(if (n == frame.size) frame else frame.copyOf(n), SAMPLE_RATE)
+                            while (engine.isReady(stream)) {
+                                require(++cycles <= 500) { "Decoder exceeded replay budget" }
+                                engine.decode(stream)
+                            }
+                        }
+                        if (tailMs > 0) stream.acceptWaveform(FloatArray(SAMPLE_RATE * tailMs / 1000), SAMPLE_RATE)
+                        stream.inputFinished()
+                        while (engine.isReady(stream)) {
+                            require(++finalCycles <= 500) { "Finalization exceeded replay budget" }
+                            engine.decode(stream)
+                        }
+                        resultText = engine.getResult(stream).text.trim()
+                        write(journal, JSONObject().put("event", "replay_result")
+                            .put("tail_ms", tailMs).put("text", resultText)
+                            .put("decode_cycles", cycles).put("finalize_cycles", finalCycles)
+                            .put("elapsed_ms", SystemClock.elapsedRealtime() - started))
+                    } finally {
+                        stream.release()
+                    }
+                    summary.append("\n").append(tailMs).append("ms → ").append(resultText.ifBlank { "(ריק)" })
+                }
+                runOnUiThread {
+                    transcript.text = summary.toString()
+                    status.text = "הבדיקה המקומית הסתיימה. ניתן לייצא יומן להשוואה."
+                }
+            } catch (t: Throwable) {
+                show("בדיקת WAV נכשלה: " + t.javaClass.simpleName + ": " + t.message)
+            } finally {
+                runOnUiThread { setBusy(false) }
+            }
+        }
+    }
+
     private fun exportJournal() {
         val file = latestJournal
         if (busy || file == null || !file.exists()) {
@@ -436,6 +528,7 @@ class ZipformerActivity : Activity() {
         importButton.isEnabled = !value && !loaded
         prepareButton.isEnabled = !value && ready && !loaded
         startButton.isEnabled = !value && loaded
+        replayButton.isEnabled = !value && loaded
         stopButton.isEnabled = value && recording
         exportButton.isEnabled = !value && latestJournal?.exists() == true
     }

@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="life.mosaic.permission.LOCAL_VOICE_ASR" />
-    <queries><package android:name="life.mosaic.tensorwhisper" /></queries>
+    <queries><package android:name="life.mosaic.tensorwhisper" /><package android:name="life.mosaic.zipformergate" /></queries>
     <application android:label="מוזאיק — שיחה" android:allowBackup="false"
         android:extractNativeLibs="true" android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">

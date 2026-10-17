@@ -1,0 +1,36 @@
+name: Zipformer voice loop opt-in checks
+
+on:
+  pull_request:
+    paths:
+      - "poc/zipformer-gate/**"
+      - "poc/tensor-llm/**"
+      - "poc/model-storage/src/main/java/life/mosaic/models/VoiceAsrBackend.java"
+      - "docs/zipformer-voice-loop.md"
+      - ".github/workflows/zipformer-voice-loop.yml"
+  push:
+    branches:
+      - "experiment/zipformer-voice-loop-opt-in"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-voice-loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Download and verify pinned sherpa-onnx AAR
+        run: python3 scripts/prepare_zipformer_android_runtime.py
+      - name: Compile separate Zipformer voice companion APK
+        run: |
+          chmod +x gradlew
+          ./gradlew -p poc/zipformer-gate testDebugUnitTest assembleDebug
+      - name: Compile and test LLM voice controller
+        run: ./gradlew -p poc/tensor-llm testDebugUnitTest compileDebugJavaWithJavac

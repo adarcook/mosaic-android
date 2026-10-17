@@ -542,6 +542,28 @@ PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3e
 
 **החלטה:** אפשר לבנות את זוג האפליקציות באותו מפתח חדש במק ולהתקין מחדש אחרי גיבוי private files של שתיהן. מקור Documents אינו נמחק בהסרה; working copies, הקלטות/תמלילים, הגדרות ו־parity gate כן. יש לייבא מחדש Whisper/Gemma מהתיקייה העצמאית, קול מתיקיית המשנה, ולהשלים parity stage6 מחדש. אין מודלים להורדה במק, אך build עדיין צריך SDK/JDK21 ותלויות/runtime. אין עדות שהגיבוי, ההסרה, הייבוא או ההתקנה במק כבר בוצעו. גרסאות הקוד נשארות LLM0.8/ASR0.13; ניסוי שיפור קול נוסף טרם מומש. main ללא שינוי; PR#35 פתוח.
 
+### ASR-20 — התקנה מחדש בדסקטופ ושחזור מקומי, 17.10.2026 (Asia/Jerusalem)
+
+זו ראיית הקמה מאוחרת ל־ASR-20, לא ניסוי פענוח חדש. ההשערה: מקורות עצמאיים וגיבוי פרטי מאפשרים מעבר מחשב/חתימה בלי להוריד משקלים מחדש. הקוד שנבנה והותקן הוא `7f883a15101cb31c138559e65f1d7c887a29b018`, בענף `experiment/zipformer-voice-loop-opt-in`, [PR #42](https://github.com/adarcook/mosaic-android/pull/42). נבדקו origin/main=`7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9` וה־PRs הקשורים; #42 עדיין פתוח ו־Draft. אין merge או השלמת roadmap. זהות commit של ה־APKs הישנים אינה מאומתת.
+
+**גורמים שהשתנו וקבלה:** סביבת Windows חדשה עם JDK 22 ו־Gradle 8.9, חתימה חדשה והתקנה נקייה של שלוש חבילות הניסוי אחרי גיבוי ה־APKs וכל נתוניהן הפרטיים. תעודת החתימה הישנה SHA-256=`ddcd0a67735d21987d3e0360521f5c06a806c30b3f62a4286bbbc1952d6b9a6d`; שלושת ה־APKs החדשים חתומים יחד ב־`ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35`. מפתח הדסקטופ גובה מחוץ לריפו. תנאי הקבלה להקמה: מקור עצמאי נשמר, גודל/SHA תקינים, ייבוא מקומי והכנה סדרתית מלאה. קבלת תמלול/קול אינה נכללת בבדיקת ההכנה.
+
+| APK מקומי | bytes | SHA-256 |
+|---|---:|---|
+| Zipformer `0.4-zipformer-replay-diagnostic` | 15,661,448 | `de298a41d402c0a8f6d4c3c99bccfd8e30f8e4f7bfd53a8a708eaf57bfb32690` |
+| Whisper `0.14-voice-beam-trial` | 8,350,785 | `067aeb0e9b1c0ed25bd99924832f37add526c7efd8a4e54c30397dc471576b90` |
+| Voice `0.10-zipformer-voice-opt-in` | 28,802,023 | `9aef7997c346942cd992642c798a80824effecd86d46c8acfc90a94bf765d5c7` |
+
+**שחזור בפועל:** מקורות Whisper/Gemma ו־BlueTTS נשארו ב־Documents ונבדקו מול SHA/גדלים מקובעים. מודלי Zipformer וה־lock שוחזרו מהגיבוי הפרטי, אומתו ונכתבו עם `run-as` תחת UID האפליקציה. ניסיון העתקת working copies חיצוניים דרך shell הצליח בבדיקת SHA אך נכשל בגישה מהאפליקציה: BlueTTS לא היה נגיש ו־Gemma החזיר `EACCES`. לכן הועברו העותקים האלה הצידה, ו־Gemma, שלושת קובצי Whisper ו־BlueTTS יובאו דרך מסכי SAF המובנים. כל מסך דיווח שהייבוא הושלם. אין להסתפק ב־SHA מוצלח של adb כהוכחת גישה של המנוע. המקורות העצמאיים לא שונו; BlueTTS כתב manifest קנוני חדש לעותק העבודה בלבד.
+
+**קבועים ושחזור:** Pixel 10 Pro / Tensor G5, fingerprint=`google/blazer/blazer:17/CP3A.261005.005/16271449:user/release-keys`. אותן זהויות Whisper/Gemma/BlueTTS המפורטות למעלה ובקוד; Zipformer revision=`ee769a2a13b887f91572eec349458bfb0fe79e7a`. Zipformer INT8 על CPU; Gemma על Tensor G5 NPU; Renikud/BlueTTS על CPU; Whisper שומר encoder והכנת K/V על TPU ו־decoder Q5 על CPU, אך לא הורץ כאן. אין שינוי במשקלים, shapes, cache layout, quantization, Beam, חלונות, tail padding או קוד capture. אין GPU. נבחר Zipformer במסך; לא שוחזרו preferences או parity gate ישנים.
+
+**תוצאות נפרדות:** שלוש הבניות המקומיות הצליחו בתור ההקמה הקודם. דוחות JUnit המקומיים נבדקו שוב: 6 בדיקות Zipformer ו־40 בדיקות LLM, אפס failures/errors/skipped; אין טענת CI חדשה. אחרי הייבוא, `foreground_sequential_prepare` הסתיים ב־`complete`, סה״כ **15,573ms**: ASR **1,951ms** (verify 200/load 1,582), LLM **6,196ms** (verify 4,233/load 1,629), TTS **6,002ms** (verify 2,259/load 3,481). זמני שחרור **196/220/963ms**, בכל שלב `binder_dead=true` עם `death_notification`. אלה זמני אימות/טעינה ושחרור, ללא audio capture, decoding, generation או playback. אין השוואת מהירות על אודיו, WER, sustained throughput או מסקנה תרמית.
+
+**ראיות פרטיות:** ארכיון `desktop-reinstall-20261017` מחוץ ל־Git כולל גיבויי הנתונים וה־APKs הישנים, מפתח הדסקטופ ודוח שחזור. גיבוי Zipformer ששימש לשחזור: 72,332,288 bytes, SHA=`573acbf912d386582eebaede5d09064f2db2f5a36303f63709d983ba7073430e`. יומן ההכנה הסופי: 3,956 bytes, SHA=`08171312c4fa7280da5956446eb3d927ce5da635810fe685e106fe59a62d6c93`. שמירתו הסתיימה אחרי terminal complete; hash של יומן חלקי אינו זהות הראיה הסופית.
+
+**החלטה, מגבלות ו־rollback:** הקמה/ייבוא והכנת מסלול Zipformer עברו. בדיקת דיבור חדשה, ניגון, פניות חוזרות, replay של אותו PCM ובעיית המילה האחרונה עדיין Pending; גם parity stage6 של Whisper נדרש מחדש לפני השימוש במסלול ההיברידי. אין סימון של תיקון דיוק. נקודת שחזור: אותו commit, שלושת ה־APKs/מפתח הדסקטופ ומקורות המודלים הפרטיים; עדכונים הבאים ב־`install -r` עם אותה תעודה. ראה [מדריך האחסון](independent-model-storage.md#מעבר-לדסקטופ-windows--לקח-מהתקנת-17102026).
+
 ### ASR-27 — Session receipt ללא fileKey ב־Windows (16.10.2026 Asia/Jerusalem)
 
 | שדה | ערך |
@@ -556,6 +578,44 @@ PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3e
 | מצב Pixel | לא נבדק; יש לבדוק בפועל אם `fileKey` זמין ב־Android ומה המשמעות לזמן האימות בכל פנייה |
 
 **פירוש ובטיחות:** ללא מזהה קובץ אי אפשר להוכיח מתוך metadata בלבד שקובץ הוחלף באותו גודל ובאותם זמנים. התיקון בוחר אימות מלא ולא מנסה לזהות החלפה באמצעות metadata לא מספק. זהו fail-closed מבחינת שימוש חוזר ב־receipt; עדיין אינו הגנה קריפטוגרפית מפני שינוי במהלך חישוב ה־SHA כשהמטא־דאטה זהה. אם גם בפיקסל `fileKey=null`, ייתכן שזמן אימות מודלים יגדל משמעותית; יש למדוד זאת לפני אישור שינוי ל־Android production. לא נמדדו אודיו, מהירות תמלול, WER, latency או thermal בניסוי host הזה. אין שינוי ב־main ואין לסמן שלב roadmap Complete.
+
+### ASR-30 / VOICE-07 — פענוח מקטע הסיום של Zipformer, 17.10.2026 Asia/Jerusalem
+
+**סטטוס:** תיקון עבר replay ישיר בשירות Android על שתי הקלטות כשל קיימות. בדיקת דיבור חדשה מקצה לקצה ויציבות לאורך פניות עדיין Pending. זהו המשך לחקירת סוף המילה ב־[מדריך הניסוי](zipformer-voice-loop.md#same-pcm-device-isolation-and-complete-tail-fix--2026-10-17), ולא אישור כללי לדיוק המודל.
+
+| שדה | ראיה / הגדרה |
+|---|---|
+| השערה | 500ms שקט אינם מספיקים להכנת מקטע encoder אחרון; `inputFinished()` לבדו אינו מבטיח ש־`isReady()` יהיה true |
+| Baseline / rollback | קוד `7f883a15101cb31c138559e65f1d7c887a29b018`, ותיעוד `e5f597a60d9cc73059c69df485cc6d436b40a922`; Zipformer 0.4, SHA APK=`de298a41d402c0a8f6d4c3c99bccfd8e30f8e4f7bfd53a8a708eaf57bfb32690` |
+| Candidate | קוד `f886795c20550e84851288ada8ff8378fb9e3ed0`, PR #42, Zipformer `0.5-zipformer-complete-tail` / versionCode 4; APK 15,661,444 bytes, SHA=`1cdd7abcf2aede7d2ef58355adf4120bbd21472d739b8ed4a7b6f12e80c6c72f` |
+| גורם משתנה | 32,000 דגימות אפס (2,000ms ב־16kHz) במקום 8,000, לפני `inputFinished()`; זוהי תוספת לקלט inference בלבד, ללא הארכת הקלטת מיקרופון או שינוי PCM |
+| קבועים | sherpa-onnx 1.13.8; Zipformer2 INT8, CPU / 2 threads / greedy / endpoint disabled; 100ms הזנה; revision=`ee769a2a13b887f91572eec349458bfb0fe79e7a`; אין שינוי ב־weights, quantization, graph shapes, cache layout, Whisper/Gemma/TTS או capture |
+| מכשיר / build | Pixel 10 Pro / Tensor G5; `google/blazer/blazer:17/CP3A.261005.005/16271449:user/release-keys`; JDK22/Gradle8.9, חתימת הדסקטופ מאותה רשומת ASR-20 |
+| קבלה שנבדקה | אותו PCM נכשל ב־baseline ומחזיר את המילה האחרונה במועמד; סיום מוגבל, SHA קלט זהה ו־worker death; שום טקסט אינו מושלם באמצעות LLM |
+
+**ראיית הכשל החדשה:** הפנייה בתצלום המשתמש הותאמה ליומן על ידי זמני השלבים 2,520/5,640/14,662ms. PCM16-LE mono 16kHz, 182,396 bytes, 5.699875s, SHA=`49fbf7665dcc9d1a7ead8b516425bfe70e9d83c12149a2e68c45f1435df660ee`. יומן 11,249 bytes, SHA=`9517d936a02c6ee39714a8144e1c0b21959bef50bd680534dcd5a40bde426832`. המשתמש דיווח שמילת הסיום חסרה. `tail_padding_ms=500`, `finalize_decode_cycles=0`; פנייה שלמה ביומן אינה הוכחת תמלול מלא.
+
+**בידוד מבוקר במכשיר:** אותו PCM נעטף ב־WAV ללא שינוי דגימות (WAV SHA=`83fc353226d75f7cbfa84b4f3c58925026f942c5899072d4041335e595ee0634`) והוזן למסך ה־replay הקיים, ארבעה streams חדשים על אותו recognizer טעון, בסדר 0/500/1000/2000ms. ב־0/500 חסרה המילה, וב־1000/2000 היא מופיעה. מחזורי הפענוח לפני סיום=4 בכל הריצות, ואחרי סיום=0/0/1/1; elapsed=241/189/182/179ms, ללא טעינת המודל. סדר הריצה וה־cache אינם מבוקרים למדידת ביצועים; זו בדיקת שחזור מילה, לא טענת speedup. יומן replay: 929 bytes, SHA=`5e2abfe18918d448bc1813ffe956dc45521e22d1e5ca24f875bf6cd8857efada`.
+
+**הסבר לפי מקור ומודל מאומת:** ב־encoder עם SHA=`6c6febcb74a09435315a1d872a6539f6e7fc2c333533f14c74edc0e85c49ffcd` נקראו metadata `T=141`, `decode_chunk_len=128`. ב־[מימוש המודל ב־1.13.8](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/csrc/online-zipformer2-transducer-model.h), `ChunkSize=T` ו־`ChunkShift=decode_chunk_len`; [תנאי readiness](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/csrc/online-recognizer-transducer-impl.h) הוא `processed + ChunkSize < ready`. עם feature step של 10ms, מדובר בדרישה של 1.41s ובתזוזה של 1.28s. לכן 500ms אינם מכסים כל מיקום סיום בתוך המקטע. נבחרו 2,000ms עם מרווח; המסקנה נתמכת גם בהשוואת הדגימות הזהות. אין המתנה של שתי שניות בזמן אמת, אבל יש עלות פענוח נוספת.
+
+**בדיקת השירות המותקן עצמו:** harness פרטי, חתום באותו מפתח, הפעיל Instrumentation מול חבילת Voice והעביר את אותם bytes ל־Messenger של `ZipformerVoiceService`. ה־baseline נבדק לפני עדכון ה־APK, ואז candidate הותקן ב־`install -r` ללא הסרה/איפוס. ה־harness אינו במסלול המוצר ולא משנה את התמליל; הוא שומר תוצאה פרטית ובודק suffix מול הציפייה שסופקה במפורש. אין כאן הקלטה מחדש או הפעלת Gemma/BlueTTS.
+
+| אותו מקור 5.699875s | Baseline 500ms | Candidate 2000ms |
+|---|---:|---:|
+| המילה האחרונה חזרה | לא | כן |
+| final decode cycles | 0 | 1 |
+| compute / decode ms | 336 / 292 | 413 / 365 |
+| verify / load ms | 116 / 1,608 | 77 / 1,648 |
+| סיום worker נצפה | כן | כן |
+
+זו תצפית יחידה בסדר baseline→candidate, לא benchmark; תוספת compute שנצפתה היא 77ms, ולא שתי שניות wall. בהקלטת כשל קודמת נוספת (215,676 bytes, 6.739875s, SHA=`02dfbe2fd7c4e95973f19a9a362368f1c9cdcc0350c015888d225cbcd9c93545`) ה־baseline המקורי דיווח 500ms ו־0 מחזורי סיום. אותו PCM החזיר כעת את מילת הסיום בשירות 0.5, מחזור סיום אחד, compute459/decode403ms, ואושר worker death. זהו replay של המקור הישן, לא פנייה שנקראה שוב.
+
+**Host ומגבלות:** 7 בדיקות JUnit ו־assembleDebug עברו ב־Windows. נוסף invariant שמדמה את תנאי readiness לכל אורכי 1–1200 feature frames עם מרווח frontend; הוא נכשל ב־500ms, אך אינו בדיקת native או איכות דיבור. callback order, דגימות אפס ושמירת קצב 16kHz נבדקים בנפרד. אין עדיין ראיית CI עבור הקוד החדש בעת רישום התוצאה. אין corpus/WER, שמות/שלילות, איכות אקוסטית, latency של פנייה מלאה או sustained throughput. `thermal_status=0` בשירותים אינו מוכיח סיבת ביצועים. אף GPU/TPU אינו משתתף ב־ASR הזה; Gemma NPU ו־TTS CPU כלל לא הורצו בבדיקת השירות.
+
+**ראיות ושימור:** חבילת האבחון הפרטית `tail-diagnostic-20261017` כוללת קלטים, harness source/APK ותוצאות. תוצאת baseline של השירות: 787 bytes, SHA=`8f89c5bf8bf276d5954f4eca7f4fa7aebd1251e32eb716eacc846f2720b7f7ad`; candidate מקור חדש: 790 bytes, SHA=`bd1b81f1722edb8ecc4f538117e5bc052e6729cd48d7dfffbaae865548539444`; candidate מקור קודם: 818 bytes, SHA=`832adc854f096d2cab4cd69708999082af8c891095cb8a5b53ebea7a702f2103`. שום PCM, תמליל או model binary לא נוסף ל־Git.
+
+**החלטה:** לשמור את 0.5 כמועמד מותקן שעבר שתי הקלטות כשל בבדיקת שירות. יש לבצע דיבור חדש ושתי פניות מלאות לאימות מוצר, ולבדוק מקרי מספרים/שלילות נוספים; אין לסמן דיוק כללי או roadmap Complete. rollback: לבנות את קוד הבסיס עם מפתח הדסקטופ ולעדכן ללא הסרה (version downgrade עשוי לדרוש `-r -d`); המקורות והמודלים נשארים. PR #42 נשאר Draft ו־main נשאר `7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9`.
 
 ### למה הריצה הרציפה האחרונה נעצרה?
 

@@ -7,6 +7,11 @@
         android:usesCleartextTraffic="false"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- Same-signature IPC as the existing Whisper ASR; native engine stays isolated. -->
+        <service android:name=".ZipformerVoiceService"
+            android:exported="true"
+            android:permission="life.mosaic.permission.LOCAL_VOICE_ASR"
+            android:process=":voice" />
         <activity android:name=".ZipformerActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
