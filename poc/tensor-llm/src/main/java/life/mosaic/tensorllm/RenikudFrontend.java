@@ -9,6 +9,7 @@ import org.json.*;
 
 /** RenikudPlus character model; exact cascade MAP when embedded conditioning metadata exists. */
 final class RenikudFrontend implements AutoCloseable {
+    static final String LOAD_POLICY = "cpu_no_prepack";
     private final OrtEnvironment env = OrtEnvironment.getEnvironment();
     private final OrtSession session;
     private final JSONObject vocab, consonants, vowels, constraints, geresh;
@@ -16,6 +17,10 @@ final class RenikudFrontend implements AutoCloseable {
     RenikudFrontend(File model) throws Exception {
         try (OrtSession.SessionOptions options = new OrtSession.SessionOptions()) {
             options.setIntraOpNumThreads(2); options.setInterOpNumThreads(1);
+            // This worker is recreated for each turn. Packing the 1.23GB FP32
+            // weights costs more than it saves for a few short speech chunks.
+            // Keep graph optimizations; skip only the up-front weight packing.
+            options.addConfigEntry("session.disable_prepacking", "1");
             session = env.createSession(model.getPath(), options);
         }
         meta = session.getMetadata().getCustomMetadata();
