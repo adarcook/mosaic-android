@@ -86,3 +86,24 @@ The finalization timestamp measures only the application's work **after** \`Audi
 **Interpretation:** For this one easy spoken request, the model produced the expected text quickly and appears fundamentally faster at returning a finished transcript than Whisper Beam 2's previous ~24.0 s ASR *after a separately captured ~4.7 s utterance*. This is **not a controlled identical-PCM A/B**, does not prove comparable WER on varied Hebrew or mixed English, and the raw user audio and transcripts are deliberately not published. No LLM/TTS stage was included. Before integration, run additional privacy-preserving device tests with numbers, negation, names, English phrases, and **two successive turns**; verify response-critical word accuracy. Gemma can resolve minor wording mistakes but cannot reconstruct omitted commands or reliably infer missing negation or numbers.
 
 **Next conditional slice:** evaluate a replaceable local ASR selector in the existing voice controller, with Zipformer as an **explicit opt-in** and Whisper as fallback, only after further device acceptance. Preserve model provenance, private journals, worker lifecycle, memory budget, and separate component rollback. Do not claim natural conversational end-to-end latency from an ASR-only test. Keep draft PR unmerged until requested.
+
+
+## Pixel 10 Pro follow-up: numbers and negation — 2026-10-17
+
+Second **private** streaming journal (6 events: start, 4 partials, complete) confirmed by user upload, with the same pinned model revision and CPU INT8 runtime. No audio or personal transcript is committed.
+
+| Metric | Result |
+|---|---:|
+| Captured samples duration | 6,800 ms |
+| First partial after session start | 3,045 ms |
+| Partial changes from session start | 3,045 / 4,252 / 5,549 / 6,860 ms |
+| CPU decode time accumulated | 341 ms |
+| Decode RTF (decode calls only / captured audio) | 0.050147 |
+| Time from recorder stop to finalization | 0 ms (journal millisecond resolution) |
+| Total wall time including microphone | 7,018 ms |
+| Available memory / thermal status | 6,452 MiB / 0 |
+| Status | Complete, 4 partial updates; no logged errors |
+
+**Accuracy:** the final transcript preserved the time (“eight fifteen”), the negation **do not send a message**, and the alternative **call instead** in the requested Hebrew test sentence. The wake name “Mosaic” was transcribed without its final consonant; do not assume reliable name recognition. These are one user's informal phrase-level observations, not scored WER or a controlled same-PCM benchmark. No action, reminder or phone operation was executed (ASR-only gate).
+
+**Decision:** Streaming usability on these two isolated turns is promising. End-of-speech finalization displayed as 0 ms indicates negligible *remaining work at Stop*, **not zero computational cost**; 341 ms decoding occurred during capture. Before changing the main voice controller, require an opt-in switch, Whisper fallback, independent process/memory stability gates, and evaluation of combined Gemma + BlueTTS latency. Confirm numbers, negation and names before any action that sends messages or schedules events; Gemma cannot reliably recover omitted critical words.
