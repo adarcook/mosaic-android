@@ -14,6 +14,8 @@ import org.json.JSONObject;
 
 /** Foreground warm session. Sequential turns, durable stages and isolated native runtimes. */
 public final class VoiceActivity extends Activity {
+    private final VoiceToolRouter toolRouter = new VoiceToolRouter(java.util.List.of(
+            new WhatsAppVoiceTool(() -> WhatsAppNotificationListener.readLatest(this))));
     private VoiceScreen screen;
     private boolean handsfreeTurn, autoCapture, armOnResume, armingStandby;
     private VoiceFeedback feedback;
@@ -208,16 +210,16 @@ public final class VoiceActivity extends Activity {
                 return;
             }
             if(completed.equals("asr")){if(!life.mosaic.models.VoiceAsrBackend.matchesResult(selectedAsrEngine,data.getString("asr_engine",null),selectedBeam,data.getInt("beam_size",life.mosaic.models.VoiceAsrBeam.BASELINE)))throw new IOException("מנוע התמלול החזיר זהות או הגדרת Beam שגויה; בדוק גרסאות");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();
-                boolean whatsappRead=WhatsAppReadIntent.matches(recognized);
-                event(new JSONObject().put("type","intent_route").put("route",whatsappRead?"whatsapp_latest_notification":"conversation"));
-                if(whatsappRead){
+                VoiceTool tool=toolRouter.route(recognized);
+                event(new JSONObject().put("type","intent_route").put("route",tool==null?"conversation":tool.route()));
+                if(tool!=null){
                     toolTurn=true;
-                    WhatsAppNotificationTool.Result result=WhatsAppNotificationListener.readLatest(this);
-                    event(new JSONObject().put("type","tool_invocation").put("tool",WhatsAppNotificationTool.ID)
+                    VoiceTool.Result result=tool.execute();
+                    event(new JSONObject().put("type","tool_invocation").put("tool",tool.id())
                             .put("status",result.status.name()).put("read_only",true));
-                    response=WhatsAppNotificationTool.spoken(result);
-                    answer.setText("מוזאיק: "+WhatsAppNotificationTool.displayed(result)); // ephemeral; do not save notification text to preferences
-                    llm.setText("2 · כלי מקומי: "+WhatsAppNotificationTool.ID+" · "+result.status.name());
+                    response=result.spoken;
+                    answer.setText("מוזאיק: "+result.displayed); // ephemeral; do not save notification text to preferences
+                    llm.setText("2 · כלי מקומי: "+tool.id()+" · "+result.status.name());
                     transition("tts","מכין הקראת התראה…");Bundle toolRequest=new Bundle();
                     toolRequest.putString("answer",response);
                     bind(new Intent(this,TtsService.class),toolRequest,240000);
