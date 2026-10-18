@@ -1,0 +1,88 @@
+name: Tensor Whisper hybrid gate
+on:
+  push:
+    branches:
+      - "experiment/tensor-g5-whisper-gate"
+      - "experiment/ivrit-hybrid-asr-gate"
+      - "experiment/ivrit-cross-attention-tensor-g5"
+      - "experiment/ivrit-tpu-cross-integration"
+      - "experiment/ivrit-continuous-asr-gate"
+      - "experiment/ivrit-decoder-throughput"
+      - "experiment/ivrit-durable-audio-recovery"
+      - "experiment/tensor-local-llm"
+  pull_request:
+    paths:
+      - "poc/tensor-whisper/**"
+      - "poc/model-storage/**"
+      - "scripts/prepare_shared_model_folder.py"
+      - "poc/speech/**"
+      - "scripts/*whisper*"
+      - "scripts/compare_asr_sessions.py"
+      - "scripts/tests/test_compare_asr_sessions.py"
+      - ".github/workflows/tensor-whisper.yml"
+      - "docs/tensor-g5-whisper-gate.md"
+      - "docs/ivrit-whisper-hybrid-asr-gate.md"
+      - "docs/ivrit-whisper-continuous-gate.md"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Install pinned Android native toolchain
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"             "ndk;27.0.12077973"             "cmake;3.22.1"
+
+      - name: Test independent model source cache integrity
+        run: |
+          mkdir -p /tmp/model-copy-tests
+          javac -d /tmp/model-copy-tests poc/model-storage/src/main/java/life/mosaic/models/ModelCopy.java poc/model-storage/src/test/java/life/mosaic/models/ModelCopyTest.java
+          java -cp /tmp/model-copy-tests life.mosaic.models.ModelCopyTest
+          python3 -m py_compile scripts/prepare_shared_model_folder.py
+
+      - name: Test PCM windows and transcript boundary handling
+        run: |
+          mkdir -p /tmp/stream-tests
+          javac -d /tmp/stream-tests poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamWindow.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamText.java poc/tensor-whisper/src/test/java/life/mosaic/tensorwhisper/StreamWindowTest.java
+          java -cp /tmp/stream-tests life.mosaic.tensorwhisper.StreamWindowTest
+
+      - name: Test durable audio and recovery
+        run: |
+          javac -d /tmp/stream-tests poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamWindow.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/ArchivePcm.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/ArchiveJournal.java poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/ArchiveCheckpoint.java poc/tensor-whisper/src/test/java/life/mosaic/tensorwhisper/ArchiveStorageTest.java
+          java -cp /tmp/stream-tests life.mosaic.tensorwhisper.ArchiveStorageTest
+
+      - name: Test session comparison
+        run: python3 -m unittest discover -s scripts/tests -p test_compare_asr_sessions.py -v
+
+      - name: Python syntax
+        run: |
+          python3 -m py_compile scripts/prepare_whisper_tiny_litert.py
+          python3 -m py_compile scripts/compile_tensor_whisper.py
+          python3 -m py_compile scripts/prepare_tensor_whisper_runtime.py
+
+      - name: Fetch pinned public Tensor runtime
+        run: python3 scripts/prepare_tensor_whisper_runtime.py
+
+      - name: Build Tensor G5 + Whisper hybrid gate
+        run: ./gradlew -p poc/tensor-whisper clean assembleDebug
+
+      - name: Upload hybrid gate APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tensor-whisper-hybrid-asr-apk
+          path: poc/tensor-whisper/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

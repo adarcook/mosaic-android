@@ -1,0 +1,4 @@
+/src/main/jniLibs/
+/src/main/assets/*.tflite
+/.gradle/
+/build/

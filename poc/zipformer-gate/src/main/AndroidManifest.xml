@@ -1,0 +1,30 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-feature android:name="android.hardware.microphone" android:required="true" />
+    <application
+        android:label="Mosaic Hebrew Streaming Gate"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- Same-signature IPC as the existing Whisper ASR; native engine stays isolated. -->
+        <activity android:name=".WakeSetupActivity" android:exported="true" android:permission="life.mosaic.permission.LOCAL_VOICE_ASR" />
+        <service android:name=".WakeListenService" android:exported="true"
+            android:permission="life.mosaic.permission.LOCAL_VOICE_ASR"
+            android:foregroundServiceType="microphone" android:process=":wake" />
+        <service android:name=".ZipformerVoiceService"
+            android:exported="true"
+            android:permission="life.mosaic.permission.LOCAL_VOICE_ASR"
+            android:process=":voice" />
+        <activity android:name=".ZipformerActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -1,0 +1,5 @@
+# Voice frontend attribution
+
+BlueTTS 2.5, Blue / Maxim Melichov: https://github.com/maxmelichov/BlueTTS/tree/0e38dbf08ed53f85863d1eab092bd9572c53a503 . Existing acoustic implementation adapted from Mosaic's BlueSynthesizer; MIT license retained in blue-tts-license.txt. blue-vocab.json comes from notmax123/BlueTTS2.5-onnx revision 468da64b4a51795a7594a3637727dbaf876b6df2, SHA-256 13fba5e735222fcf30d9c062d898982a1ba86d481f11560fbbdf6e0af79417b3.
+
+ReNikud: Maxim Melichov, Yakov Kolani, Morris Alper, https://github.com/renikud/renikud . The upstream attribution license is retained in renikud-attribution-license.txt. RenikudPlus model card declares Apache 2.0 for model revision 679c56ca449d41873fb8ff7711ddf7563d28198f: https://huggingface.co/notmax123/RenikudPlus/tree/679c56ca449d41873fb8ff7711ddf7563d28198f . RenikudFrontend and CascadeMap adapt its Python wrapper to Java/ONNX Runtime. Changes: bounded Hebrew chunks, per-letter/cascade decoding in Java, no corpus datastore, local-only model paths, conservative digit/Latin spelling, no downloader in Android. No model weights are bundled in the repository or APK.
