@@ -793,3 +793,26 @@ python3 scripts/compare_asr_sessions.py baseline.jsonl candidate.jsonl
 | מנוע חם וקול רציף | [WarmHybridEngine](../poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/WarmHybridEngine.java), [StreamingGateService](../poc/tensor-whisper/src/main/java/life/mosaic/tensorwhisper/StreamingGateService.java) |
 | השוואת מדידות | [compare_asr_sessions.py](../scripts/compare_asr_sessions.py) |
 | בניית גרסת 0.7 שעברה CI | [Actions run 37752763780](https://github.com/adarcook/mosaic-android/actions/runs/37752763780) |
+
+## ASR-06 — Main integration build follow-up, 2026-10-18
+
+The user's explicit request to adopt the current voice UI baseline retargeted
+PR #49 to main (`7d2a4d4198fe74b81b7cd2630bc28cb74a0c71f9`). The full diff
+re-exercised the historical Tensor probe template. Baseline source/rollback:
+`2d3372f6914fb45265f113aff61950d33504dbe5`; failed hosted run
+[39129289932](https://github.com/adarcook/mosaic-android/actions/runs/39129289932),
+job `117680947780`. Java compilation reported three ambiguous `Environment`
+references due to wildcard Android/LiteRT imports, consistent with the older
+legacy-probe failure already recorded under ASR-22/23/24.
+
+Hypothesis/change: an explicit LiteRT `Environment` import resolves compilation.
+Acceptance: the hosted template builds and uploads its model-free artifact.
+Candidate identity is the PR commit containing this entry; CI is pending at
+authoring. Controlled factors: LiteRT 2.1.6, Java 17 / Gradle 8.9, pinned dispatch,
+package identity, synthetic ADD graph contract, NPU-only policy and timeout are
+unchanged. Installed Voice 0.22 / wake companion sources and models are unchanged.
+This is compile-time disambiguation only, with no new weights, graph, inference
+setting, host numerical parity, audio, device, thermal, quality or latency result.
+Keep the historical outcomes and remaining acceptance gates; merge authorization
+does not establish production readiness. Reproduction remains documented in
+[tensor-g5-probe.md](tensor-g5-probe.md).

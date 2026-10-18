@@ -4,6 +4,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.*;
 import com.google.ai.edge.litert.*;
+import com.google.ai.edge.litert.Environment;
 import java.util.*;
 import java.util.concurrent.Executors;
 

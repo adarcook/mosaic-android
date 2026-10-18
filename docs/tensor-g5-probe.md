@@ -67,3 +67,15 @@ References:
 Next gate after a successful device probe: export the original ivrit.ai encoder,
 validate numerical and Hebrew transcript parity, compile it, and integrate it
 with the existing Whisper decoder. No TPU speech APK exists at this stage.
+
+## Main integration build follow-up — 2026-10-18
+
+PR #49's full comparison against main re-exercised this historical template.
+Run [39129289932](https://github.com/adarcook/mosaic-android/actions/runs/39129289932)
+on `2d3372f6914fb45265f113aff61950d33504dbe5` failed because the wildcard
+Android and LiteRT imports both expose an `Environment` class. An explicit
+`com.google.ai.edge.litert.Environment` import resolves the Java name without
+changing the runtime, model, NPU-only execution, package or cancellation policy.
+Acceptance is a successful hosted template build; candidate CI is pending at
+this record. No model is included and no new device run is performed. See the
+dated ASR-06 follow-up in the central history.
