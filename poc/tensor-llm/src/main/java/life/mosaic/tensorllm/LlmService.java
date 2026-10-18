@@ -13,12 +13,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONObject;
 
-/** A foreground warm engine: NPU requested explicitly, fresh conversations, no fallback or tools. */
+/** NPU-only engine. Voice uses manual structured tools; archive summarization has no tools. */
 public final class LlmService extends Service {
     private volatile boolean busy;
+    private volatile AgentToolExchange pendingTool;
     private Engine engine;private life.mosaic.models.FileSnapshot snapshot;
     private final Messenger incoming = new Messenger(new Handler(Looper.getMainLooper(), message -> {
         if (message.what == 9) { android.os.Process.killProcess(android.os.Process.myPid()); return true; }
+        if (message.what == 7) {
+            AgentToolExchange pending=pendingTool;Bundle result=message.getData();
+            if(pending!=null)pending.complete(result.getString("agent_call_id",""),result.getString("agent_status",""),result.getString("agent_content",""));
+            return true;
+        }
         if (message.what == 1 && !busy) {
             busy = true; Messenger reply = message.replyTo; Bundle data = new Bundle(message.getData());
             send(reply, 1, "", android.os.Process.myPid());
@@ -30,6 +36,7 @@ public final class LlmService extends Service {
     @Override public IBinder onBind(Intent intent) { return incoming.getBinder(); }
 
     private void run(Messenger reply, Bundle data) {
+        if(data.getBoolean("voice",false)&&!data.getBoolean("prepare",false)){runAgent(reply,data);return;}
         Conversation conversation = null; File journal = null;
         try {
             if (!"Google".equalsIgnoreCase(Build.MANUFACTURER)
@@ -105,6 +112,55 @@ public final class LlmService extends Service {
             if (conversation != null) try { conversation.close(); } catch (Throwable ignored) { }
 
         }
+    }
+    private void runAgent(Messenger reply,Bundle data) {
+        Conversation conversation=null;File journal=null;
+        try{
+            if(!"Google".equalsIgnoreCase(Build.MANUFACTURER)||!Build.SOC_MODEL.toLowerCase(java.util.Locale.ROOT).contains("tensor g5"))
+                throw new IOException("Tensor G5 required");
+            String text=data.getString("text","");
+            if(text.isBlank()||text.length()>ModelSpec.MAX_TEXT)throw new IOException("Invalid request");
+            String system=AgentTools.system(data.getString("agent_hint",""));
+            File folder=new File(getFilesDir(),"llm-sessions");
+            if(!folder.isDirectory()&&!folder.mkdirs())throw new IOException("Journal unavailable");
+            journal=new File(folder,"llm-agent-"+System.currentTimeMillis()+"-"+java.util.UUID.randomUUID()+".jsonl");
+            append(journal,new JSONObject().put("type","start").put("build",BuildConfig.VERSION_NAME)
+                    .put("experiment","ASR-38 / VOICE-16").put("runtime","0.18.0").put("requested_backend","NPU")
+                    .put("automatic_tool_calling",false).put("max_tool_calls",1).put("voice_mode",true)
+                    .put("system_prompt_sha256",hash(system.getBytes(StandardCharsets.UTF_8))));
+            Bundle metrics=ensureEngine(reply,journal,data.getString("foreground_session",""));
+            conversation=engine.createConversation(new ConversationConfig(Contents.Companion.of(system),
+                    Collections.emptyList(),NativeAgentModel.providers(),new SamplerConfig(20,0.9,0.2,0),false,
+                    Collections.emptyList(),Collections.emptyMap(),null,false,512,new ThinkingConfig(false),false,false,null));
+            send(reply,2,"המודל בוחר תשובה או כלי…",0);
+            long started=SystemClock.elapsedRealtime();
+            NativeAgentModel model=new NativeAgentModel(conversation,started+150000,data.getString("agent_hint",""));
+            String answer=ManualToolAgent.run(text,model,(name,arguments)->requestTool(reply,name),()->Thread.currentThread().isInterrupted());
+            long generateMs=SystemClock.elapsedRealtime()-started;
+            conversation.close();conversation=null;
+            snapshot.requireUnchanged();
+            // All voice-agent journals are metadata-only: tool content and generated private answers remain ephemeral.
+            append(journal,new JSONObject().put("type","end").put("state","complete").put("generate_ms",generateMs)
+                    .put("first_text_chunk_ms",model.firstTextMs()));
+            Bundle terminal=new Bundle(metrics);terminal.putString("answer",answer);terminal.putLong("generate_ms",generateMs);
+            terminal.putLong("first_text_chunk_ms",model.firstTextMs());terminal.putString("journal",journal.getName());
+            life.mosaic.models.WarmMemory.add(this,terminal);busy=false;send(reply,4,"המודל השלים את הפנייה",0,terminal);
+        }catch(Throwable error){
+            if(journal!=null)try{append(journal,new JSONObject().put("type","end").put("state","error").put("reason","agent_failed"));}catch(Exception ignored){}
+            busy=false;send(reply,5,"המודל לא השלים פנייה תקינה. לא הופעלה פעולה נוספת; אפשר לנסות שוב או לנסח מחדש.",0);
+        }finally{
+            AgentToolExchange pending=pendingTool;pendingTool=null;if(pending!=null)pending.close();
+            if(conversation!=null)try{conversation.close();}catch(Throwable ignored){}
+        }
+    }
+    private VoiceTool.Result requestTool(Messenger reply,String name)throws Exception{
+        AgentToolExchange pending=new AgentToolExchange();pendingTool=pending;
+        try{
+            Bundle request=new Bundle();request.putString("agent_call_id",pending.id);request.putString("agent_function",name);
+            request.putString("agent_arguments","{}");
+            send(reply,6,"המודל ביקש כלי מקומי",0,request);
+            return pending.await(20000);
+        }finally{pending.close();if(pendingTool==pending)pendingTool=null;}
     }
     @Override public boolean onUnbind(Intent intent){android.os.Process.killProcess(android.os.Process.myPid());return false;}
     private Bundle ensureEngine(Messenger reply,File journal,String session)throws Exception {

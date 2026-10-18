@@ -5,6 +5,13 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class VoiceEventSummaryTest {
+    @Test public void modelDecisionTimelineIsExplicitAndDoesNotCopyPayloads() throws Exception {
+        String start=VoiceEventSummary.describe(new JSONObject().put("type","agent_start").put("request","PRIVATE_REQUEST"));
+        assertTrue(start.contains("לבחירת תשובה או כלי"));assertFalse(start.contains("PRIVATE"));
+        String call=VoiceEventSummary.describe(new JSONObject().put("type","intent_route").put("route","whatsapp_latest_notification")
+                .put("source","model").put("agent_content","PRIVATE_DATA"));
+        assertTrue(call.contains("המודל בחר כלי"));assertFalse(call.contains("PRIVATE"));
+    }
     @Test public void personalRouteShowsSourceWithoutPhraseOrUnknownSource() throws Exception {
         JSONObject event = new JSONObject().put("type", "intent_route").put("route", "whatsapp_latest_notification")
                 .put("source", "personal_command").put("phrase", "PRIVATE_PHRASE");

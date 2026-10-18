@@ -715,6 +715,54 @@ User screenshot showed a last-WhatsApp-conversation read request falling through
 
 After the native route fix user confirmed readout but objected to full URLs being spelled. 0.22 candidate replaces URL spans only in speech with a short Hebrew placeholder, preserves original bounded display/snapshot, and summarizes adjacent links. No fetching/opening, new data access, model/normalization setting or lifecycle change. URL/email/punctuation/Unicode/integration regressions, CI/installation/preparation and evidence limits in [notification-spoken-links.md](notification-spoken-links.md). No inference-speed, acoustic or sustained-stability claim; main/roadmap unchanged and PRs unmerged.
 
+### ASR-38 / VOICE-16 — בחירת כלים באמצעות המודל, 18.10.2026
+
+Voice 0.24/code22 replaces the voice path's positive keyword/alias routing with
+LiteRT-LM 0.18.0 native structured function calls, automatic execution disabled.
+An exact personal phrase supplies a meaning hint; only a model-emitted, validated
+call can invoke the existing read-only notification adapter. Its result returns in
+the TOOL role to the same conversation for a model-written final answer. At most
+one call per turn; invalid/multiple/stale calls, cancellation and private-output
+guards fail closed. The LLM remains resident only during the small Android read,
+then exits through the observed-death gate before CPU TTS. Gemma/ASR/TTS weights,
+sampler and backends are unchanged; system/schema/orchestration are changed factors.
+
+Baseline/rollback `2373982d7bffaf3ea29cfe127ea42d42e1978076` (installed 0.23),
+main inspected `613b71ebd3d94dcb7e84f70af058a818739fb3f9`; drafts #50/#51 inspected.
+Host compilation/tests passed; fixed real-model/synthetic-result probe and live
+device acceptance are separate pending gates. No ASR quality, latency speedup,
+battery, thermal or roadmap-completion claim. Full hypothesis, controls, acceptance,
+native API sources, privacy, artifact identities/reproduction and evidence limits:
+[model-tool-agent.md](model-tool-agent.md). No merge authorized.
+
+ASR-38 initial physical result: implementation `6ee634bd37657e1ea3a01414e3e605afa0f02760`
+/ installed 0.24/code22 passed host 123 tests and all three CI workflows. Real
+Gemma/NPU with synthetic tool results passed 4/5 fixed cases: explicit WhatsApp
+read emitted a structured call and used `NO_MESSAGE` truthfully; greeting, negation
+and explanation emitted no call. Personal alias asked for clarification instead.
+0.24.1/code23 strengthens only the trusted meaning hint in Hebrew, preserving
+model-selected execution. Repeat probe pending; no real notification/audio/TTS or
+latency-accuracy benchmark claim. APK/source identities, controls and limits are
+appended in the detailed record above; initial failed alias evidence is retained.
+
+ASR-38 second probe: 0.24.1 (`8d4ec41cb7cb54208ce0121784befd76b292e642`)
+again passed 4/5; the explicit read used the tool, but a system-only Hebrew alias
+meaning still led to clarification. 0.24.2/code24 expands the exact saved meaning
+into the full user request before inference, retaining model-only execution and
+the original request's veto. Same fixtures and controlled settings; repeat pending.
+Both unsuccessful alias-context variants and separate APK identities are retained
+in [model-tool-agent.md](model-tool-agent.md); no broad accuracy/speedup claim.
+
+ASR-38 third probe: source `edc37a7bbb8d3e554b4c9827e11f94c6e56090b0`, installed
+0.24.2/code24, passed 124 host tests and all three triggered CI workflows. The same
+real Gemma/NPU/synthetic-result fixtures now passed **5/5**: explicit read and saved
+alias each emitted one native call and used `NO_MESSAGE` truthfully; greeting,
+negation and explanation emitted none. Exact CI/signed/installed APK and probe hashes,
+unchanged private dictionary evidence, device identity and limits are appended to
+the detailed record. No actual notifications, microphone or TTS were used. Keep as
+an installed development candidate; real spoken/permission/lock/cancellation and
+repeatability gates remain pending. No merge, roadmap completion or speedup claim.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.
