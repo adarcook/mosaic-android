@@ -667,6 +667,8 @@ PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3e
 
 ### ASR-34 / VOICE-12 — משוב קולי מוכן מראש וקיצור אימותים בפניות חוזרות, 18.10.2026
 
+0.20 first controlled screen-off follow-up completed: user reported seems to work. 24,136 ms including 4.352 s input, receipt-only feedback played, first actual answer API 10,428 ms after capture-end; metadata receipt checks 5/47 ms. Automatic rearm and a second request followed; main process unchanged. One successful trial does not establish sustained reliability. See [spoken-feedback-latency.md](spoken-feedback-latency.md).
+
 0.20 activation after user unlock: completed 19,917 ms including 3,845 ms cue preparation; listener active. All three cache entries verified; ready and receipt waveforms exactly match the saved 0.19 ready/clear-thinking references by rate, length and SHA-256. Failure cue remains acoustically unaccepted. Controlled SLEEP/keyguard/screen-off and non-interactive health verified; new full turn/rearm test pending. See [spoken-feedback-latency.md](spoken-feedback-latency.md).
 
 0.19 audition: after 22,114 ms preparation and verified five-clip hashes, user found received and voicing unclear, thinking clear. 0.20 candidate moves that clear phrase to receipt and removes other normal-path stage announcements; detailed stage journaling remains. No model/setting/lifecycle change. Source baseline c94a619; tests/CI/install/hash reuse proof pending. Screen-off wake reliability remains unresolved. See [spoken-feedback-latency.md](spoken-feedback-latency.md).
