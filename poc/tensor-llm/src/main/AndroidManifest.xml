@@ -6,7 +6,7 @@
         android:extractNativeLibs="true" android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name="life.mosaic.models.ModelSetupActivity" android:exported="false" />
-        <activity android:name=".VoiceActivity" android:exported="true">
+        <activity android:name=".VoiceActivity" android:exported="true" android:theme="@style/Theme.Mosaic.Voice">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
