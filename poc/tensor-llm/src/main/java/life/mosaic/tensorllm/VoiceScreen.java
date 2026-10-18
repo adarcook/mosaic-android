@@ -24,6 +24,8 @@ final class VoiceScreen {
     final TextView asr, llm, tts, transcript, answer, status;
     final Button talk, stop, setup, export, archive, warm, notificationAccess, notificationCheck;
     final CheckBox beam2, zipformer;
+    final Button handsfreeButton, assistantButton, wakeExport;
+    final TextView handsfreeStatus;
     final ProgressBar asrProgress, llmProgress, ttsProgress;
     private final TextView heroTitle, heroDetail, stateBadge, elapsed, permission, trace;
     private final TextView[] steps = new TextView[3];
@@ -113,6 +115,15 @@ final class VoiceScreen {
         elapsed.setPadding(0, dp(12), 0, 0);
         hero.addView(elapsed);
 
+        LinearLayout handsfree = panel(home);
+        handsfree.addView(text("מוזאיק, בלי לגעת", 20, INK));
+        handsfreeStatus = content(handsfree, "האזנה כבויה");
+        assistantButton = button("בחירת מוזאיק כעוזר", false);
+        handsfreeButton = button("הפעלת האזנה מקומית", false);
+        addButton(handsfree, assistantButton);
+        addButton(handsfree, handsfreeButton);
+        handsfree.addView(text("ניסוי: אמור מוזאיק, המתן לצליל ואז דבר. ההאזנה משתמשת במיקרופון ובסוללה; אודיו ההמתנה אינו נשמר. תוכן אישי דורש פתיחת נעילה.", 12, MUTED));
+
         LinearLayout strip = row();
         for (int i = 0; i < steps.length; i++) {
             steps[i] = text(new String[]{"01  הקשבה", "02  הבנה / כלי", "03  קול"}[i], 12, MUTED);
@@ -164,6 +175,8 @@ final class VoiceScreen {
         TextView exportNote = text("יומן מלא עשוי לכלול תמלילים ותשובות אישיים. תוכן הודעות WhatsApp אינו נשמר ביומן הכלי.", 12, MUTED);
         exportNote.setPadding(0, dp(8), 0, 0);
         tracePanel.addView(exportNote);
+        wakeExport = button("ייצוא אבחון ההאזנה", false);
+        addButton(tracePanel, wakeExport);
 
         heading(debug, "מנועים והרשאות", "ההגדרות הקיימות נשמרות בין עדכונים");
         LinearLayout settings = panel(debug);
@@ -181,7 +194,7 @@ final class VoiceScreen {
         settings.addView(experimentNote);
         notificationCheck = button("בדיקת זמינות כלי WhatsApp", false);
         addButton(settings, notificationCheck);
-        TextView build = text("MOSAIC · " + BuildConfig.VERSION_NAME + "\nגרסת פיתוח · הפעלה קולית ללא מגע עדיין בפיתוח", 12, MUTED);
+        TextView build = text("MOSAIC · " + BuildConfig.VERSION_NAME + "\nגרסת פיתוח · האזנה מקומית היא מצב ניסוי", 12, MUTED);
         build.setGravity(Gravity.CENTER);
         build.setPadding(0, dp(12), 0, dp(12));
         debug.addView(build);

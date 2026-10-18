@@ -6,12 +6,18 @@
         android:extractNativeLibs="true" android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name="life.mosaic.models.ModelSetupActivity" android:exported="false" />
-        <activity android:name=".VoiceActivity" android:exported="true" android:theme="@style/Theme.Mosaic.Voice">
+        <activity android:name=".VoiceActivity" android:exported="true" android:launchMode="singleTop" android:theme="@style/Theme.Mosaic.Voice">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver android:name=".WakeEventReceiver" android:exported="false" />
+        <service android:name=".MosaicAssistantService" android:permission="android.permission.BIND_VOICE_INTERACTION" android:exported="true">
+            <intent-filter><action android:name="android.service.voice.VoiceInteractionService" /></intent-filter>
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/voice_interaction" />
+        </service>
+        <service android:name=".MosaicSessionService" android:permission="android.permission.BIND_VOICE_INTERACTION" android:exported="true" />
         <activity android:name=".TtsSetupActivity" android:exported="false" />
         <service android:name=".TtsService" android:exported="false" android:process=":tts" />
         <service android:name=".WhatsAppNotificationListener"

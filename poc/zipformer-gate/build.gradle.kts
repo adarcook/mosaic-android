@@ -9,8 +9,8 @@ android {
         applicationId = "life.mosaic.zipformergate"
         minSdk = 31
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.5-zipformer-complete-tail"
+        versionCode = 5
+        versionName = "0.6-local-wake"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

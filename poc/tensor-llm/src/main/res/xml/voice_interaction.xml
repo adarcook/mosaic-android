@@ -1,0 +1,6 @@
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="life.mosaic.tensorllm.MosaicSessionService"
+    android:recognitionService=""
+    android:settingsActivity="life.mosaic.tensorllm.VoiceActivity"
+    android:supportsAssist="true"
+    android:supportsLaunchVoiceAssistFromKeyguard="true" />

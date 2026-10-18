@@ -34,3 +34,8 @@ jobs:
           ./gradlew -p poc/zipformer-gate testDebugUnitTest assembleDebug
       - name: Compile and test LLM voice controller
         run: ./gradlew -p poc/tensor-llm testDebugUnitTest compileDebugJavaWithJavac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mosaic-zipformer-local-wake-apk
+          path: poc/zipformer-gate/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
