@@ -208,7 +208,9 @@ public final class VoiceActivity extends Activity {
                 return;
             }
             if(completed.equals("asr")){if(!life.mosaic.models.VoiceAsrBackend.matchesResult(selectedAsrEngine,data.getString("asr_engine",null),selectedBeam,data.getInt("beam_size",life.mosaic.models.VoiceAsrBeam.BASELINE)))throw new IOException("מנוע התמלול החזיר זהות או הגדרת Beam שגויה; בדוק גרסאות");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();
-                if(WhatsAppReadIntent.matches(recognized)){
+                boolean whatsappRead=WhatsAppReadIntent.matches(recognized);
+                event(new JSONObject().put("type","intent_route").put("route",whatsappRead?"whatsapp_latest_notification":"conversation"));
+                if(whatsappRead){
                     toolTurn=true;
                     WhatsAppNotificationTool.Result result=WhatsAppNotificationListener.readLatest(this);
                     event(new JSONObject().put("type","tool_invocation").put("tool",WhatsAppNotificationTool.ID)

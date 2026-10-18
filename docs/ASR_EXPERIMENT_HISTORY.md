@@ -699,6 +699,10 @@ PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3e
 
 מועמד 0.16 / Zipformer 0.7 מוסיף שירות מיקרופון/הקראה גלוי ומוגבל לשש דקות, כך שפנייה מורשית יכולה להמשיך כשה־Activity מושהה. Stop/כשל/סגירת פעילות מפסיקים ומנקים; הרשאת ההתראה החדשה ניתנת דרך Android. אבחון ההמתנה שומר רק חלונות מספריים מצומצמים (זמני אודיו/קיר/עיבוד, בלוקים עם דגימות שאינן אפס ו־interactive), ללא אודיו או טקסט. אין שינוי למשקלים/חיפוש/פרמטרים/backend/הפרדת מנועים. בנייה ו־61+9 בדיקות מקומיות עברו; בדיקה מבוקרת של מסך כבוי ללא נגיעה, המשך פנייה, latency ושתי פניות נדרשים בנפרד. ראה [screen-off-voice-lifecycle.md](screen-off-voice-lifecycle.md) לזהויות, גבולות השירות, השערה, rollback וגבולות הראיות. main/roadmap נשארים ללא שינוי.
 
+### ASR-36 / VOICE-14 — WhatsApp conversation-request routing, 2026-10-18
+
+User screenshot showed a last-WhatsApp-conversation read request falling through to generic Gemma no-access text. Baseline 0249d01: the gate required message/SMS nouns. Candidate 0.21 recognizes explicit last-conversation/chat requests for the existing latest-notification tool; unsupported history, negation, unrelated actions and call discussion do not grant reads. Adds fixed enum route diagnostics without private content. No ASR/model/settings/lifecycle change; native permission/keyguard/content bounds remain. Local 72 tests/build passed before final negative case; exact SHA/CI/install/acoustic tool status pending. Main and roadmap unchanged, PRs unmerged. See [whatsapp-intent-routing.md](whatsapp-intent-routing.md).
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

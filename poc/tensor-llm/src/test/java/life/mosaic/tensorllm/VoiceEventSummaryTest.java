@@ -34,4 +34,12 @@ public class VoiceEventSummaryTest {
         assertFalse(error.contains("PRIVATE"));
         assertTrue(error.contains("תקלה"));
     }
+    @Test public void routeSummaryUsesOnlyAllowlistedRoutes()throws Exception{
+        String line=VoiceEventSummary.describe(new JSONObject().put("type","intent_route")
+                .put("route","whatsapp_latest_notification").put("transcript","PRIVATE_REQUEST"));
+        assertTrue(line.contains("WhatsApp"));
+        assertFalse(line.contains("PRIVATE"));
+        assertEquals("",VoiceEventSummary.describe(new JSONObject().put("type","intent_route").put("route","PRIVATE_ROUTE")));
+        assertTrue(VoiceEventSummary.describe(new JSONObject().put("type","intent_route").put("route","conversation")).contains("מודל השיחה"));
+    }
 }
