@@ -25,3 +25,8 @@ After user unlock and explicit preparation, repeat the request. Collect only `in
 Local build and 72 existing/new controller tests passed before the final whole-history negative addition; the final build is recorded below. Candidate SHA, CI/artifact, installed APK and native runtime outcomes pending until appended. Real audio WER, sustained throughput, battery and parity are not measured by this routing change. Roll back source `0249d01d5f4d6f870bc95929ed1788bf5a58693c` rebuilt with non-decreasing versionCode and existing signer, preserving all model/data/journal directories.
 
 Final local controller test/build passed: 72 tests, zero failures/errors, including the whole-history negative case.
+
+
+## Installation follow-up — 2026-10-18, Asia/Jerusalem
+
+Code `737a5e903beee3f9645dad18be0d6609678c6ce4` passed exact-head LLM workflow `39126419921`; controller artifact `12135973775`, ZIP digest `ab3566e3f4b70eea0be318c055435c42b301bdcc55d83c4969a48a7e872786be`. Other workflows were still running at pre-install observation. Local controller 0.21/code19 SHA-256 `62167b3632a6fb3234823995825d27ccc8686de85f2b98217e1747ea995fa0be`; prior 0.20 backup `664745dfdca06ed1eed955cc8b44551d604f4ceda67f382b970c08985eba3841`. Both certificates matched existing signer `ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35` before replacement. Data-preserving install succeeded and installed 0.21 version was confirmed. Companion/model/data/journal directories retained. The phone was locked; user asked to unlock for explicit preparation and same-request acoustic routing check. Actual native route/status/playback still pending, not inferred from text tests/build. No merge.
