@@ -24,7 +24,7 @@ public final class VoiceActivity extends Activity {
         if(active||!foreground||locked()||serviceProbeRunning)return;
         if(!FeedbackClips.valid(getFilesDir())){status.setText("הפעל האזנה פעם אחת כדי להכין את משפטי המשוב");return;}
         String[] ids=FeedbackClips.TEXT.keySet().toArray(new String[0]);
-        String[] names={"מוכנות","קבלת בקשה","מחשבה","הקראה","תקלה"};
+        String[] names={"מוכנות","קבלת בקשה","תקלה"};
         String[] labels=new String[ids.length];for(int i=0;i<ids.length;i++)labels[i]=names[i]+" · "+FeedbackClips.TEXT.get(ids[i]);
         feedbackPreviewDialog=new android.app.AlertDialog.Builder(this).setTitle("איך מוזאיק נשמע?")
             .setSingleChoiceItems(labels,-1,(dialog,index)->feedback.play(ids[index],ok->{if(feedbackPreviewDialog!=null)status.setText(ok?"משפט המשוב הושמע · אפשר לבחור משפט נוסף":"לא ניתן להשמיע את המשפט · הפעל הכנה מחדש");}))
@@ -166,7 +166,7 @@ public final class VoiceActivity extends Activity {
             life.mosaic.models.VoiceAsrBackend.serviceName(selectedAsrEngine)));}
     private void stopMic(){recording=false;AudioRecord mic=recorder;if(mic!=null)try{mic.stop();}catch(RuntimeException ignored){}stop.setText("ביטול הפעולה");}
     private void transition(String next,String text)throws Exception{
-        if(handsfreeTurn&&!prewarming){if(next.equals("asr"))speakPhase("received");else if(next.equals("llm"))speakPhase("thinking");else if(next.equals("tts"))speakPhase("voicing");}
+        if(handsfreeTurn&&!prewarming&&next.equals("asr"))speakPhase("received");
         stage=next;stageStart=SystemClock.elapsedRealtime();event(new JSONObject().put("type","phase").put("stage",stage).put("state","running"));
         TextView card=stage.equals("capture")||stage.equals("asr")?asr:stage.equals("llm")?llm:tts;card.setText(label(stage)+" · "+text);card.setTextColor(VoiceScreen.ACCENT);screen.session(prepared,active,recording,prewarming,stage);main.removeCallbacks(clock);main.post(clock);
         asrProgress.setVisibility(stage.equals("capture")||stage.equals("asr")?android.view.View.VISIBLE:android.view.View.GONE);llmProgress.setVisibility(stage.equals("llm")?android.view.View.VISIBLE:android.view.View.GONE);ttsProgress.setVisibility(stage.equals("tts")?android.view.View.VISIBLE:android.view.View.GONE);

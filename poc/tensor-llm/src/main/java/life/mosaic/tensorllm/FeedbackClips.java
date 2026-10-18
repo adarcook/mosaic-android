@@ -11,9 +11,7 @@ import org.json.*;
 final class FeedbackClips {
     static final Map<String,String> TEXT = Collections.unmodifiableMap(new LinkedHashMap<>() {{
         put("ready", "אני פה. דבר אליי.");
-        put("received", "סגור, קיבלתי את הבקשה.");
-        put("thinking", "אני על זה, רק רגע.");
-        put("voicing", "הנה. זה בא.");
+        put("received", "אני על זה, רק רגע.");
         put("error", "נתקעתי רגע. צריך להפעיל אותי שוב באפליקציה.");
     }});
     private static final String CONTRACT="mosaic-feedback-v1|"+TtsPack.REV+"|"+new TreeMap<>(TtsPack.PINNED)+"|"+TEXT;
