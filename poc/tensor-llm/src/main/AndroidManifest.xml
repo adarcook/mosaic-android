@@ -25,6 +25,7 @@
         </service>
         <service android:name=".MosaicSessionService" android:permission="android.permission.BIND_VOICE_INTERACTION" android:exported="true" />
         <activity android:name=".TtsSetupActivity" android:exported="false" />
+        <activity android:name=".PersonalCommandsActivity" android:exported="false" android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode" android:theme="@style/Theme.Mosaic.Voice" />
         <service android:name=".TtsService" android:exported="false" android:process=":tts" />
         <service android:name=".WhatsAppNotificationListener"
             android:exported="true"

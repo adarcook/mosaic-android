@@ -5,6 +5,15 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class VoiceEventSummaryTest {
+    @Test public void personalRouteShowsSourceWithoutPhraseOrUnknownSource() throws Exception {
+        JSONObject event = new JSONObject().put("type", "intent_route").put("route", "whatsapp_latest_notification")
+                .put("source", "personal_command").put("phrase", "PRIVATE_PHRASE");
+        String line = VoiceEventSummary.describe(event);
+        assertTrue(line.contains("ביטוי אישי"));
+        assertFalse(line.contains("PRIVATE"));
+        event.put("source", "PRIVATE_SOURCE");
+        assertFalse(VoiceEventSummary.describe(event).contains("PRIVATE"));
+    }
     @Test public void privatePayloadNeverAppearsInTimeline() throws Exception {
         JSONObject event = new JSONObject().put("type", "tool_invocation").put("status", "OK")
                 .put("since_start_ms", 12500).put("answer", "PRIVATE_MESSAGE")

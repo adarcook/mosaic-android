@@ -24,7 +24,7 @@ final class VoiceScreen {
     final TextView asr, llm, tts, transcript, answer, status;
     final Button talk, stop, setup, export, archive, warm, notificationAccess, notificationCheck;
     final CheckBox beam2, zipformer;
-    final Button handsfreeButton, assistantButton, wakeExport, serviceProbe, feedbackPreview;
+    final Button handsfreeButton, assistantButton, wakeExport, serviceProbe, feedbackPreview, personalCommands;
     final TextView handsfreeStatus;
     final ProgressBar asrProgress, llmProgress, ttsProgress;
     private final TextView heroTitle, heroDetail, stateBadge, elapsed, permission, trace;
@@ -142,6 +142,9 @@ final class VoiceScreen {
         tools.addView(permission);
         notificationAccess = button("ניהול גישה להתראות", false);
         addButton(tools, notificationAccess);
+        personalCommands = button("המילון האישי", false);
+        addButton(tools, personalCommands);
+        tools.addView(text("הוסף ביטויים משלך להקראת התראת WhatsApp האחרונה.", 12, MUTED));
 
         heading(home, "השיחה שלך", "התמלול והתשובה מופיעים כאן במהלך הפנייה");
         LinearLayout userMessage = panel(home);

@@ -88,6 +88,7 @@ public final class VoiceActivity extends Activity {
         screen.handsfreeButton.setOnClickListener(v->{if(HandsFreeController.enabled())HandsFreeController.stop(this,"ההאזנה הופסקה לפי בקשה");else wakeSetup();});
         screen.wakeExport.setOnClickListener(v->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/x-ndjson").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"mosaic-handsfree-status.jsonl"),76));
         screen.feedbackPreview.setOnClickListener(v->previewFeedback());
+        screen.personalCommands.setOnClickListener(v->{if(!active&&foreground&&!locked()&&!serviceProbeRunning)startActivity(new Intent(this,PersonalCommandsActivity.class));});
         screen.serviceProbe.setOnClickListener(v->{if(serviceProbeRunning){finishServiceProbe(false);return;}if(active||locked()||HandsFreeController.enabled()||!foreground)return;serviceProbeRunning=true;controls(true);try{TurnForegroundService.start(this);pollServiceProbe(0,SystemClock.elapsedRealtime()+3000);}catch(Exception error){finishServiceProbe(false);}});
         String previous=getPreferences(0).getString("journal","");if(!previous.isEmpty()){File file=new File(new File(getFilesDir(),"voice-turns"),previous);if(file.isFile())journal=file;}
         if(!locked()){transcript.setText(getPreferences(0).getString("transcript",""));answer.setText(getPreferences(0).getString("answer",""));status.setText(getPreferences(0).getString("result","כל שלב מוצג בנפרד. התמליל, התשובה והיומן נשמרים מקומית."));}
@@ -210,8 +211,10 @@ public final class VoiceActivity extends Activity {
                 return;
             }
             if(completed.equals("asr")){if(!life.mosaic.models.VoiceAsrBackend.matchesResult(selectedAsrEngine,data.getString("asr_engine",null),selectedBeam,data.getInt("beam_size",life.mosaic.models.VoiceAsrBeam.BASELINE)))throw new IOException("מנוע התמלול החזיר זהות או הגדרת Beam שגויה; בדוק גרסאות");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();
-                VoiceTool tool=toolRouter.route(recognized);
-                event(new JSONObject().put("type","intent_route").put("route",tool==null?"conversation":tool.route()));
+                PersonalCommands dictionary=PersonalCommandStore.open(this).load();
+                VoiceTool tool=toolRouter.route(recognized,dictionary);
+                event(new JSONObject().put("type","intent_route").put("route",tool==null?"conversation":tool.route())
+                        .put("source",dictionary.toolFor(recognized)==null?"built_in":"personal_command"));
                 if(tool!=null){
                     toolTurn=true;
                     VoiceTool.Result result=tool.execute();
@@ -277,6 +280,7 @@ public final class VoiceActivity extends Activity {
     }
     private void controls(boolean idle){notificationAccess.setEnabled(idle);notificationCheck.setEnabled(idle);zipformer.setEnabled(idle&&!locked());beam2.setEnabled(idle&&!locked()&&!zipformer.isChecked());talk.setEnabled(idle);warm.setEnabled(idle);setup.setEnabled(idle);archive.setEnabled(idle);export.setEnabled(idle&&journal!=null&&journal.isFile());stop.setEnabled(!idle);screen.session(prepared,active,recording,prewarming,stage);
         boolean deviceLocked=locked();
+        screen.personalCommands.setEnabled(idle&&!deviceLocked&&!serviceProbeRunning);
         screen.feedbackPreview.setEnabled(idle&&!deviceLocked&&!serviceProbeRunning);
         screen.handsfreeStatus.setText(HandsFreeController.status(this)+(deviceLocked?"\nהמכשיר נעול · תוכן אישי מחייב פתיחה":""));
         screen.assistantButton.setVisibility(HandsFreeController.selected(this)?android.view.View.GONE:android.view.View.VISIBLE);

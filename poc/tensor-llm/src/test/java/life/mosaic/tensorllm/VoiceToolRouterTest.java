@@ -96,6 +96,40 @@ public class VoiceToolRouterTest {
         assertThrows(IllegalStateException.class, () -> router.route("request"));
     }
 
+    @Test public void savedPersonalPhraseUsesRegisteredToolWithoutReadingDuringSelection() {
+        AtomicInteger reads = new AtomicInteger();
+        VoiceTool tool = new WhatsAppVoiceTool(() -> {
+            reads.incrementAndGet();
+            return WhatsAppNotificationTool.unavailable(WhatsAppNotificationTool.Status.DEVICE_LOCKED);
+        });
+        VoiceToolRouter router = new VoiceToolRouter(List.of(tool));
+        PersonalCommands commands = PersonalCommands.empty().put(new PersonalCommands.Entry(
+                "test", "תן לי עדכון", WhatsAppNotificationTool.ID, true));
+        assertSame(tool, router.route("תן לי עדכון!", commands));
+        assertEquals(0, reads.get());
+        assertEquals(VoiceTool.Status.DEVICE_LOCKED, router.route("תן לי עדכון", commands).execute().status);
+        assertEquals(1, reads.get());
+        assertSame(tool, router.route(READ, commands));
+        assertNull(router.route("אל תן לי עדכון", commands));
+        assertNull(router.route("שלום", commands));
+    }
+
+    @Test public void disabledAndDeletedAliasesReturnToConversation() {
+        VoiceTool tool = new WhatsAppVoiceTool(() -> { throw new AssertionError("No reads expected"); });
+        VoiceToolRouter router = new VoiceToolRouter(List.of(tool));
+        PersonalCommands commands = PersonalCommands.empty().put(new PersonalCommands.Entry(
+                "test", "תן לי עדכון", WhatsAppNotificationTool.ID, false));
+        assertNull(router.route("תן לי עדכון", commands));
+        assertNull(router.route("תן לי עדכון", commands.remove("test")));
+        assertSame(tool, router.route(READ, commands));
+    }
+
+    @Test public void personalTargetMustActuallyBeRegistered() {
+        PersonalCommands commands = PersonalCommands.empty().put(new PersonalCommands.Entry(
+                "test", "תן לי עדכון", WhatsAppNotificationTool.ID, true));
+        assertThrows(IllegalStateException.class, () -> new VoiceToolRouter(List.of()).route("תן לי עדכון", commands));
+    }
+
     private static VoiceTool fake(String id, String route) {
         return new VoiceTool() {
             public String id() { return id; }
