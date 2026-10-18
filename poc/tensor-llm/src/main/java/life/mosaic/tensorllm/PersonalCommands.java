@@ -90,6 +90,8 @@ final class PersonalCommands {
         List<Entry> entries = new ArrayList<>();
         for (int i = 0; i < array.length(); i++) {
             JSONObject entry = array.getJSONObject(i);
+            if (!(entry.get("id") instanceof String) || !(entry.get("phrase") instanceof String) ||
+                    !(entry.get("tool") instanceof String)) throw new IllegalArgumentException("פרטי הביטוי אינם תקינים");
             if (!(entry.get("enabled") instanceof Boolean)) throw new IllegalArgumentException("מצב הביטוי אינו תקין");
             entries.add(new Entry(entry.getString("id"), entry.getString("phrase"), entry.getString("tool"), entry.getBoolean("enabled")));
         }

@@ -85,6 +85,8 @@ public class PersonalCommandsTest {
         JSONObject invalid = new JSONObject(PersonalCommands.empty().put(entry("one", "תן לי עדכון", true)).encode());
         invalid.getJSONArray("entries").getJSONObject(0).put("enabled", "true");
         assertThrows(IllegalArgumentException.class, () -> PersonalCommands.decode(invalid.toString()));
+        invalid.getJSONArray("entries").getJSONObject(0).put("enabled", true).put("phrase", 123);
+        assertThrows(IllegalArgumentException.class, () -> PersonalCommands.decode(invalid.toString()));
     }
 
     @Test public void duplicateIdsAndMutableInputAreHandled() {
