@@ -21,3 +21,8 @@ Local build/tests, exact candidate SHA/CI/APK and device preparation will be app
 Local controller build and all 80 tests passed, including eight new link rendering/integration tests. These use public synthetic example domains, not the user notification.
 
 A further boundary case covers many tiny bare domains: if long placeholders would expand speech beyond 1,100 characters, individual placeholders shorten to a single word, preserving surrounding message prose and the existing 1,200-character TTS input bound. Final controller build and 81 tests passed (nine new URL cases).
+
+
+## Installation evidence — 2026-10-18, Asia/Jerusalem
+
+Final code `7173a0bad5f426014c2965fc302dd767f1e4f251` passed exact-head LLM workflow `39127374830` and Zipformer `39127374794` before install. Controller CI artifact `12137135258`, ZIP digest `5b2da94aae2915fa5d5b367a072e6319b12019dec6ebfb63f42acffb157ca439`. Remaining workflows still in progress at that observation. Local 0.22/code20 APK SHA-256 `86c1854a3baf9baf49abd7733379eaf18781e88f60f904c26204afb069718af5`; prior 0.21 backup `62167b3632a6fb3234823995825d27ccc8686de85f2b98217e1747ea995fa0be`. Existing/candidate signer verified equal to `ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35` before update. Data-preserving install succeeded and package version confirmed by the installer; companion/models/data/journals retained. Phone locked at completion; user asked to unlock for explicit reactivation. No uninstall, data clearing, signature/permission/keyguard bypass or merge. Physical speech/UI rendering in 0.22 remains unmeasured; pure rendering/integration tests and prior native tool success are separate evidence.
