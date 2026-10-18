@@ -84,3 +84,12 @@ Baseline/rollback `c94a619030781ca00d0db419d107f5d57f8f5738` with non-decreasing
 
 
 0.20 code `7d9cf9a8e183bd94386765121ddbe9ccc10b767a`: LLM workflow `39125563302` and Zipformer `39125563279` passed before install; voice-loop `39125563426`, Whisper hybrid `39125563270`, Android Build `39125563246` were still running at that observation. Exact-head controller artifact `12135917835`, ZIP digest `0b3dfb71b7b48644de2b2f2f383c2b6021323f1bbbecc2bdab2e42035f7c2a2b`. Matching-signer data-preserving local update succeeded: 0.20/code18 APK SHA-256 `664745dfdca06ed1eed955cc8b44551d604f4ceda67f382b970c08985eba3841`; prior 0.19 backed up and verified `7642cd21036e960705e836e0444f128fd5c5614fdb3fdf012c9e812105c00e55`. Phone locked at install completion; explicit preparation, reference-waveform equality and runtime outcomes still pending user unlock. No unlock/permission/signature bypass, data reset or uninstall. No PR merged.
+
+
+## 0.20 preparation and exact clear-waveform check — 2026-10-18, 15:05 Asia/Jerusalem
+
+After user unlock, explicit activation completed in 19,917 ms: ASR 1,803 ms; Gemma 7,354 ms (full verification 5,792 ms, load 1,133 ms); TTS 9,471 ms (full verification 2,773 ms, load 2,567 ms), including 3,845 ms cue preparation. Listener reported listening at `1792325154717`, 2,217 ms after prepare terminal. All three live catalog entries matched source text/contract, byte lengths and SHA-256. The ready and new receipt clip entries (rate, bytes and digest) exactly matched the privately saved 0.19 ready and user-confirmed clear thinking references. Ready 1.045 s; receipt 1.324 s; retained failure 2.995 s. This establishes identical normal-path waveforms, not a newly inferred acoustic quality. Failure remains unaccepted acoustically.
+
+Standby was explicitly enabled and nonzero-input/decode health observed. Deliberate SLEEP was followed by verified keyguard/SCREEN_STATE_OFF and non-interactive health before requesting the user's end-to-end test. Actual new wake, receipt playback, answer completion and rearm remain pending that test. No new install, data clearing, signature/permission/keyguard bypass or merge in this activation step. No inference-speed or sustained-reliability claim.
+
+Later exact-code CI observation: all five 0.20 workflows, including Android Build `39125563246`, completed successfully.
