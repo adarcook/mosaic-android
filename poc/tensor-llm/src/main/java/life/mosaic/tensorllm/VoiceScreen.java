@@ -24,7 +24,7 @@ final class VoiceScreen {
     final TextView asr, llm, tts, transcript, answer, status;
     final Button talk, stop, setup, export, archive, warm, notificationAccess, notificationCheck;
     final CheckBox beam2, zipformer;
-    final Button handsfreeButton, assistantButton, wakeExport, serviceProbe;
+    final Button handsfreeButton, assistantButton, wakeExport, serviceProbe, feedbackPreview;
     final TextView handsfreeStatus;
     final ProgressBar asrProgress, llmProgress, ttsProgress;
     private final TextView heroTitle, heroDetail, stateBadge, elapsed, permission, trace;
@@ -122,6 +122,8 @@ final class VoiceScreen {
         handsfreeButton = button("הפעלת האזנה מקומית", false);
         addButton(handsfree, assistantButton);
         addButton(handsfree, handsfreeButton);
+        feedbackPreview = button("איך מוזאיק נשמע?", false);
+        addButton(handsfree, feedbackPreview);
         handsfree.addView(text("אמור מוזאיק, המתן ל־‘אני פה, דבר אליי’ ואז דבר. משוב קולי מלווה את השלבים גם בלי מסך. ההפעלה הראשונית מכינה את הקול. מצב ניסוי משתמש במיקרופון ובסוללה; אודיו ההמתנה אינו נשמר. תוכן אישי דורש פתיחת נעילה.", 12, MUTED));
 
         LinearLayout strip = row();

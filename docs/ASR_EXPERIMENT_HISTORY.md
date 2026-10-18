@@ -667,6 +667,8 @@ PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3e
 
 ### ASR-34 / VOICE-12 — משוב קולי מוכן מראש וקיצור אימותים בפניות חוזרות, 18.10.2026
 
+0.19 follow-up: user reported two post-ready clips as gibberish in 0.18 despite valid PCM hashes/playback callbacks. Two completed locked requests and rearm do not establish intelligibility; screen-off wake attempt had failed independently. Candidate replaces two short phrases with full clauses and adds unlocked per-clip audition without recording/models. No phonemizer/model/setting change or proven acoustic/wake fix. Build/CI/install/audio results pending; see [spoken-feedback-latency.md](spoken-feedback-latency.md).
+
 0.18 follow-up: activation completed in 21,374 ms; all five new catalog/contract, PCM byte lengths and hashes verified. Ready 1.045 s; received/thinking/voicing .766/.906/.697 s; error 2.995 s. Standby rearmed, controlled SLEEP/keyguard/screen-off and non-interactive health verified. Acoustic wording preference and completed request/rearm still pending user test; no inference speedup claim. See [spoken-feedback-latency.md](spoken-feedback-latency.md).
 
 עדכון 14:42: אחרי חיבור מחדש נשלף ואומת APK מותקן 0.18 מול hash המועמד והחתימה הקיימת; ההתקנה הקודמת אכן הושלמה לפני הניתוק, ולכן לא נדרשה התקנה נוספת. כל חמש בדיקות CI בקוד `8cdda02266a6ebdb986d112b4b14fa1d4e431bc4` עברו. הנתונים נשמרו והחלה הכנה דרך האפליקציה לאחר פתיחה. יצירת המטמון והתוצאה הקולית יתועדו בנפרד ב־[spoken-feedback-latency.md](spoken-feedback-latency.md).

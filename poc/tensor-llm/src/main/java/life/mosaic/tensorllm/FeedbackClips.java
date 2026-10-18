@@ -11,8 +11,8 @@ import org.json.*;
 final class FeedbackClips {
     static final Map<String,String> TEXT = Collections.unmodifiableMap(new LinkedHashMap<>() {{
         put("ready", "אני פה. דבר אליי.");
-        put("received", "סגור. קיבלתי.");
-        put("thinking", "רגע. בודק לך.");
+        put("received", "סגור, קיבלתי את הבקשה.");
+        put("thinking", "אני על זה, רק רגע.");
         put("voicing", "הנה. זה בא.");
         put("error", "נתקעתי רגע. צריך להפעיל אותי שוב באפליקציה.");
     }});
