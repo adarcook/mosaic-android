@@ -709,6 +709,8 @@ User screenshot showed a last-WhatsApp-conversation read request falling through
 
 ### ASR-37 / VOICE-15 — Spoken WhatsApp link placeholders, 2026-10-18
 
+0.22 reactivation at 15:35 after user unlock: prepare completed 16,035 ms, clear-cue cache reused 38 ms; listener active and numeric input/decode health observed. All five exact-code CI workflows passed. No additional notification read or new acoustic URL-quality claim; standby left enabled, PR unmerged. See [notification-spoken-links.md](notification-spoken-links.md).
+
 0.22 final code 7173a0bad5f426014c2965fc302dd767f1e4f251 passed 81 local tests/build and exact-head LLM/Zipformer CI before install; remaining workflows pending then. CI artifact identified; matching-signer data-preserving update installed, 0.21 backed up. User unlock/reactivation pending; no new acoustic speed/quality claim. Identity and limits in [notification-spoken-links.md](notification-spoken-links.md).
 
 After the native route fix user confirmed readout but objected to full URLs being spelled. 0.22 candidate replaces URL spans only in speech with a short Hebrew placeholder, preserves original bounded display/snapshot, and summarizes adjacent links. No fetching/opening, new data access, model/normalization setting or lifecycle change. URL/email/punctuation/Unicode/integration regressions, CI/installation/preparation and evidence limits in [notification-spoken-links.md](notification-spoken-links.md). No inference-speed, acoustic or sustained-stability claim; main/roadmap unchanged and PRs unmerged.
