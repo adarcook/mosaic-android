@@ -51,6 +51,10 @@ public final class WhatsAppNotificationTool {
     }
     /** Speak only bounded locally returned text; unavailable states never invent content. */
     public static String spoken(Result result){
+        return SpokenLinks.forSpeech(displayed(result));
+    }
+    /** Full bounded result stays ephemeral on screen; speech may use shorter link placeholders. */
+    public static String displayed(Result result){
         return switch(result.status){
             case OK -> "בהתראה האחרונה בוואטסאפ"+(result.title.isEmpty()?"":", "+result.title)+", נכתב: "+result.text;
             case PERMISSION_DENIED -> "אין לי הרשאה לקרוא התראות. אפשר לאשר את הגישה בהגדרות אנדרואיד.";

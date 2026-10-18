@@ -707,6 +707,10 @@ Native 0.21 follow-up: all five exact-code CI workflows passed; after unlock/pre
 
 User screenshot showed a last-WhatsApp-conversation read request falling through to generic Gemma no-access text. Baseline 0249d01: the gate required message/SMS nouns. Candidate 0.21 recognizes explicit last-conversation/chat requests for the existing latest-notification tool; unsupported history, negation, unrelated actions and call discussion do not grant reads. Adds fixed enum route diagnostics without private content. No ASR/model/settings/lifecycle change; native permission/keyguard/content bounds remain. Local 72 tests/build passed before final negative case; exact SHA/CI/install/acoustic tool status pending. Main and roadmap unchanged, PRs unmerged. See [whatsapp-intent-routing.md](whatsapp-intent-routing.md).
 
+### ASR-37 / VOICE-15 — Spoken WhatsApp link placeholders, 2026-10-18
+
+After the native route fix user confirmed readout but objected to full URLs being spelled. 0.22 candidate replaces URL spans only in speech with a short Hebrew placeholder, preserves original bounded display/snapshot, and summarizes adjacent links. No fetching/opening, new data access, model/normalization setting or lifecycle change. URL/email/punctuation/Unicode/integration regressions, CI/installation/preparation and evidence limits in [notification-spoken-links.md](notification-spoken-links.md). No inference-speed, acoustic or sustained-stability claim; main/roadmap unchanged and PRs unmerged.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

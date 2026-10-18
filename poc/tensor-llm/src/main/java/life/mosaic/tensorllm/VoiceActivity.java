@@ -216,7 +216,7 @@ public final class VoiceActivity extends Activity {
                     event(new JSONObject().put("type","tool_invocation").put("tool",WhatsAppNotificationTool.ID)
                             .put("status",result.status.name()).put("read_only",true));
                     response=WhatsAppNotificationTool.spoken(result);
-                    answer.setText("מוזאיק: "+response); // ephemeral; do not save notification text to preferences
+                    answer.setText("מוזאיק: "+WhatsAppNotificationTool.displayed(result)); // ephemeral; do not save notification text to preferences
                     llm.setText("2 · כלי מקומי: "+WhatsAppNotificationTool.ID+" · "+result.status.name());
                     transition("tts","מכין הקראת התראה…");Bundle toolRequest=new Bundle();
                     toolRequest.putString("answer",response);
