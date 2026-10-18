@@ -73,6 +73,44 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(len(gh.replies), 1)
 
 
+class GitHubProvenanceTests(unittest.TestCase):
+    def test_exact_sha_owner_repo_and_success_required(self):
+        from github_queue import GitHub
+        sha = "a" * 40
+        gh = GitHub("fake-token-for-local-unit-test")
+        good = {"name": "Tensor local LLM gate", "head_sha": sha,
+                "conclusion": "success", "event": "pull_request",
+                "head_repository": {"full_name": "adarcook/mosaic-android"},
+                "head_branch": "feature/voice-whatsapp-notification-tool",
+                "id": 123, "run_started_at": "2026-10-18T00:00:00Z"}
+        calls = []
+        def fake_request(path, data=None):
+            calls.append(path)
+            if path.startswith("/actions/runs?"):
+                return {"workflow_runs": [
+                    {**good, "conclusion": "failure", "id": 1},
+                    {**good, "head_repository": {"full_name": "someone/fork"}, "id": 2},
+                    {**good, "head_sha": "b"*40, "id": 3},
+                    good]}
+            return {"artifacts": [{"name": "mosaic-tensor-local-llm-apk",
+                                   "expired": False, "id": 777}]}
+        gh.request = fake_request
+        self.assertEqual(gh.successful_artifact(sha), 777)
+        self.assertIn("/actions/runs/123/artifacts?per_page=100", calls)
+
+    def test_rejects_missing_trusted_success(self):
+        from github_queue import GitHub
+        gh = GitHub("fake-token-for-local-unit-test")
+        gh.request = lambda *_args, **_kwargs: {"workflow_runs": [{
+            "name": "Tensor local LLM gate", "head_sha": "a"*40,
+            "conclusion": "success", "event": "pull_request",
+            "head_repository": {"full_name": "untrusted/fork"},
+            "head_branch": "feature/voice", "id": 5
+        }]}
+        with self.assertRaises(BridgeError):
+            gh.successful_artifact("a"*40)
+
+
 class DeviceTests(unittest.TestCase):
     @patch("device.process", return_value="List of devices attached\npixel-serial\tdevice\n")
     def test_one_device(self, run):
