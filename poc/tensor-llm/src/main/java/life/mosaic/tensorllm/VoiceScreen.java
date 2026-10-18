@@ -24,7 +24,7 @@ final class VoiceScreen {
     final TextView asr, llm, tts, transcript, answer, status;
     final Button talk, stop, setup, export, archive, warm, notificationAccess, notificationCheck;
     final CheckBox beam2, zipformer;
-    final Button handsfreeButton, assistantButton, wakeExport;
+    final Button handsfreeButton, assistantButton, wakeExport, serviceProbe;
     final TextView handsfreeStatus;
     final ProgressBar asrProgress, llmProgress, ttsProgress;
     private final TextView heroTitle, heroDetail, stateBadge, elapsed, permission, trace;
@@ -177,6 +177,8 @@ final class VoiceScreen {
         tracePanel.addView(exportNote);
         wakeExport = button("ייצוא אבחון ההאזנה", false);
         addButton(tracePanel, wakeExport);
+        serviceProbe = button("בדיקת רציפות הרקע · ללא הקלטה", false);
+        addButton(tracePanel, serviceProbe);
 
         heading(debug, "מנועים והרשאות", "ההגדרות הקיימות נשמרות בין עדכונים");
         LinearLayout settings = panel(debug);

@@ -8,8 +8,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.16-screen-off-turns"
+        versionCode = 15
+        versionName = "0.17-fgs-start-lifetime"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
