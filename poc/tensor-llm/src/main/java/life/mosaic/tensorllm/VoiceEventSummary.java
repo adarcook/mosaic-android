@@ -18,7 +18,7 @@ final class VoiceEventSummary {
             case "worker_release_error", "worker_stop_send_error" -> "תקלה בשחרור מנוע";
             case "tool_invocation" -> "כלי WhatsApp · " + toolStatus(event.optString("status"));
             case "intent_route" -> switch(event.optString("route")){
-                case "whatsapp_latest_notification" -> "הבקשה זוהתה · התראת WhatsApp אחרונה";
+                case "whatsapp_latest_notification" -> ("personal_command".equals(event.optString("source"))?"ביטוי אישי זוהה":"הבקשה זוהתה")+" · התראת WhatsApp אחרונה";
                 case "conversation" -> "הבקשה הועברה למודל השיחה";
                 default -> "";
             };

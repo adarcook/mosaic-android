@@ -1,18 +1,13 @@
 package life.mosaic.tensorllm;
 
-import java.util.Locale;
-import java.text.Normalizer;
-
 /** Explicit, read-only command gate until the on-device agent has a typed tool planner. */
 public final class WhatsAppReadIntent {
     private WhatsAppReadIntent(){}
     public static boolean matches(String recognized){
         if(recognized==null||recognized.isBlank())return false;
-        String s=Normalizer.normalize(recognized,Normalizer.Form.NFD).toLowerCase(Locale.ROOT)
-             .replaceAll("[\\u0591-\\u05c7]","").replaceAll("['׳’]","")
-             .replaceAll("[^\\p{L}\\p{N}]+"," ").replaceAll("\\s+"," ").trim();
+        String s=VoiceCommandText.normalize(recognized);
         // A read-only tool still needs an affirmative request, not a how-to or another action.
-        if(word(s,"אל|לא|בלי|ללא|איך|כיצד|למה|מדוע")||word(s,"שלח|תשלח|לשלוח|מחק|תמחק|למחוק|חייג|תחייג|התקשר|תתקשר|ענה|תענה|לענות"))return false;
+        if(VoiceCommandText.blocked(s))return false;
         String compact=s.replace(" ","");
         boolean whatsapp=compact.contains("וואטסאפ")||compact.contains("ווטסאפ")||compact.contains("וואצאפ")||compact.contains("whatsapp");
         boolean message=s.contains("הודע")||s.contains("מסרון");

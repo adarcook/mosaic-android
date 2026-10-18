@@ -31,4 +31,11 @@ final class VoiceToolRouter {
         }
         return selected;
     }
+
+    VoiceTool route(String request, PersonalCommands commands) {
+        String target = commands.toolFor(request);
+        if (target == null) return route(request);
+        for (VoiceTool tool : tools) if (tool.id().equals(target)) return tool;
+        throw new IllegalStateException("Personal command target is unavailable");
+    }
 }
