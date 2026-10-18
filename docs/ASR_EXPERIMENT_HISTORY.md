@@ -753,6 +753,16 @@ the original request's veto. Same fixtures and controlled settings; repeat pendi
 Both unsuccessful alias-context variants and separate APK identities are retained
 in [model-tool-agent.md](model-tool-agent.md); no broad accuracy/speedup claim.
 
+ASR-38 third probe: source `edc37a7bbb8d3e554b4c9827e11f94c6e56090b0`, installed
+0.24.2/code24, passed 124 host tests and all three triggered CI workflows. The same
+real Gemma/NPU/synthetic-result fixtures now passed **5/5**: explicit read and saved
+alias each emitted one native call and used `NO_MESSAGE` truthfully; greeting,
+negation and explanation emitted none. Exact CI/signed/installed APK and probe hashes,
+unchanged private dictionary evidence, device identity and limits are appended to
+the detailed record. No actual notifications, microphone or TTS were used. Keep as
+an installed development candidate; real spoken/permission/lock/cancellation and
+repeatability gates remain pending. No merge, roadmap completion or speedup claim.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

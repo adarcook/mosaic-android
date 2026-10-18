@@ -184,3 +184,44 @@ keyword fallback: a model answer without a native call performs no read. This
 implements the owner's stored meaning rather than leaving an ambiguous utterance
 as the sole USER message. Same five-case probe, model/schema/sampler/results;
 current build/install/probe evidence pending at authoring.
+
+## Third physical probe — 0.24.2 passes the fixed gate
+
+Implementation/source `edc37a7bbb8d3e554b4c9827e11f94c6e56090b0` passed **124
+local tests**, zero failures/errors/skips, and all three triggered CI workflows:
+[controller 39136270379](https://github.com/adarcook/mosaic-android/actions/runs/39136270379),
+[voice-loop 39136270566](https://github.com/adarcook/mosaic-android/actions/runs/39136270566),
+[Android Build 39136270376](https://github.com/adarcook/mosaic-android/actions/runs/39136270376).
+Controller artifact `12139213978`; ZIP SHA-256
+`998f10d0993fdf93654f9c4f857fba6bc7820410c169bc10f45e40b9fef3c6e8`;
+original CI APK `72dfdd518df40009fbcb1d2efd6b7afca096ce3ef5431434f543d9e29f3faba1`.
+The same local matching-signer procedure preserved all non-signature APK contents,
+updated in place, and verified the pulled installed 0.24.2/code24 APK:
+`7ac8100aa6951aaeea6123d8969f535556ce603a82ebd9434d1316b5802dcbc9`.
+The prior 0.24.1 APK was backed up (hash in the preceding record). The private
+dictionary hash stayed identical; no data clear, model/permission/bridge change.
+
+All **5/5 fixed cases passed** on real Gemma/NPU: greeting 0 calls, explicit read
+1 call, saved alias 1 call, negated request 0, explanation 0. Both call cases
+received synthetic `NO_MESSAGE` through the native TOOL message and produced
+truthful final answers stating no available notification and no history access,
+reviewed locally. There were no actual notification reads, microphone recordings
+or TTS runs. Probe output SHA-256:
+`efbb0423b5075b76db0c314a67430d73cac0ff34a02744d964b4f1a6a6cea73d`.
+Earlier probe output hashes are
+`523dbaa7aa10259839037804dfec12b7631b4ed56e0185439d5b1636db1bd06a`
+(0.24) and `8304edb41d16d35fb0142a3423880a18bdfc55946e31f62a31c1f9aee9eab379`
+(0.24.1). Raw output and APKs remain in ignored local QA folders.
+
+Device: Pixel 10 Pro / Tensor G5, fingerprint
+`google/blazer/blazer:17/CP3A.261005.005/16271449:user/release-keys`.
+At the last probe battery reported no AC/USB/wireless charging and 27.1 °C battery
+temperature; this is not SoC temperature or evidence of thermal causality.
+No latency measurement/A-B comparison or broad language accuracy claim is made.
+
+Decision: keep the model-selected loop as the current installed development
+candidate, with the fixed synthetic gate passed. Live speech, real Binder-to-
+notification readout, lock/revocation/cancellation during private response and TTS,
+additional phrasings and sustained turns remain acceptance gates. Main/roadmap
+unchanged, draft #52 unmerged. This evidence-only follow-up does not change the
+installed application sources or require another installation.
