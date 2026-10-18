@@ -1,0 +1,30 @@
+name: Pixel Test Bridge safety and syntax
+
+on:
+  pull_request:
+    paths:
+      - "tools/pixel-test-bridge/**"
+      - ".github/workflows/pixel-test-bridge.yml"
+  push:
+    branches:
+      - "feature/pixel-test-bridge"
+    paths:
+      - "tools/pixel-test-bridge/**"
+      - ".github/workflows/pixel-test-bridge.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  bridge-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile scripts
+        run: python -m compileall -q tools/pixel-test-bridge
+      - name: Run unit tests
+        run: python -m unittest discover -s tools/pixel-test-bridge/tests -p "test_*.py" -v
