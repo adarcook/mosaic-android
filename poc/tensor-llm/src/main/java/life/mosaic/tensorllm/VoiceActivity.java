@@ -80,7 +80,7 @@ public final class VoiceActivity extends Activity {
         if(!foreground||!handsfreeTurn||active)return;
         if(HandsFreeController.session().isEmpty()||(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)){HandsFreeController.status(this,"יש להכין האזנה עם התראת עצירה מתוך מוזאיק");endHandsFree(false);return;}
         try{TurnForegroundService.start(this);}catch(Exception error){HandsFreeController.status(this,"Android חסם שיחה כשהמסך כבוי");endHandsFree(false);return;}
-        HandsFreeController.status(this,"משוב מוכן · אני כאן, דבר אליי");
+        HandsFreeController.status(this,"משוב מוכן · אני פה, דבר אליי");
         feedback.play("ready",ok->{if(!handsfreeTurn||active)return;if(!ok||!TurnForegroundService.active()){endHandsFree(false);return;}HandsFreeController.status(this,"מוכן לבקשה · אפשר לדבר עכשיו");main.postDelayed(()->{if(canRunTurn()&&handsfreeTurn&&!active)begin(false);},100);});
     }
     private void prepareStandby(){armingStandby=true;HandsFreeController.stop(this,"מכין הפעלה ללא מסך ומשוב קולי · הכנה חד־פעמית להפעלה");begin(true);if(!active){armingStandby=false;HandsFreeController.stop(this,"הכנת ההאזנה לא התחילה; יש לבדוק אבחון");}}

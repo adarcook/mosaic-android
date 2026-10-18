@@ -10,11 +10,11 @@ import org.json.*;
 /** Fixed, locally synthesized UI speech. Never accepts a user transcript or notification. */
 final class FeedbackClips {
     static final Map<String,String> TEXT = Collections.unmodifiableMap(new LinkedHashMap<>() {{
-        put("ready", "אני כאן. דבר אליי.");
-        put("received", "קיבלתי. אני בודק.");
-        put("thinking", "אני מכין תשובה.");
-        put("voicing", "אני מכין את ההקראה.");
-        put("error", "הפנייה לא הושלמה. צריך להפעיל אותי שוב באפליקציה.");
+        put("ready", "אני פה. דבר אליי.");
+        put("received", "סגור. קיבלתי.");
+        put("thinking", "רגע. בודק לך.");
+        put("voicing", "הנה. זה בא.");
+        put("error", "נתקעתי רגע. צריך להפעיל אותי שוב באפליקציה.");
     }});
     private static final String CONTRACT="mosaic-feedback-v1|"+TtsPack.REV+"|"+new TreeMap<>(TtsPack.PINNED)+"|"+TEXT;
     static final class Clip {

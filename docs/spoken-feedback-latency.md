@@ -30,3 +30,12 @@ Measure detected wake to first cue, cue end to capture, capture duration, ASR/Ge
 ## Evidence, decision and rollback
 
 Local controller `testDebugUnitTest assembleDebug` passed: 61 tests, zero failures/errors, including existing receipt invalidation and seven cue-cache tests. CI/device outcomes will be appended with exact candidate SHA/APK identity. At writing, acoustic feedback, two-turn stability, actual speedup, battery, false wakes, call/mic contention and locked WhatsApp rejection are pending. Decision: pending device acceptance. Rollback source is `3fccda881869f40aa0d0bb33e668b1b2209f59cb`; rebuild with a non-decreasing versionCode and existing signer, preserving all data/models. Do not uninstall, clear data or bypass signature checks.
+
+
+## 0.18 cue wording follow-up — 2026-10-18 (ASR-34 / VOICE-12)
+
+After 0.17 the user reported the answer felt relatively fast and requested lighter fixed phrases. Candidate Voice 0.18 / code 16 changes only the five fixed phrases and their matching readiness hint/status: ready “אני פה. דבר אליי.”; received “סגור. קיבלתי.”; thinking “רגע. בודק לך.”; voicing “הנה. זה בא.”; error “נתקעתי רגע. צריך להפעיל אותי שוב באפליקציה.” The failure cue still accurately requires reopening the app; receipt/voicing cues do not claim successful action execution. No randomness, extra cues or waiting delay is added. The catalog text participates in the existing cache contract, so old clips are rejected and regenerated once at explicit preparation. No need to delete files, models or personal journals. Existing bounded PCM/hash checks, capture-after-ready and cancellation-before-answer rules remain.
+
+Baseline/rollback `da6675dec54312522488deb86d1ad8304737b110` with non-decreasing version code and the same signer. CPU/NPU placement, model weights, synthesis/decoding settings, session receipts and service lifecycle are unchanged. Local build/cache tests, exact-head CI/artifact, matching-signer update, regenerated cache, acoustic preference and post-update rearm results will be appended; wording alone is not an inference-speed change.
+
+Local controller build and all 67 existing tests passed after the wording change, including cue-cache integrity tests. No new wording-only test was added.
