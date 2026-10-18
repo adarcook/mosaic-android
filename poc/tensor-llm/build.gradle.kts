@@ -8,8 +8,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.15-spoken-feedback"
+        versionCode = 14
+        versionName = "0.16-screen-off-turns"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

@@ -18,9 +18,11 @@ public final class VoiceActivity extends Activity {
     private boolean handsfreeTurn, autoCapture, armOnResume, armingStandby;
     private VoiceFeedback feedback;
     private boolean locked(){return ((android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE)).isDeviceLocked();}
-    private final BroadcastReceiver handsfreeChanged=new BroadcastReceiver(){public void onReceive(Context c,Intent i){controls(!active);}};
+    private final BroadcastReceiver handsfreeChanged=new BroadcastReceiver(){public void onReceive(Context c,Intent i){if(TurnForegroundService.STOPPED.equals(i.getAction())){if(active)finish("cancelled","הפנייה נעצרה דרך ההתראה או מגבלת הזמן");else if(handsfreeTurn)endHandsFree(false);}controls(!active);}};
+    private boolean canRunTurn(){return foreground||(handsfreeTurn&&TurnForegroundService.active());}
     private void wakeSetup(){
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},75);return;}
+        if(android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},79);return;}
         try{startActivityForResult(new Intent().setComponent(new ComponentName(HandsFreeController.COMPANION,HandsFreeController.COMPANION+".WakeSetupActivity")),78);}
         catch(Exception e){status.setText("נדרש עדכון חבילת Zipformer להפעלה בלי מגע");}
     }
@@ -40,7 +42,7 @@ public final class VoiceActivity extends Activity {
     private long turnStart,stageStart;private int selectedBeam=life.mosaic.models.VoiceAsrBeam.BASELINE;private String selectedAsrEngine=life.mosaic.models.VoiceAsrBackend.WHISPER,stage="idle",recognized="",response="";
     private File journal,audioFile;private Runnable deadline;private WorkerRelease pendingRelease;
     private final Runnable clock=new Runnable(){public void run(){if(active){status.setText("שלב: "+label(stage)+" · "+((SystemClock.elapsedRealtime()-stageStart)/1000)+" שניות · כולל: "+((SystemClock.elapsedRealtime()-turnStart)/1000)+" שניות\n"+(journal==null?"":journal.getName()));screen.tick(SystemClock.elapsedRealtime()-turnStart);main.postDelayed(this,1000);}}};
-    @Override public void onCreate(Bundle saved){super.onCreate(saved);screen=new VoiceScreen(this);feedback=new VoiceFeedback(this);acceptWake(getIntent());registerReceiver(handsfreeChanged,new IntentFilter(HandsFreeController.CHANGED),Context.RECEIVER_NOT_EXPORTED);
+    @Override public void onCreate(Bundle saved){super.onCreate(saved);screen=new VoiceScreen(this);feedback=new VoiceFeedback(this);acceptWake(getIntent());IntentFilter handsfreeFilter=new IntentFilter(HandsFreeController.CHANGED);handsfreeFilter.addAction(TurnForegroundService.STOPPED);registerReceiver(handsfreeChanged,handsfreeFilter,Context.RECEIVER_NOT_EXPORTED);
         asr=screen.asr;llm=screen.llm;tts=screen.tts;transcript=screen.transcript;answer=screen.answer;status=screen.status;
         talk=screen.talk;stop=screen.stop;setup=screen.setup;export=screen.export;archive=screen.archive;warm=screen.warm;
         notificationAccess=screen.notificationAccess;notificationCheck=screen.notificationCheck;beam2=screen.beam2;zipformer=screen.zipformer;
@@ -74,8 +76,10 @@ public final class VoiceActivity extends Activity {
     }
     private void readyCapture(){
         if(!foreground||!handsfreeTurn||active)return;
+        if(HandsFreeController.session().isEmpty()||(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)){HandsFreeController.status(this,"יש להכין האזנה עם התראת עצירה מתוך מוזאיק");endHandsFree(false);return;}
+        try{TurnForegroundService.start(this);}catch(Exception error){HandsFreeController.status(this,"Android חסם שיחה כשהמסך כבוי");endHandsFree(false);return;}
         HandsFreeController.status(this,"משוב מוכן · אני כאן, דבר אליי");
-        feedback.play("ready",ok->{if(!foreground||!handsfreeTurn||active)return;if(!ok){endHandsFree(false);return;}HandsFreeController.status(this,"מוכן לבקשה · אפשר לדבר עכשיו");main.postDelayed(()->{if(foreground&&handsfreeTurn&&!active)begin(false);},100);});
+        feedback.play("ready",ok->{if(!canRunTurn()||!handsfreeTurn||active)return;if(!ok||!TurnForegroundService.active()){endHandsFree(false);return;}HandsFreeController.status(this,"מוכן לבקשה · אפשר לדבר עכשיו");main.postDelayed(()->{if(canRunTurn()&&handsfreeTurn&&!active)begin(false);},100);});
     }
     private void prepareStandby(){armingStandby=true;HandsFreeController.stop(this,"מכין הפעלה ללא מסך ומשוב קולי · הכנה חד־פעמית להפעלה");begin(true);if(!active){armingStandby=false;HandsFreeController.stop(this,"הכנת ההאזנה לא התחילה; יש לבדוק אבחון");}}
     private void speakPhase(String cue)throws Exception{
@@ -86,13 +90,13 @@ public final class VoiceActivity extends Activity {
     private void endHandsFree(boolean success){
         handsfreeTurn=false;autoCapture=false;
         Runnable leave=()->{MosaicSessionService.close();setShowWhenLocked(false);setTurnScreenOn(false);if(locked())moveTaskToBack(true);};
-        if(success){feedback.cancel();if(foreground&&HandsFreeController.requested())HandsFreeController.arm(this);leave.run();}
+        if(success){feedback.cancel();if((foreground||TurnForegroundService.active())&&HandsFreeController.requested())HandsFreeController.arm(this);else TurnForegroundService.stop(this);leave.run();}
         else{HandsFreeController.stop(this,"הפנייה נעצרה · יש להפעיל האזנה שוב");feedback.play("error",ok->leave.run());}
     }
     private void requestMic(){if(active||!foreground)return;if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},73);return;}begin();}
-    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==75){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)wakeSetup();return;}if(code==73||code==74){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED&&foreground)begin(code==74);else{status.setText("לא אושרה הרשאת מיקרופון");screen.problem();controls(!active);}}}
+    @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==79){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)wakeSetup();else status.setText("נדרשת הרשאת התראה גלויה לעצירת שיחה ללא מסך");return;}if(code==75){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)wakeSetup();return;}if(code==73||code==74){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED&&foreground)begin(code==74);else{status.setText("לא אושרה הרשאת מיקרופון");screen.problem();controls(!active);}}}
     private void begin(){begin(false);}
-    private void begin(boolean warming){if(active||!foreground)return;
+    private void begin(boolean warming){if(active||!canRunTurn())return;
         if(warming&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},74);return;}
         if(!warming&&!prepared&&!handsfreeTurn){status.setText("לחץ הכנת מנועים לפני הדיבור");return;}
         main.removeCallbacks(idleRelease);prewarming=warming;
@@ -261,6 +265,6 @@ public final class VoiceActivity extends Activity {
         try(InputStream input=new FileInputStream(source);OutputStream output=getContentResolver().openOutputStream(data.getData())){if(output==null)throw new IOException("יעד אינו זמין");input.transferTo(output);status.setText(request==76?"אבחון ההאזנה יוצא ללא אודיו או תמלילים":"יומן השיחה יוצא. הוא כולל תמליל ותשובה אישיים.");}catch(Exception e){status.setText("הייצוא נכשל: "+e.getMessage());}}
     @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(level>=TRIM_MEMORY_RUNNING_LOW){if(active)finish("error","לחץ זיכרון במכשיר — המנועים שוחררו");else{main.removeCallbacks(idleRelease);clearWorkers();controls(true);status.setText("המנועים שוחררו בגלל לחץ זיכרון. הכן אותם שוב כדי להמשיך.");}}}
     @Override protected void onResume(){super.onResume();foreground=true;if(locked()){transcript.setText("");answer.setText("");}controls(!active);if(armOnResume){armOnResume=false;prepareStandby();}if(autoCapture&&!active){autoCapture=false;readyCapture();}notificationAccess.setText(WhatsAppNotificationListener.hasAccess(this)?"גישה להתראות מאושרת — שינוי הרשאה":"אישור גישה להתראות WhatsApp");}
-    @Override protected void onDestroy(){unregisterReceiver(handsfreeChanged);super.onDestroy();}
-    @Override protected void onPause(){foreground=false;feedback.cancel();if(active)finish("cancelled","השיחה נעצרה במעבר לרקע; הנתונים שכבר נשמרו נשארו במכשיר");if(handsfreeTurn){handsfreeTurn=false;autoCapture=false;MosaicSessionService.close();HandsFreeController.stop(this,"השיחה הופרעה · יש להפעיל האזנה שוב");setShowWhenLocked(false);setTurnScreenOn(false);}if(toolTurn){answer.setText("");response="";}main.removeCallbacks(idleRelease);clearWorkers();super.onPause();}
+    @Override protected void onDestroy(){if(handsfreeTurn||armingStandby||active){handsfreeTurn=false;armingStandby=false;if(active)finish("cancelled","מסך השיחה נסגר; הפנייה נשמרה והופסקה");HandsFreeController.stop(this,"מסך השיחה נסגר · ההאזנה הופסקה");MosaicSessionService.close();}feedback.cancel();unregisterReceiver(handsfreeChanged);super.onDestroy();}
+    @Override protected void onPause(){foreground=false;if(handsfreeTurn&&TurnForegroundService.active()){main.removeCallbacks(idleRelease);super.onPause();return;}feedback.cancel();if(active)finish("cancelled","השיחה נעצרה במעבר לרקע; הנתונים שכבר נשמרו נשארו במכשיר");if(handsfreeTurn){handsfreeTurn=false;autoCapture=false;MosaicSessionService.close();HandsFreeController.stop(this,"השיחה הופרעה · יש להפעיל האזנה שוב");setShowWhenLocked(false);setTurnScreenOn(false);}if(toolTurn){answer.setText("");response="";}main.removeCallbacks(idleRelease);clearWorkers();super.onPause();}
 }

@@ -23,14 +23,17 @@ final class HandsFreeController {
     static boolean requested(){return standbyRequested;}
     static String session(){return session;}
     static void verifiedSession(String value){if(value==null||!value.matches("[a-f0-9-]{36}"))throw new IllegalArgumentException("Invalid standby session");session=value;}
+    private static void append(Context c,org.json.JSONObject event)throws Exception{
+        java.io.File file=new java.io.File(c.getFilesDir(),"handsfree-status.jsonl");
+        if(file.length()>128*1024){java.io.File archived=new java.io.File(c.getFilesDir(),"handsfree-status-"+System.currentTimeMillis()+".jsonl");if(!file.renameTo(archived))throw new java.io.IOException("Cannot rotate status journal");}
+        event.put("at_ms",System.currentTimeMillis());
+        try(java.io.FileOutputStream out=new java.io.FileOutputStream(file,true)){out.write((event+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+    }
     static String status(Context c){return c.getSharedPreferences("handsfree",0).getString("status","האזנה כבויה · צריך להפעיל פעם אחת לפני נעילה");}
     static void status(Context c,String text){
         c.getSharedPreferences("handsfree",0).edit().putString("status",text).apply();
         try {
-            java.io.File file=new java.io.File(c.getFilesDir(),"handsfree-status.jsonl");
-            if(file.length()>128*1024){java.io.File archived=new java.io.File(c.getFilesDir(),"handsfree-status-"+System.currentTimeMillis()+".jsonl");if(!file.renameTo(archived))throw new java.io.IOException("Cannot rotate status journal");}
-            org.json.JSONObject event=new org.json.JSONObject().put("at_ms",System.currentTimeMillis()).put("status",text);
-            try(java.io.FileOutputStream out=new java.io.FileOutputStream(file,true)){out.write((event+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            append(c,new org.json.JSONObject().put("status",text));
         }catch(Exception ignored){}
         c.sendBroadcast(new Intent(CHANGED).setPackage(c.getPackageName()));
     }
@@ -43,7 +46,7 @@ final class HandsFreeController {
         if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){status(c,"נדרשת הרשאת מיקרופון");return;}
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
-                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<5)throw new IllegalStateException();
+                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<6)throw new IllegalStateException();
             token=UUID.randomUUID().toString();final String current=token;
             enabled=true;standbyRequested=true;handoff=new WakeHandoff();worker=null;
             PendingIntent callback=PendingIntent.getBroadcast(c,87,new Intent(c,WakeEventReceiver.class).setAction(current),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
@@ -70,7 +73,12 @@ final class HandsFreeController {
         Context c=context.getApplicationContext();
         if(!enabled||!token.equals(intent.getAction())||!selected(c))return;
         String state=intent.getStringExtra("state");
-        if("listening".equals(state)){status(c,"ממתין ל־מוזאיק · האזנה מקומית פעילה");return;}
+        if("health".equals(state)){
+            try{org.json.JSONObject event=new org.json.JSONObject().put("type","wake_health").put("interactive",intent.getBooleanExtra("interactive",false));
+                for(String key:new String[]{"wall_ms","audio_ms","decode_ms","nonzero_blocks"}){long value=intent.getLongExtra(key,-1);if(value<0||value>600000)return;event.put(key,value);}append(c,event);
+            }catch(Exception ignored){}return;
+        }
+        if("listening".equals(state)){status(c,"ממתין ל־מוזאיק · האזנה מקומית פעילה");TurnForegroundService.stop(c);return;}
         if(!"wake".equals(state)&&!"error".equals(state)&&!"stopped".equals(state))return;
         handoff.result(state);
         if("wake".equals(state)){
@@ -94,6 +102,7 @@ final class HandsFreeController {
     }
     static void stop(Context context,String reason){
         Context c=context.getApplicationContext();enabled=false;standbyRequested=false;token="";launchToken="";session="";
+        TurnForegroundService.stop(c);
         try{c.stopService(service(c));}catch(Exception ignored){}
         unbind(c);worker=null;handoff=null;status(c,reason);
     }

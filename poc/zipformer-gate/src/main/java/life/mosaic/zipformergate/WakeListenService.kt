@@ -95,6 +95,10 @@ class WakeListenService : Service() {
             report("listening")
             val samples = ShortArray(1600)
             var streamSamples = 0
+            var healthAt = SystemClock.elapsedRealtime()
+            var healthSamples = 0L
+            var nonzeroBlocks = 0L
+            var decodeMs = 0L
             while (running) {
                 val count = recorder.read(samples, 0, samples.size, AudioRecord.READ_BLOCKING)
                 if (!running) break
@@ -103,10 +107,23 @@ class WakeListenService : Service() {
                 val currentStream = requireNotNull(stream)
                 currentStream.acceptWaveform(FloatArray(count) { samples[it] / 32768f }, 16000)
                 streamSamples += count
+                healthSamples += count
+                if ((0 until count).any { samples[it].toInt() != 0 }) nonzeroBlocks++
+                val decodeStart = SystemClock.elapsedRealtime()
                 var cycles = 0
                 while (recognizer.isReady(currentStream)) {
                     require(++cycles < 100)
                     recognizer.decode(currentStream)
+                }
+                decodeMs += SystemClock.elapsedRealtime() - decodeStart
+                val now = SystemClock.elapsedRealtime()
+                if (now - healthAt >= 5000) {
+                    try { reply?.send(this, 0, Intent().putExtra("state", "health")
+                        .putExtra("wall_ms", now-healthAt).putExtra("audio_ms", healthSamples*1000/16000)
+                        .putExtra("decode_ms", decodeMs).putExtra("nonzero_blocks", nonzeroBlocks)
+                        .putExtra("interactive", (getSystemService(POWER_SERVICE) as PowerManager).isInteractive)) }
+                    catch (_: Exception) { running=false }
+                    healthAt=now;healthSamples=0;nonzeroBlocks=0;decodeMs=0
                 }
                 if (WakePhrase.matches(recognizer.getResult(currentStream).text)) { result = "wake"; break }
                 if (recognizer.isEndpoint(currentStream) || streamSamples >= 16000 * 30) {
