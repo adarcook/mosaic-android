@@ -5,7 +5,8 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Properties;
 
-/** Private, session-scoped verification receipt; survives worker disposal, not a new UI session. */
+/** Private verification receipt scoped to an explicit interaction session, including opted-in standby.
+ * Survives worker disposal; callers must replace the session on a new activation/process lifetime. */
 public final class SessionVerification {
     public interface Verify { void run() throws Exception; }
     public static boolean verify(File receipt,String session,String contract,File[] files,Verify full)throws Exception {

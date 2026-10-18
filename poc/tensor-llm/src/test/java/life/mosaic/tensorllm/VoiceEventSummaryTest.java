@@ -22,6 +22,8 @@ public class VoiceEventSummaryTest {
                 .put("status", "PRIVATE_STATUS")).contains("PRIVATE"));
         assertFalse(VoiceEventSummary.describe(new JSONObject().put("type", "phase")
                 .put("stage", "PRIVATE_STAGE")).contains("PRIVATE"));
+        assertFalse(VoiceEventSummary.describe(new JSONObject().put("type", "feedback_start")
+                .put("cue", "PRIVATE_PAYLOAD")).contains("PRIVATE"));
     }
 
     @Test public void failureAndCancellationRemainDistinguishable() throws Exception {

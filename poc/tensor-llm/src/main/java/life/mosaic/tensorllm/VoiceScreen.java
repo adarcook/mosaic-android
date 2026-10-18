@@ -122,7 +122,7 @@ final class VoiceScreen {
         handsfreeButton = button("הפעלת האזנה מקומית", false);
         addButton(handsfree, assistantButton);
         addButton(handsfree, handsfreeButton);
-        handsfree.addView(text("ניסוי: אמור מוזאיק, המתן לצליל ואז דבר. ההאזנה משתמשת במיקרופון ובסוללה; אודיו ההמתנה אינו נשמר. תוכן אישי דורש פתיחת נעילה.", 12, MUTED));
+        handsfree.addView(text("אמור מוזאיק, המתן ל־‘אני כאן, דבר אליי’ ואז דבר. משוב קולי מלווה את השלבים גם בלי מסך. ההפעלה הראשונית מכינה את הקול. מצב ניסוי משתמש במיקרופון ובסוללה; אודיו ההמתנה אינו נשמר. תוכן אישי דורש פתיחת נעילה.", 12, MUTED));
 
         LinearLayout strip = row();
         for (int i = 0; i < steps.length; i++) {

@@ -14,13 +14,15 @@ final class HandsFreeController {
     private static final Handler main=new Handler(Looper.getMainLooper());
     private static ServiceConnection connection;
     private static IBinder worker;
-    private static String token="",launchToken="";
+    private static String token="",launchToken="",session="";
     private static WakeHandoff handoff;
     private static boolean bound, enabled, standbyRequested;
 
     static boolean selected(Context c){return VoiceInteractionService.isActiveService(c,new ComponentName(c,MosaicAssistantService.class));}
     static boolean enabled(){return enabled;}
     static boolean requested(){return standbyRequested;}
+    static String session(){return session;}
+    static void verifiedSession(String value){if(value==null||!value.matches("[a-f0-9-]{36}"))throw new IllegalArgumentException("Invalid standby session");session=value;}
     static String status(Context c){return c.getSharedPreferences("handsfree",0).getString("status","האזנה כבויה · צריך להפעיל פעם אחת לפני נעילה");}
     static void status(Context c,String text){
         c.getSharedPreferences("handsfree",0).edit().putString("status",text).apply();
@@ -37,6 +39,7 @@ final class HandsFreeController {
         Context c=context.getApplicationContext();
         if(enabled)return;
         if(!selected(c)){status(c,"יש לבחור את מוזאיק כעוזר ברירת המחדל");return;}
+        if(session.isEmpty()||!FeedbackClips.valid(c.getFilesDir())){stop(c,"יש להכין משוב קולי והאזנה מתוך מוזאיק");return;}
         if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){status(c,"נדרשת הרשאת מיקרופון");return;}
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
@@ -90,7 +93,7 @@ final class HandsFreeController {
         }
     }
     static void stop(Context context,String reason){
-        Context c=context.getApplicationContext();enabled=false;standbyRequested=false;token="";launchToken="";
+        Context c=context.getApplicationContext();enabled=false;standbyRequested=false;token="";launchToken="";session="";
         try{c.stopService(service(c));}catch(Exception ignored){}
         unbind(c);worker=null;handoff=null;status(c,reason);
     }

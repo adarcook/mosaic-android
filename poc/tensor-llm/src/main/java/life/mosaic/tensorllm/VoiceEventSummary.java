@@ -11,6 +11,8 @@ final class VoiceEventSummary {
             case "stage_end" -> stage(event.optString("stage")) +
                     ("complete".equals(event.optString("state")) ? " · הושלם" : " · נכשל");
             case "capture_end" -> "ההקלטה נשמרה במכשיר";
+            case "feedback_start" -> "משוב קולי קבוע · התחיל";
+            case "feedback_end" -> event.optBoolean("played",false)?"משוב קולי קבוע · הושמע":"משוב קולי קבוע · לא הושמע";
             case "worker_release_start" -> stage(event.optString("stage")) + " · משחרר מנוע";
             case "worker_release_end" -> stage(event.optString("stage")) + " · שחרור המנוע אושר";
             case "worker_release_error", "worker_stop_send_error" -> "תקלה בשחרור מנוע";

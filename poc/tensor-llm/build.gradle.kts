@@ -8,8 +8,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.14-handsfree-experiment"
+        versionCode = 13
+        versionName = "0.15-spoken-feedback"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
