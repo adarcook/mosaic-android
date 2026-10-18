@@ -41,7 +41,7 @@ public final class AgentProbeInstrumentation extends Instrumentation {
                     conversation=engine.createConversation(new ConversationConfig(Contents.Companion.of(AgentTools.system(hint)),
                             Collections.emptyList(),NativeAgentModel.providers(),new SamplerConfig(20,0.9,0.2,0),false,
                             Collections.emptyList(),Collections.emptyMap(),null,false,512,new ThinkingConfig(false),false,false,null));
-                    NativeAgentModel nativeModel=new NativeAgentModel(conversation,SystemClock.elapsedRealtime()+60000);
+                    NativeAgentModel nativeModel=new NativeAgentModel(conversation,SystemClock.elapsedRealtime()+60000,hint);
                     String answer=ManualToolAgent.run(requests[i],nativeModel,(name,args)->{
                         calls.incrementAndGet();return new VoiceTool.Result(VoiceTool.Status.NO_MESSAGE,
                                 "לא נמצאה הודעת וואטסאפ זמינה בהתראות. אין גישה להיסטוריית השיחות.","לא נמצאה הודעה");

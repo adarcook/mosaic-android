@@ -13,13 +13,19 @@ import java.util.concurrent.atomic.AtomicReference;
 final class NativeAgentModel implements ManualToolAgent.Model {
     private final Conversation conversation;
     private final long deadline;
+    private final String personalHint;
     private long firstTextMs = -1;
     private final long started = SystemClock.elapsedRealtime();
 
-    NativeAgentModel(Conversation conversation, long deadline) { this.conversation = conversation; this.deadline = deadline; }
+    NativeAgentModel(Conversation conversation, long deadline) { this(conversation,deadline,""); }
+    NativeAgentModel(Conversation conversation, long deadline, String personalHint) {
+        this.conversation = conversation;this.deadline = deadline;this.personalHint=personalHint;
+    }
     long firstTextMs() { return firstTextMs; }
 
     public ManualToolAgent.Reply generate(com.google.ai.edge.litertlm.Message input) throws Exception {
+        if(input.getRole()==Role.USER&&!personalHint.isEmpty())
+            input=com.google.ai.edge.litertlm.Message.Companion.user(AgentTools.interpretedRequest(input.toString(),personalHint));
         StringBuilder text = new StringBuilder();
         List<ToolCall> calls = new ArrayList<>();
         AtomicReference<Throwable> failure = new AtomicReference<>();

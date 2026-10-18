@@ -1,6 +1,6 @@
 # ASR-38 / VOICE-16 — Model-selected local tools
 
-2026-10-18, Asia/Jerusalem. Current candidate Voice 0.24.1 / versionCode 23;
+2026-10-18, Asia/Jerusalem. Current candidate Voice 0.24.2 / versionCode 24;
 initial device candidate was 0.24/code22. This experiment replaces
 the production voice path's deterministic tool selection with native LiteRT-LM
 function calls. It is stacked on draft #51 and remains unmerged.
@@ -36,8 +36,11 @@ not establish real-notification readout or microphone/TTS acceptance.
 
 Every voice transcript now goes to `LlmService`. `VoiceActivity` no longer calls
 `VoiceToolRouter.route` to decide between WhatsApp and Gemma. A matching saved
-personal phrase becomes an allowlisted meaning hint, without copying its raw text
-into system instructions or executing it directly.
+personal phrase becomes an allowlisted meaning hint and, from 0.24.2, expands to
+the full user request for that saved action. Its raw text remains in the original
+ASR display/journal and is not copied into system instructions. Expansion never
+executes the tool; the model must emit the structured call, and the original raw
+request still governs the execution veto.
 
 `NativeAgentModel` registers the app-owned zero-argument
 `read_latest_whatsapp_notification` schema and sets `automaticToolCalling=false`.
@@ -156,3 +159,28 @@ allowlisted function name. It still requires the model to emit a native call; th
 is no alias execution shortcut. The same five fixtures will be rerun with identical
 weights/runtime/sampler/schema and synthetic result. New CI/artifact/install/probe
 identity and results are pending at authoring. No speed comparison is made.
+
+## Second physical probe and input-expansion candidate
+
+0.24.1 implementation `8d4ec41cb7cb54208ce0121784befd76b292e642` again passed
+123 host tests and controller CI (`39135932534`, artifact `12139313359`). ZIP
+SHA-256 `4e0143660809edcd73a1c98e0555541847d995afcf4119cccaf35e9db34240b4`;
+CI APK `580fd467a10095da7082582b7861a550fc61c35434a45c075e56453ec261444f`;
+locally signed/pulled installed APK
+`1618e47344194cea7e9e7bdc07f4bd8420ab273b52a3d9160442ad3c7d762d02`.
+Normal matching-signer update preserved dictionary data. Broader CI was still
+running at installation; no source outside the alias context/version changed.
+
+The same real-model fixture set again passed **4/5**, with the same explicit-call
+success and three correct no-call cases. The alias offered to read WhatsApp but
+still asked what to read. A system-only Hebrew meaning hint did not pass the alias
+gate. No real notifications/audio/TTS were used; this failed outcome is retained.
+
+0.24.2 expands the exact owner-defined alias into the full canonical user request
+before model inference, while retaining the meaning hint. The expansion is
+allowlisted app code, not arbitrary text from the dictionary; original raw input
+remains the execution-veto input. There is still no deterministic execution or
+keyword fallback: a model answer without a native call performs no read. This
+implements the owner's stored meaning rather than leaving an ambiguous utterance
+as the sole USER message. Same five-case probe, model/schema/sampler/results;
+current build/install/probe evidence pending at authoring.

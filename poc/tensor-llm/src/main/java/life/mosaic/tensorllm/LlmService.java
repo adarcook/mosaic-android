@@ -134,7 +134,7 @@ public final class LlmService extends Service {
                     Collections.emptyList(),Collections.emptyMap(),null,false,512,new ThinkingConfig(false),false,false,null));
             send(reply,2,"המודל בוחר תשובה או כלי…",0);
             long started=SystemClock.elapsedRealtime();
-            NativeAgentModel model=new NativeAgentModel(conversation,started+150000);
+            NativeAgentModel model=new NativeAgentModel(conversation,started+150000,data.getString("agent_hint",""));
             String answer=ManualToolAgent.run(text,model,(name,arguments)->requestTool(reply,name),()->Thread.currentThread().isInterrupted());
             long generateMs=SystemClock.elapsedRealtime()-started;
             conversation.close();conversation=null;

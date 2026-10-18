@@ -112,4 +112,15 @@ public class ManualToolAgentTest {
         assertEquals(1,manager.getToolsDescription().size());
         assertTrue(manager.execute(AgentTools.WHATSAPP_FUNCTION,new com.google.gson.JsonObject()).getAsString().contains("Automatic tool execution is disabled"));
     }
+
+    @Test public void savedMeaningExpandsInputButStillRequiresAModelCall() throws Exception {
+        assertEquals("תקריא לי את הודעת הוואטסאפ האחרונה",AgentTools.interpretedRequest("תן לי עדכון",AgentTools.WHATSAPP_FUNCTION));
+        assertEquals("שלום",AgentTools.interpretedRequest("שלום",""));
+        assertThrows(IllegalArgumentException.class,()->AgentTools.interpretedRequest("שלום","unknown"));
+        assertEquals("צריך הבהרה",ManualToolAgent.run("תן לי עדכון",m->{
+            assertEquals(Role.USER,m.getRole());
+            assertTrue(AgentTools.interpretedRequest(m.toString(),AgentTools.WHATSAPP_FUNCTION).contains("וואטסאפ"));
+            return text("צריך הבהרה");
+        },noExecution(),()->false));
+    }
 }

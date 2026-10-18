@@ -37,4 +37,11 @@ final class AgentTools {
                 + "הפעולה המתאימה למשמעות הזאת היא " + WHATSAPP_FUNCTION +
                 ". פרש את הבקשה לפי המשמעות שנשמרה; בדיקות ההרשאה והנעילה עדיין נדרשות.");
     }
+
+    /** Expand an explicitly saved meaning into a user request; only the model can emit a call. */
+    static String interpretedRequest(String request, String hint) {
+        if(hint.isEmpty())return request;
+        if(!WHATSAPP_FUNCTION.equals(hint))throw new IllegalArgumentException("Unsupported personal preference");
+        return "תקריא לי את הודעת הוואטסאפ האחרונה";
+    }
 }

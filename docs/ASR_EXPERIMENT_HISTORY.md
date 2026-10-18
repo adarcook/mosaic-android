@@ -745,6 +745,14 @@ model-selected execution. Repeat probe pending; no real notification/audio/TTS o
 latency-accuracy benchmark claim. APK/source identities, controls and limits are
 appended in the detailed record above; initial failed alias evidence is retained.
 
+ASR-38 second probe: 0.24.1 (`8d4ec41cb7cb54208ce0121784befd76b292e642`)
+again passed 4/5; the explicit read used the tool, but a system-only Hebrew alias
+meaning still led to clarification. 0.24.2/code24 expands the exact saved meaning
+into the full user request before inference, retaining model-only execution and
+the original request's veto. Same fixtures and controlled settings; repeat pending.
+Both unsuccessful alias-context variants and separate APK identities are retained
+in [model-tool-agent.md](model-tool-agent.md); no broad accuracy/speedup claim.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.
