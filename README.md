@@ -2,6 +2,25 @@
 
 The single Android application for the Mosaic personal system.
 
+## Voice interface development baseline
+
+On 2026-10-18 the user approved the current Voice 0.22 conversation interface as
+the baseline for future Mosaic app work and explicitly requested integration into
+`main` through [PR #49](https://github.com/adarcook/mosaic-android/pull/49).
+Preserve its Hebrew RTL layout, dark navy/turquoise/violet styling, conversation
+cards and separate Diagnostics tab when extending the assistant.
+
+The current voice controller lives in [`poc/tensor-llm`](poc/tensor-llm), with the
+opt-in CPU wake companion in [`poc/zipformer-gate`](poc/zipformer-gate). This source
+baseline retains the installed package identities and does not move the voice UI
+into the separate nutrition `app` module. See [UI](docs/voice-ui-observability.md),
+[hands-free operation](docs/handsfree-assistant.md),
+[WhatsApp routing](docs/whatsapp-intent-routing.md) and
+[spoken links](docs/notification-spoken-links.md) for implementation and evidence.
+Generalized tool routing, personal command mappings, sustained wake reliability
+and battery acceptance remain follow-up work. Historical experiment results below
+remain dated evidence rather than a production-readiness claim.
+
 Mosaic Android is designed as one installed app with independently maintained product areas such as nutrition, photos, swimming, personal insights, settings, and synchronization.
 
 ## Current capabilities
@@ -66,7 +85,7 @@ The first architecture stage changes branding and documents the target structure
 
 ## Hebrew ASR experiments
 
-Start with the [Hebrew explanation and experiment history](docs/ASR_EXPERIMENT_HISTORY.md): model conversion, CPU/TPU responsibilities, measured breakthroughs/regressions, reproducibility gaps and rollback commits. This voice work is experimental and lives in open PRs, not completed production functionality.
+Start with the [Hebrew explanation and experiment history](docs/ASR_EXPERIMENT_HISTORY.md): model conversion, CPU/TPU responsibilities, measured breakthroughs/regressions, reproducibility gaps and rollback commits. The integrated voice baseline remains experimental; merging its source does not complete the production acceptance gates.
 
 For each new experiment or later device result, update the history using the [record template](docs/ASR_EXPERIMENT_TEMPLATE.md) and follow [AGENTS.md](AGENTS.md).
 
