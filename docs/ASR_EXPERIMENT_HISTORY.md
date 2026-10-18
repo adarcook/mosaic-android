@@ -667,6 +667,10 @@ PCM לא צורף: journal מדווח SHA `bfdca3b45f270d020ef78d9aa6d7e5e2c2b3e
 
 ### ASR-34 / VOICE-12 — משוב קולי מוכן מראש וקיצור אימותים בפניות חוזרות, 18.10.2026
 
+0.18 follow-up: activation completed in 21,374 ms; all five new catalog/contract, PCM byte lengths and hashes verified. Ready 1.045 s; received/thinking/voicing .766/.906/.697 s; error 2.995 s. Standby rearmed, controlled SLEEP/keyguard/screen-off and non-interactive health verified. Acoustic wording preference and completed request/rearm still pending user test; no inference speedup claim. See [spoken-feedback-latency.md](spoken-feedback-latency.md).
+
+עדכון 14:42: אחרי חיבור מחדש נשלף ואומת APK מותקן 0.18 מול hash המועמד והחתימה הקיימת; ההתקנה הקודמת אכן הושלמה לפני הניתוק, ולכן לא נדרשה התקנה נוספת. כל חמש בדיקות CI בקוד `8cdda02266a6ebdb986d112b4b14fa1d4e431bc4` עברו. הנתונים נשמרו והחלה הכנה דרך האפליקציה לאחר פתיחה. יצירת המטמון והתוצאה הקולית יתועדו בנפרד ב־[spoken-feedback-latency.md](spoken-feedback-latency.md).
+
 עדכון נוסח 0.18: המשתמש דיווח ש־0.17 מרגיש יחסית מהיר וביקש משוב קבוע קליל יותר. משתנים רק חמשת המשפטים הקבועים ורמז המוכנות התואם. חוזה המטמון כולל את הטקסט ולכן ההכנה תיצור מחדש את הקטעים בלי מחיקת נתונים; אין שינוי למודלים/הסקה/רציפות/תזמון. בדיקות, CI, התקנה וקול ממתינים לתיעוד ב־[spoken-feedback-latency.md](spoken-feedback-latency.md).
 
 בסיס קוד `3fccda881869f40aa0d0bb33e668b1b2209f59cb` (Voice 0.14), תיעוד `def7273c4ebc8cd872484cd007fcbd95bba0d9e0`. המשתמש אישר שהצליל מגיע מהר יותר אבל חלש מאוד, ושהתגובה עדיין איטית לשימוש ללא מבט במסך. מועמד 0.15: חמש הודעות משוב קבועות נוצרות פעם אחת מקומית ונשמרות במטמון פרטי ומאומת; ההקלטה מתחילה לאחר סוף הודעת המוכנות. ההכנה המלאה ואימות SHA מתבצעים בהפעלת ההאזנה, ו־receipt הקיים תחום כעת להפעלת standby מפורשת בזיכרון, כולל פניות חוזרות בנעילה. Stop/שגיאה/החלפת עוזר/מות בעלים מבטלים את ההפעלה; שינוי זהות קובץ מחייב אימות מלא. אין שינוי ל־fileKey fail-closed, משקלים, decoder, פרמטרי מודלים, backend או שחרור תהליכים סדרתי.
