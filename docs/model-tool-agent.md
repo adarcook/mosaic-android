@@ -1,6 +1,7 @@
 # ASR-38 / VOICE-16 — Model-selected local tools
 
-2026-10-18, Asia/Jerusalem. Voice 0.24 / versionCode 22. This experiment replaces
+2026-10-18, Asia/Jerusalem. Current candidate Voice 0.24.1 / versionCode 23;
+initial device candidate was 0.24/code22. This experiment replaces
 the production voice path's deterministic tool selection with native LiteRT-LM
 function calls. It is stacked on draft #51 and remains unmerged.
 
@@ -125,3 +126,33 @@ results remain unmeasured until the device gate and should not be guessed.
 Rollback source is the 0.23 baseline above. Preserve app data, models and dictionary;
 use compatible signing and respect Android version-code downgrade rules. Keep this
 PR draft and leave main/roadmap completion unchanged.
+
+## First physical probe — 0.24, 2026-10-18
+
+Implementation `6ee634bd37657e1ea3a01414e3e605afa0f02760` passed 123 local tests
+and all three triggered CI workflows: controller `39135401078`, voice-loop
+`39135401075`, Android Build `39135401102`. Controller artifact `12139622845`,
+ZIP SHA-256 `9417f3708bda384c2183f3c61ac0e07f8ce06eb520ac113e86a0c39217a06d3e`.
+CI APK SHA-256 `081b8f3392f0d6010f7888ad690a85c0c15a3387f05f230c0cf34055cc27aa9f`.
+The CI signature differed; the existing local development signer matched the
+installed 0.23. Re-signing preserved all non-signature ZIP entry hashes. A normal
+data-preserving update installed 0.24, and the pulled-back APK/hash/signer matched:
+`c54cb6aec3e1f2ab2ee4cf033b9ad8bfdefd12a7927a0e59cbfc814cf3735111`.
+The prior 0.23 APK was backed up (hash in baseline table), and the private dictionary
+file hash stayed identical. No bridge opt-in/permission/model change or data clear.
+
+Real Gemma/NPU with synthetic native results passed **4/5 fixtures**: greeting,
+explicit WhatsApp read, negation and explanation. Explicit read produced one native
+structured call; the returned `NO_MESSAGE` led to a truthful no-available-notification/
+no-history-access final answer. The personal alias fixture produced zero calls and
+asked for clarification: the English function-name-only preference was insufficient.
+This is a failed alias acceptance gate, not a production pass. No actual notification,
+microphone or TTS was used. Android identity and raw synthetic probe are retained
+locally; no private device data is published.
+
+0.24.1 changes only the alias interpretation context to an explicit app-owned Hebrew
+meaning (“the user asks to read the latest WhatsApp notification”), alongside the
+allowlisted function name. It still requires the model to emit a native call; there
+is no alias execution shortcut. The same five fixtures will be rerun with identical
+weights/runtime/sampler/schema and synthetic result. New CI/artifact/install/probe
+identity and results are pending at authoring. No speed comparison is made.

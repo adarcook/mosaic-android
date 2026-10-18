@@ -1,6 +1,5 @@
 package life.mosaic.tensorllm;
 
-import java.util.List;
 import java.util.Map;
 import org.json.JSONObject;
 
@@ -33,7 +32,9 @@ final class AgentTools {
     static String system(String hint) {
         if (!hint.isEmpty() && !WHATSAPP_FUNCTION.equals(hint)) throw new IllegalArgumentException("Unsupported personal preference");
         return ModelSpec.VOICE_SYSTEM + (hint.isEmpty() ? "" :
-                " The owner explicitly mapped this exact personal phrase to " + WHATSAPP_FUNCTION +
-                ". Use this preference to interpret the request, subject to the same tool and permission rules.");
+                " משמעות בקשת המשתמש בפנייה הנוכחית, לפי הביטוי האישי שבעל הטלפון שמר: "
+                + "המשתמש מבקש להקריא את התראת הוואטסאפ האחרונה. זו המשמעות של הבקשה הנוכחית, ולא בקשה לעדכון כללי. "
+                + "הפעולה המתאימה למשמעות הזאת היא " + WHATSAPP_FUNCTION +
+                ". פרש את הבקשה לפי המשמעות שנשמרה; בדיקות ההרשאה והנעילה עדיין נדרשות.");
     }
 }

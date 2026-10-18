@@ -735,6 +735,16 @@ battery, thermal or roadmap-completion claim. Full hypothesis, controls, accepta
 native API sources, privacy, artifact identities/reproduction and evidence limits:
 [model-tool-agent.md](model-tool-agent.md). No merge authorized.
 
+ASR-38 initial physical result: implementation `6ee634bd37657e1ea3a01414e3e605afa0f02760`
+/ installed 0.24/code22 passed host 123 tests and all three CI workflows. Real
+Gemma/NPU with synthetic tool results passed 4/5 fixed cases: explicit WhatsApp
+read emitted a structured call and used `NO_MESSAGE` truthfully; greeting, negation
+and explanation emitted no call. Personal alias asked for clarification instead.
+0.24.1/code23 strengthens only the trusted meaning hint in Hebrew, preserving
+model-selected execution. Repeat probe pending; no real notification/audio/TTS or
+latency-accuracy benchmark claim. APK/source identities, controls and limits are
+appended in the detailed record above; initial failed alias evidence is retained.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

@@ -99,6 +99,7 @@ public class ManualToolAgentTest {
         assertEquals(AgentTools.WHATSAPP_FUNCTION,AgentTools.personalHint("תן לי עדכון!",dictionary));
         assertEquals("",AgentTools.personalHint("אל תן לי עדכון",dictionary));
         assertFalse(AgentTools.system(AgentTools.personalHint("תן לי עדכון",dictionary)).contains("תן לי עדכון"));
+        assertTrue(AgentTools.system(AgentTools.personalHint("תן לי עדכון",dictionary)).contains("המשתמש מבקש להקריא את התראת הוואטסאפ האחרונה"));
         assertThrows(IllegalArgumentException.class,()->AgentTools.system("unregistered"));
     }
 
