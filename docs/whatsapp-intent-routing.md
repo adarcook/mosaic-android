@@ -30,3 +30,18 @@ Final local controller test/build passed: 72 tests, zero failures/errors, includ
 ## Installation follow-up — 2026-10-18, Asia/Jerusalem
 
 Code `737a5e903beee3f9645dad18be0d6609678c6ce4` passed exact-head LLM workflow `39126419921`; controller artifact `12135973775`, ZIP digest `ab3566e3f4b70eea0be318c055435c42b301bdcc55d83c4969a48a7e872786be`. Other workflows were still running at pre-install observation. Local controller 0.21/code19 SHA-256 `62167b3632a6fb3234823995825d27ccc8686de85f2b98217e1747ea995fa0be`; prior 0.20 backup `664745dfdca06ed1eed955cc8b44551d604f4ceda67f382b970c08985eba3841`. Both certificates matched existing signer `ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35` before replacement. Data-preserving install succeeded and installed 0.21 version was confirmed. Companion/model/data/journal directories retained. The phone was locked; user asked to unlock for explicit preparation and same-request acoustic routing check. Actual native route/status/playback still pending, not inferred from text tests/build. No merge.
+
+
+## Activation follow-up — 2026-10-18, 15:17 Asia/Jerusalem
+
+After the user unlocked, installed Voice 0.21 and unlocked/interactive state were verified. Explicit activation completed in 15,504 ms (ASR 1,796 ms, Gemma 7,108 ms, TTS 5,505 ms); unchanged cached clear cues verified/reused in 81 ms. Listener reported listening 2,258 ms after prepare terminal. No notification content was read by this activation. User was asked to keep the device unlocked and repeat the last-conversation command; route, native tool status and audible outcome remain pending. No full-history access or acoustic/notification success is inferred from preparation.
+
+
+## Native route observation — 2026-10-18, 15:19 Asia/Jerusalem
+
+All five workflows on code `737a5e903beee3f9645dad18be0d6609678c6ce4` completed successfully: LLM `39126419921`, Zipformer `39126419850`, voice-loop `39126419855`, Whisper hybrid `39126419834`, Android Build `39126419859`.
+
+The repeated spoken request produced capture 11.899875 s (12-second cap), ASR 2,694 ms, route `whatsapp_latest_notification` at `1792325965942` and tool status OK at `1792325965950`. The tool event contained only the fixed tool ID, status, read_only=true and numeric timestamps. No LLM stage ran. Receipt cue played. This establishes native dispatch to an available notification and avoids the generic model response seen in the screenshot. At this observation TTS had not yet produced its terminal result; audible completeness, final TTS privacy-field omission and listener rearm remain pending. No message body/title or private transcript is published. Different reread audio, not a controlled performance/ASR accuracy comparison.
+
+
+The native request subsequently completed in 104,974 ms, with TTS 89,272 ms and 56.703 s output audio; first answer playback API `1792325971793` was 8,784 ms after capture-end logging. No LLM stage ran and no normalized message text appeared in TTS journal records, including terminal output. User confirmed it was now OK, but reported full URL letter-by-letter reading was undesirable. Existing VoiceText normalization spells Latin letters/digits; the next slice will replace URLs before this step while retaining the display text. These timings include reading the actual private notification and must not be compared with short generic commands. Routing/native tool read and terminal completion accepted for this trial; long-message acoustic completeness and sustained reliability are not established by user OK alone.
