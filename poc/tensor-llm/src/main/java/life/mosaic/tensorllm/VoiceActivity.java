@@ -35,7 +35,7 @@ public final class VoiceActivity extends Activity {
         feedbackPreviewDialog.show();
     }
     private boolean locked(){return ((android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE)).isDeviceLocked();}
-    private final BroadcastReceiver handsfreeChanged=new BroadcastReceiver(){public void onReceive(Context c,Intent i){if(TurnForegroundService.STOPPED.equals(i.getAction())){if(active)finish("cancelled","הפנייה נעצרה דרך ההתראה או מגבלת הזמן");else if(handsfreeTurn)endHandsFree(false);}controls(!active);}};
+    private final BroadcastReceiver handsfreeChanged=new BroadcastReceiver(){public void onReceive(Context c,Intent i){if(Intent.ACTION_SCREEN_OFF.equals(i.getAction())&&toolTurn){answer.setText("");response="";if(active&&agentStatus==VoiceTool.Status.OK)finish("cancelled","הקראת מידע פרטי נעצרה בכיבוי המסך");}if(TurnForegroundService.STOPPED.equals(i.getAction())){if(active)finish("cancelled","הפנייה נעצרה דרך ההתראה או מגבלת הזמן");else if(handsfreeTurn)endHandsFree(false);}controls(!active);}};
     private boolean canRunTurn(){return foreground||(handsfreeTurn&&TurnForegroundService.active());}
     private void wakeSetup(){
         if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},75);return;}
@@ -49,7 +49,8 @@ public final class VoiceActivity extends Activity {
     private final Handler main=new Handler(Looper.getMainLooper());
     private TextView asr,llm,tts,transcript,answer,status;private Button talk,stop,setup,export,archive,warm,notificationAccess,notificationCheck;private CheckBox beam2,zipformer;
     private ProgressBar asrProgress,llmProgress,ttsProgress;
-    private volatile boolean recording;private boolean active,foreground,prewarming,prepared,toolTurn;
+    private volatile boolean recording;private boolean active,foreground,prewarming,prepared,toolTurn,agentToolUsed;
+    private VoiceTool.Status agentStatus;
     private volatile AudioRecord recorder;
     private static final class Worker {Messenger remote;ServiceConnection connection;boolean bound;}
     private final java.util.Map<String,Worker> workers=new java.util.HashMap<>();
@@ -59,7 +60,7 @@ public final class VoiceActivity extends Activity {
     private long turnStart,stageStart;private int selectedBeam=life.mosaic.models.VoiceAsrBeam.BASELINE;private String selectedAsrEngine=life.mosaic.models.VoiceAsrBackend.WHISPER,stage="idle",recognized="",response="";
     private File journal,audioFile;private Runnable deadline;private WorkerRelease pendingRelease;
     private final Runnable clock=new Runnable(){public void run(){if(active){status.setText("שלב: "+label(stage)+" · "+((SystemClock.elapsedRealtime()-stageStart)/1000)+" שניות · כולל: "+((SystemClock.elapsedRealtime()-turnStart)/1000)+" שניות\n"+(journal==null?"":journal.getName()));screen.tick(SystemClock.elapsedRealtime()-turnStart);main.postDelayed(this,1000);}}};
-    @Override public void onCreate(Bundle saved){super.onCreate(saved);screen=new VoiceScreen(this);feedback=new VoiceFeedback(this);acceptWake(getIntent());IntentFilter handsfreeFilter=new IntentFilter(HandsFreeController.CHANGED);handsfreeFilter.addAction(TurnForegroundService.STOPPED);registerReceiver(handsfreeChanged,handsfreeFilter,Context.RECEIVER_NOT_EXPORTED);
+    @Override public void onCreate(Bundle saved){super.onCreate(saved);screen=new VoiceScreen(this);feedback=new VoiceFeedback(this);acceptWake(getIntent());IntentFilter handsfreeFilter=new IntentFilter(HandsFreeController.CHANGED);handsfreeFilter.addAction(TurnForegroundService.STOPPED);handsfreeFilter.addAction(Intent.ACTION_SCREEN_OFF);registerReceiver(handsfreeChanged,handsfreeFilter,Context.RECEIVER_NOT_EXPORTED);
         asr=screen.asr;llm=screen.llm;tts=screen.tts;transcript=screen.transcript;answer=screen.answer;status=screen.status;
         talk=screen.talk;stop=screen.stop;setup=screen.setup;export=screen.export;archive=screen.archive;warm=screen.warm;
         notificationAccess=screen.notificationAccess;notificationCheck=screen.notificationCheck;beam2=screen.beam2;zipformer=screen.zipformer;
@@ -136,7 +137,7 @@ public final class VoiceActivity extends Activity {
             if(!new File(getExternalFilesDir(null),"blue-voice/manifest.json").isFile())throw new IOException("הכן את חבילת BlueTTS דרך ‘הכנת הקול’ תחילה");
             File folder=new File(getFilesDir(),"voice-turns");if(!folder.isDirectory()&&!folder.mkdirs())throw new IOException("לא ניתן לשמור שיחה");
             String id="voice-"+System.currentTimeMillis()+"-"+java.util.UUID.randomUUID();journal=new File(folder,id+".jsonl");audioFile=new File(folder,id+".pcm");
-            turnStart=SystemClock.elapsedRealtime();selectedAsrEngine=zipformer.isChecked()?life.mosaic.models.VoiceAsrBackend.ZIPFORMER:life.mosaic.models.VoiceAsrBackend.WHISPER;selectedBeam=beam2.isChecked()?life.mosaic.models.VoiceAsrBeam.EXPERIMENT:life.mosaic.models.VoiceAsrBeam.BASELINE;active=true;toolTurn=false;turn++;recognized="";response="";transcript.setText("");answer.setText("");
+            turnStart=SystemClock.elapsedRealtime();selectedAsrEngine=zipformer.isChecked()?life.mosaic.models.VoiceAsrBackend.ZIPFORMER:life.mosaic.models.VoiceAsrBackend.WHISPER;selectedBeam=beam2.isChecked()?life.mosaic.models.VoiceAsrBeam.EXPERIMENT:life.mosaic.models.VoiceAsrBeam.BASELINE;active=true;toolTurn=false;agentToolUsed=false;agentStatus=null;turn++;recognized="";response="";transcript.setText("");answer.setText("");
             asr.setText("1 · תמלול — ממתין");llm.setText("2 · תשובת מודל — ממתין");tts.setText("3 · הקראה — ממתין");
             asr.setTextColor(VoiceScreen.MUTED);llm.setTextColor(VoiceScreen.MUTED);tts.setTextColor(VoiceScreen.MUTED);
             event(new JSONObject().put("type","start").put("experiment",selectedAsrEngine.equals(life.mosaic.models.VoiceAsrBackend.ZIPFORMER)?"ASR-30 / VOICE-07":"ASR-26 / VOICE-05").put("build",BuildConfig.VERSION_NAME).put("asr_engine",selectedAsrEngine).put("asr_package_version",getPackageManager().getPackageInfo(life.mosaic.models.VoiceAsrBackend.packageName(selectedAsrEngine),0).versionName).put("android_fingerprint",Build.FINGERPRINT).put("sample_rate",16000).put("beam",selectedBeam).put("llm_model_sha256",ModelSpec.SHA256).put("dispatch_sha256",ModelSpec.DISPATCH_SHA256).put("tts_renikud_revision",TtsPack.REV).put("interaction_experiment",handsfreeTurn||armingStandby?"ASR-34 / VOICE-12":"manual").put("standby_activation_prepare",armingStandby).put("activation",handsfreeTurn?"local_wake":"touch").put("mode",handsfreeTurn?(warming?"handsfree_prepare":"handsfree_request"):(warming?"foreground_sequential_prepare":"foreground_push_to_talk")).put("foreground_session",sessionId));
@@ -178,9 +179,10 @@ public final class VoiceActivity extends Activity {
     private void bind(Intent intent,Bundle data,long budget){data.putString("foreground_session",sessionId);final int token=++bindToken;final int id=turn;final String expected=stage;
         Worker worker=workers.get(expected);if(worker==null){worker=new Worker();workers.put(expected,worker);}final Worker selected=worker;
         Messenger reply=new Messenger(new Handler(Looper.getMainLooper(),msg->{if(!active||turn!=id||bindToken!=token||!stage.equals(expected))return true;
-            if(msg.what==1){}else if(msg.what==4)completeStage(msg.getData());else if(msg.what==5){try{JSONObject failure=new JSONObject().put("type","stage_end").put("stage",expected).put("state","error").put("elapsed_ms",SystemClock.elapsedRealtime()-stageStart);for(String key:msg.getData().keySet())failure.put(key,msg.getData().get(key));event(failure);}catch(Exception e){finish("error","לא ניתן לשמור יומן: "+e.getMessage());return true;}finish("error",msg.getData().getString("text","שגיאה"));}
-            else if(msg.what==3&&expected.equals("llm"))answer.setText(msg.getData().getString("text",""));
-            else {if(msg.getData().getBoolean("speech_playback",false))feedback.cancel();String phase=msg.getData().getString("text","");TextView card=expected.equals("asr")?asr:expected.equals("llm")?llm:tts;card.setText(label(expected)+" · "+phase);try{JSONObject detail=new JSONObject().put("type","phase_detail").put("stage",expected).put("phase",phase);for(String key:msg.getData().keySet())if(!key.equals("text"))detail.put(key,msg.getData().get(key));event(detail);}catch(Exception e){finish("error","לא ניתן לשמור יומן: "+e.getMessage());}}
+            if(msg.what==1){}else if(msg.what==4)completeStage(msg.getData());else if(msg.what==5){try{JSONObject failure=new JSONObject().put("type","stage_end").put("stage",expected).put("state","error").put("elapsed_ms",SystemClock.elapsedRealtime()-stageStart);for(String key:msg.getData().keySet())if(VoiceStagePrivacy.journalField(key,toolTurn))failure.put(key,msg.getData().get(key));event(failure);}catch(Exception e){finish("error","לא ניתן לשמור יומן: "+e.getMessage());return true;}finish("error",msg.getData().getString("text","שגיאה"));}
+            else if(msg.what==6&&expected.equals("llm"))handleAgentTool(msg.getData());
+            else if(msg.what==3&&expected.equals("llm")){} // Agent output is shown only after validated completion.
+            else {if(msg.getData().getBoolean("speech_playback",false))feedback.cancel();String phase=msg.getData().getString("text","");TextView card=expected.equals("asr")?asr:expected.equals("llm")?llm:tts;card.setText(label(expected)+" · "+phase);try{JSONObject detail=new JSONObject().put("type","phase_detail").put("stage",expected).put("phase",phase);for(String key:msg.getData().keySet())if(VoiceStagePrivacy.journalField(key,toolTurn))detail.put(key,msg.getData().get(key));event(detail);}catch(Exception e){finish("error","לא ניתן לשמור יומן: "+e.getMessage());}}
             return true;}));
         deadline=()->{if(active&&turn==id&&bindToken==token)finish("error","TIMEOUT — "+label(expected));};main.postDelayed(deadline,budget);
         android.os.Message request=android.os.Message.obtain(null,1);request.replyTo=reply;request.setData(data);
@@ -195,7 +197,7 @@ public final class VoiceActivity extends Activity {
     private void completeStage(Bundle data){String completed=stage;long elapsed=SystemClock.elapsedRealtime()-stageStart;
         try{
             JSONObject result=new JSONObject().put("type","stage_end").put("stage",stage).put("state","complete").put("elapsed_ms",elapsed);
-            for(String key:data.keySet())if(!key.equals("text")&&!(toolTurn&&("normalized_text".equals(key)||"answer".equals(key))))result.put(key,data.get(key));event(result);
+            for(String key:data.keySet())if(VoiceStagePrivacy.journalField(key,toolTurn))result.put(key,data.get(key));event(result);
             TextView card=stage.equals("asr")?asr:stage.equals("llm")?llm:tts;card.setText(label(stage)+" · הושלם · "+elapsed+" ms");card.setTextColor(VoiceScreen.SUCCESS);
             releaseStage();
             disposeWorker(completed,()->continueStage(completed,data));
@@ -212,26 +214,40 @@ public final class VoiceActivity extends Activity {
             }
             if(completed.equals("asr")){if(!life.mosaic.models.VoiceAsrBackend.matchesResult(selectedAsrEngine,data.getString("asr_engine",null),selectedBeam,data.getInt("beam_size",life.mosaic.models.VoiceAsrBeam.BASELINE)))throw new IOException("מנוע התמלול החזיר זהות או הגדרת Beam שגויה; בדוק גרסאות");recognized=data.getString("transcript","");if(recognized.isBlank())throw new IOException("תמלול ריק");transcript.setText("אמרת: "+recognized);getPreferences(0).edit().putString("transcript",recognized).apply();
                 PersonalCommands dictionary=PersonalCommandStore.open(this).load();
-                VoiceTool tool=toolRouter.route(recognized,dictionary);
-                event(new JSONObject().put("type","intent_route").put("route",tool==null?"conversation":tool.route())
-                        .put("source",dictionary.toolFor(recognized)==null?"built_in":"personal_command"));
-                if(tool!=null){
-                    toolTurn=true;
-                    VoiceTool.Result result=tool.execute();
-                    event(new JSONObject().put("type","tool_invocation").put("tool",tool.id())
-                            .put("status",result.status.name()).put("read_only",true));
-                    response=result.spoken;
-                    answer.setText("מוזאיק: "+result.displayed); // ephemeral; do not save notification text to preferences
-                    llm.setText("2 · כלי מקומי: "+tool.id()+" · "+result.status.name());
-                    transition("tts","מכין הקראת התראה…");Bundle toolRequest=new Bundle();
-                    toolRequest.putString("answer",response);
-                    bind(new Intent(this,TtsService.class),toolRequest,240000);
-                    return;
-                }
-                transition("llm","פותח מודל…");Bundle request=new Bundle();request.putString("text",recognized);request.putBoolean("voice",true);request.putString("source_sha256",life.mosaic.models.ModelCopy.sha256(audioFile,()->false));bind(new Intent(this,LlmService.class),request,240000);}
-            else if(completed.equals("llm")){response=data.getString("answer","");if(response.isBlank())throw new IOException("תשובה ריקה");answer.setText("מוזאיק: "+response);getPreferences(0).edit().putString("answer",response).apply();transition("tts","מכין הקראה…");Bundle request=new Bundle();request.putString("answer",response);bind(new Intent(this,TtsService.class),request,240000);}
+                event(new JSONObject().put("type","agent_start").put("selection","model").put("personal_hint",!AgentTools.personalHint(recognized,dictionary).isEmpty()));
+                transition("llm","המודל בוחר תשובה או כלי…");Bundle request=new Bundle();request.putString("text",recognized);
+                request.putBoolean("voice",true);request.putString("agent_hint",AgentTools.personalHint(recognized,dictionary));
+                request.putString("source_sha256",life.mosaic.models.ModelCopy.sha256(audioFile,()->false));bind(new Intent(this,LlmService.class),request,240000);}
+            else if(completed.equals("llm")){
+                if(toolTurn&&agentStatus==VoiceTool.Status.OK&&(locked()||!WhatsAppNotificationListener.hasAccess(this)))
+                    throw new IOException("הגישה למידע פרטי השתנתה; פתח את הטלפון ובדוק הרשאה לפני ניסיון נוסף");
+                response=data.getString("answer","");if(response.isBlank())throw new IOException("תשובה ריקה");
+                if(!toolTurn)event(new JSONObject().put("type","intent_route").put("route","conversation").put("source","model"));
+                answer.setText("מוזאיק: "+response);if(!toolTurn)getPreferences(0).edit().putString("answer",response).apply();
+                transition("tts","מכין הקראה…");Bundle request=new Bundle();request.putString("answer",toolTurn?SpokenLinks.forSpeech(response):response);
+                request.putBoolean("private_content",toolTurn&&agentStatus==VoiceTool.Status.OK);bind(new Intent(this,TtsService.class),request,240000);}
             else finish("complete","השיחה וההקראה הסתיימו");
         }catch(Exception e){finish("error",e.toString());}
+    }
+    private void handleAgentTool(Bundle data){
+        try{
+            if(prewarming||agentToolUsed||!canRunTurn())throw new IOException("בקשת כלי מחוץ לפנייה פעילה");
+            String callId=data.getString("agent_call_id","");String raw=data.getString("agent_arguments","");
+            if(!callId.matches("[a-f0-9-]{36}")||raw.length()>128)throw new IOException("בקשת כלי לא תקינה");
+            JSONObject arguments=new JSONObject(raw);
+            if(arguments.length()!=0||VoiceCommandText.blocked(VoiceCommandText.normalize(recognized)))throw new IOException("בקשת כלי לא מורשית");
+            String id=AgentTools.validate(data.getString("agent_function",""),java.util.Map.of());
+            VoiceTool tool=toolRouter.registered(id);
+            agentToolUsed=true;toolTurn=true;
+            event(new JSONObject().put("type","intent_route").put("route",tool.route()).put("source","model"));
+            VoiceTool.Result result=tool.execute();agentStatus=result.status;
+            event(new JSONObject().put("type","tool_invocation").put("tool",tool.id()).put("status",result.status.name()).put("read_only",true));
+            if(result.displayed.length()>1200)throw new IOException("תוצאת כלי מעבר לגבול");
+            Worker worker=workers.get("llm");if(worker==null||worker.remote==null)throw new IOException("מנוע המודל אינו מחובר");
+            Bundle returned=new Bundle();returned.putString("agent_call_id",callId);returned.putString("agent_status",result.status.name());returned.putString("agent_content",result.displayed);
+            android.os.Message message=android.os.Message.obtain(null,7);message.setData(returned);worker.remote.send(message);
+            llm.setText("2 · הכלי החזיר "+result.status.name()+" · המודל מרכיב תשובה");
+        }catch(Exception invalid){finish("error","בקשת הכלי לא הושלמה בבטחה; אפשר לנסות שוב או לנסח מחדש");}
     }
     private void releaseStage(){bindToken++;if(deadline!=null)main.removeCallbacks(deadline);deadline=null;}
     private void disposeWorker(String completed,Runnable next)throws Exception {
@@ -304,5 +320,5 @@ public final class VoiceActivity extends Activity {
     @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(level>=TRIM_MEMORY_RUNNING_LOW){if(active)finish("error","לחץ זיכרון במכשיר — המנועים שוחררו");else{main.removeCallbacks(idleRelease);clearWorkers();controls(true);status.setText("המנועים שוחררו בגלל לחץ זיכרון. הכן אותם שוב כדי להמשיך.");}}}
     @Override protected void onResume(){super.onResume();foreground=true;if(locked()){transcript.setText("");answer.setText("");}controls(!active);if(armOnResume){armOnResume=false;prepareStandby();}if(autoCapture&&!active){autoCapture=false;readyCapture();}notificationAccess.setText(WhatsAppNotificationListener.hasAccess(this)?"גישה להתראות מאושרת — שינוי הרשאה":"אישור גישה להתראות WhatsApp");}
     @Override protected void onDestroy(){dismissFeedbackPreview();if(handsfreeTurn||armingStandby||active){handsfreeTurn=false;armingStandby=false;if(active)finish("cancelled","מסך השיחה נסגר; הפנייה נשמרה והופסקה");HandsFreeController.stop(this,"מסך השיחה נסגר · ההאזנה הופסקה");MosaicSessionService.close();}feedback.cancel();unregisterReceiver(handsfreeChanged);super.onDestroy();}
-    @Override protected void onPause(){foreground=false;dismissFeedbackPreview();if(serviceProbeRunning)finishServiceProbe(false);if(handsfreeTurn&&TurnForegroundService.expected()){main.removeCallbacks(idleRelease);super.onPause();return;}feedback.cancel();if(active)finish("cancelled","השיחה נעצרה במעבר לרקע; הנתונים שכבר נשמרו נשארו במכשיר");if(handsfreeTurn){handsfreeTurn=false;autoCapture=false;MosaicSessionService.close();HandsFreeController.stop(this,"השיחה הופרעה · יש להפעיל האזנה שוב");setShowWhenLocked(false);setTurnScreenOn(false);}if(toolTurn){answer.setText("");response="";}main.removeCallbacks(idleRelease);clearWorkers();super.onPause();}
+    @Override protected void onPause(){foreground=false;if(toolTurn)answer.setText("");dismissFeedbackPreview();if(serviceProbeRunning)finishServiceProbe(false);if(handsfreeTurn&&TurnForegroundService.expected()){main.removeCallbacks(idleRelease);super.onPause();return;}feedback.cancel();if(active)finish("cancelled","השיחה נעצרה במעבר לרקע; הנתונים שכבר נשמרו נשארו במכשיר");if(handsfreeTurn){handsfreeTurn=false;autoCapture=false;MosaicSessionService.close();HandsFreeController.stop(this,"השיחה הופרעה · יש להפעיל האזנה שוב");setShowWhenLocked(false);setTurnScreenOn(false);}if(toolTurn){answer.setText("");response="";}main.removeCallbacks(idleRelease);clearWorkers();super.onPause();}
 }

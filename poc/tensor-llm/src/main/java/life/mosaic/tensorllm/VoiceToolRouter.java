@@ -38,4 +38,9 @@ final class VoiceToolRouter {
         for (VoiceTool tool : tools) if (tool.id().equals(target)) return tool;
         throw new IllegalStateException("Personal command target is unavailable");
     }
+
+    VoiceTool registered(String id) {
+        for (VoiceTool tool : tools) if (tool.id().equals(id)) return tool;
+        throw new IllegalArgumentException("הכלי אינו רשום באפליקציה");
+    }
 }

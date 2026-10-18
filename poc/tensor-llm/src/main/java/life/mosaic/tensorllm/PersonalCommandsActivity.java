@@ -76,7 +76,7 @@ public final class PersonalCommandsActivity extends Activity {
         int position = scroll.getScrollY();
         content.removeAllViews();
         content.addView(text("בחר איך לבקש ממוזאיק לבצע פעולה. הביטויים נשמרים רק במכשיר.", 16, VoiceScreen.INK));
-        content.addView(text("ההתאמה היא לכל הביטוי, עם התעלמות מניקוד וסימני פיסוק. ביטוי אישי אינו עוקף הרשאות או נעילת מכשיר.", 13, VoiceScreen.MUTED));
+        content.addView(text("כשכל הביטוי תואם, המשמעות ששמרת מוצגת למודל כדי שיעזור לבחור פעולה. מוזאיק בודק הרשאות ונעילה לפני ביצוע.", 13, VoiceScreen.MUTED));
         content.addView(text(commands.entries.size() + " מתוך " + PersonalCommands.LIMIT + " ביטויים", 13, VoiceScreen.ACCENT));
         Button add = button("הוספת ביטוי", true, () -> edit(null, ""));
         add.setEnabled(commands.entries.size() < PersonalCommands.LIMIT);

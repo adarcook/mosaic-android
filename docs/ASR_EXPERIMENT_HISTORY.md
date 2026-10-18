@@ -715,6 +715,26 @@ User screenshot showed a last-WhatsApp-conversation read request falling through
 
 After the native route fix user confirmed readout but objected to full URLs being spelled. 0.22 candidate replaces URL spans only in speech with a short Hebrew placeholder, preserves original bounded display/snapshot, and summarizes adjacent links. No fetching/opening, new data access, model/normalization setting or lifecycle change. URL/email/punctuation/Unicode/integration regressions, CI/installation/preparation and evidence limits in [notification-spoken-links.md](notification-spoken-links.md). No inference-speed, acoustic or sustained-stability claim; main/roadmap unchanged and PRs unmerged.
 
+### ASR-38 / VOICE-16 — בחירת כלים באמצעות המודל, 18.10.2026
+
+Voice 0.24/code22 replaces the voice path's positive keyword/alias routing with
+LiteRT-LM 0.18.0 native structured function calls, automatic execution disabled.
+An exact personal phrase supplies a meaning hint; only a model-emitted, validated
+call can invoke the existing read-only notification adapter. Its result returns in
+the TOOL role to the same conversation for a model-written final answer. At most
+one call per turn; invalid/multiple/stale calls, cancellation and private-output
+guards fail closed. The LLM remains resident only during the small Android read,
+then exits through the observed-death gate before CPU TTS. Gemma/ASR/TTS weights,
+sampler and backends are unchanged; system/schema/orchestration are changed factors.
+
+Baseline/rollback `2373982d7bffaf3ea29cfe127ea42d42e1978076` (installed 0.23),
+main inspected `613b71ebd3d94dcb7e84f70af058a818739fb3f9`; drafts #50/#51 inspected.
+Host compilation/tests passed; fixed real-model/synthetic-result probe and live
+device acceptance are separate pending gates. No ASR quality, latency speedup,
+battery, thermal or roadmap-completion claim. Full hypothesis, controls, acceptance,
+native API sources, privacy, artifact identities/reproduction and evidence limits:
+[model-tool-agent.md](model-tool-agent.md). No merge authorized.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

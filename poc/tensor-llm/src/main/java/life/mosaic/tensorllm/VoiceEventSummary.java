@@ -7,6 +7,7 @@ final class VoiceEventSummary {
     static String describe(JSONObject event) {
         String detail = switch (event.optString("type")) {
             case "start" -> "פנייה חדשה";
+            case "agent_start" -> "הפנייה הועברה למודל לבחירת תשובה או כלי";
             case "phase" -> stage(event.optString("stage")) + " · התחיל";
             case "stage_end" -> stage(event.optString("stage")) +
                     ("complete".equals(event.optString("state")) ? " · הושלם" : " · נכשל");
@@ -18,7 +19,8 @@ final class VoiceEventSummary {
             case "worker_release_error", "worker_stop_send_error" -> "תקלה בשחרור מנוע";
             case "tool_invocation" -> "כלי WhatsApp · " + toolStatus(event.optString("status"));
             case "intent_route" -> switch(event.optString("route")){
-                case "whatsapp_latest_notification" -> ("personal_command".equals(event.optString("source"))?"ביטוי אישי זוהה":"הבקשה זוהתה")+" · התראת WhatsApp אחרונה";
+                case "whatsapp_latest_notification" -> ("model".equals(event.optString("source"))?"המודל בחר כלי":
+                        "personal_command".equals(event.optString("source"))?"ביטוי אישי זוהה":"הבקשה זוהתה")+" · התראת WhatsApp אחרונה";
                 case "conversation" -> "הבקשה הועברה למודל השיחה";
                 default -> "";
             };

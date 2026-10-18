@@ -1,0 +1,127 @@
+# ASR-38 / VOICE-16 — Model-selected local tools
+
+2026-10-18, Asia/Jerusalem. Voice 0.24 / versionCode 22. This experiment replaces
+the production voice path's deterministic tool selection with native LiteRT-LM
+function calls. It is stacked on draft #51 and remains unmerged.
+
+## Hypothesis, baseline and acceptance gate
+
+| Field | Value |
+|---|---|
+| Baseline / rollback source | `2373982d7bffaf3ea29cfe127ea42d42e1978076`, installed Voice 0.23/code21 |
+| Baseline installed APK SHA-256 | `7bc3775a0b3fae1e90e4114e45eaab4b372c2666eeab794e6e8a214e3fa3f19b` |
+| Current main inspected | `613b71ebd3d94dcb7e84f70af058a818739fb3f9`, approved UI baseline via #49 |
+| Related open work | #50 routing, #51 dictionary; #44/#48 already ancestors of main; bridge #47 separate |
+| Hypothesis | The existing Gemma 4 pack can choose a structured notification tool and write a truthful final answer from its typed result, without a keyword router choosing for it |
+| Changed factors | Voice system instruction, advertised tool schema, native manual function-calling loop, correlated Binder result, private-output guards |
+| Controlled factors | Same weights, LiteRT-LM 0.18.0, NPU-only backend, dispatch, sampler (20/.9/.2/seed0), 512 output-token budget, thinking disabled, ASR/TTS models and inference settings |
+| Candidate source/APK/hash | PR implementation commit and exact-head CI artifact will identify it; not invented at authoring |
+| Initial status | Host tests/Android compilation passed; CI and physical model acceptance pending |
+
+Acceptance defined before running the model: the fixed debug probe must choose no
+tool for greeting, negation and explanation; one notification call for an explicit
+WhatsApp read request and the owner's exact saved alias. Each selected call receives
+a synthetic `NO_MESSAGE` result and must finish with a non-empty answer, without a
+second tool call. Human review must separately check that the answer reflects the
+failure truthfully. No latency improvement or broad intent-accuracy claim follows
+from five fixtures.
+
+The physical live gate remains distinct: a new spoken request must travel through
+ASR → model → validated native tool → model → TTS, with permission denial, lock,
+no-message, cancellation and repeated-turn cases. A successful debug fixture does
+not establish real-notification readout or microphone/TTS acceptance.
+
+## Actual decision and execution path
+
+Every voice transcript now goes to `LlmService`. `VoiceActivity` no longer calls
+`VoiceToolRouter.route` to decide between WhatsApp and Gemma. A matching saved
+personal phrase becomes an allowlisted meaning hint, without copying its raw text
+into system instructions or executing it directly.
+
+`NativeAgentModel` registers the app-owned zero-argument
+`read_latest_whatsapp_notification` schema and sets `automaticToolCalling=false`.
+It consumes `Message.getToolCalls()`; text that resembles JSON is never parsed as
+an executable action. The legacy matcher/helpers remain for regression coverage,
+but the voice path does not invoke their positive-routing logic. A conservative
+negation/unsupported-action check remains an execution veto, not tool selection.
+
+`ManualToolAgent` allows at most one structured call. Unknown names, arguments,
+multiple calls, blank/oversized final replies and any additional call after a result
+fail closed. The LLM worker asks the owning activity through a correlated Binder
+exchange; the activity validates again and resolves an already registered app tool.
+The existing Android adapter checks notification access and keyguard at execution.
+
+The worker is idle while waiting (20 s maximum) for the native result, retaining
+the same conversation/KV state. `Content.ToolResponse` sends status/content back in
+the TOOL role. The model generates the final answer. There is no automatic SDK
+execution callback, arbitrary tool URL/package, shell, network fallback, send/reply/
+delete capability or text-command execution. The total generation deadline is 150 s
+across both rounds; the parent's existing 240 s stage budget still includes loading.
+Cancellation disposes the worker; stale/duplicate/late IPC replies cannot resume it.
+
+Backend split: ASR remains the existing selected CPU/TPU path; Gemma runs on Tensor
+G5 NPU; the notification adapter is ordinary Android/CPU work; BlueTTS runs on CPU.
+No ASR/LLM/TTS heavy worker is loaded in parallel with another heavy worker. The
+LLM remains resident during the small native read and exits through the existing
+observed-death gate before TTS loads. No claim of model/backend acceleration.
+
+## Privacy and limitations
+
+Voice-agent LLM journals contain metadata only. They omit user text, tool arguments,
+tool bodies and generated answers. Existing local ASR transcript/journal behavior
+still records the user's spoken input. Parent diagnostics exclude `agent_*` payloads;
+tool-derived answers are not saved in preferences or TTS `normalized_text` fields.
+The UI marks “המודל בחר כלי” only after validated model selection.
+
+Private final answers are checked again before display/TTS. Private TTS checks
+current permission and keyguard before synthesis/playback and during audio writes/
+drain. Background presentation is cleared; screen-off cancels an active private
+tool turn. Error messages are content-free. Spoken URLs still use placeholders.
+Native privacy behavior requires device checks; these guards do not constitute a
+proof that generated summaries always quote a message faithfully. Tool content is
+untrusted data in its own role, with system instructions against following embedded
+instructions and a hard one-call limit preventing another tool execution.
+
+The first catalog entry remains read-only WhatsApp, with no arguments. This slice
+establishes the model-driven loop; broader schemas, action confirmations and multiple
+tool steps are follow-up work. Archive transcript summarization remains tool-free.
+
+## Evidence, reproduction and rollback
+
+Official API/source references (pinned runtime inspected against the downloaded AAR):
+[API overview](https://developers.google.com/edge/litert-lm/api_overview#function-calling-tool-use),
+[v0.18.0 Conversation](https://github.com/google-ai-edge/LiteRT-LM/blob/v0.18.0/kotlin/java/com/google/ai/edge/litertlm/Conversation.kt),
+[v0.18.0 Message](https://github.com/google-ai-edge/LiteRT-LM/blob/v0.18.0/kotlin/java/com/google/ai/edge/litertlm/Message.kt),
+[v0.18.0 Tool](https://github.com/google-ai-edge/LiteRT-LM/blob/v0.18.0/kotlin/java/com/google/ai/edge/litertlm/Tool.kt).
+
+Host tests exercise a fake model port to verify orchestration, denial/cancellation,
+ToolResponse roles/status, one-call bounds, schema-only SDK providers, personal hints,
+correlation and diagnostic privacy. They are **not** model-accuracy measurements.
+The debug-only `AgentProbeInstrumentation` uses five fixed public synthetic inputs,
+the real pinned Gemma/NPU runtime and synthetic native results. It accepts no custom
+prompt, never opens the microphone, never reads notifications and never invokes TTS.
+Its answers may be inspected locally because all fixture inputs/results are synthetic.
+
+Reproduce on a matching-signer, exact-head CI debug APK with existing models:
+
+```text
+adb shell am instrument -w life.mosaic.tensorllm/life.mosaic.tensorllm.AgentProbeInstrumentation
+```
+
+The probe verifies full model/dispatch hashes, creates a fresh conversation per case
+and retains one loaded engine for the fixture set. Do not run it concurrently with
+active speech workers. ADB/device authorization is required; the probe is absent
+from release builds. Result/code, original CI ZIP, locally signed APK and any pulled
+installed APK hashes must be recorded separately. No private model/SDK/key/audio/
+transcript is committed.
+
+Identity: Gemma model/dispatch file hashes and sizes remain in `ModelSpec`; BlueTTS
+revision remains in `TtsPack`; ASR companion unchanged. JDK22/Gradle8.9 local, pinned
+JDK21 hosted controller workflow. No parity, real audio, WER/CER, sustained latency,
+thermal cause, battery or multi-turn stability measurement is claimed. Probe timings
+are not an A/B benchmark. Android fingerprint/charging/temperature and exact runtime
+results remain unmeasured until the device gate and should not be guessed.
+
+Rollback source is the 0.23 baseline above. Preserve app data, models and dictionary;
+use compatible signing and respect Android version-code downgrade rules. Keep this
+PR draft and leave main/roadmap completion unchanged.

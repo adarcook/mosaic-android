@@ -144,7 +144,7 @@ final class VoiceScreen {
         addButton(tools, notificationAccess);
         personalCommands = button("המילון האישי", false);
         addButton(tools, personalCommands);
-        tools.addView(text("הוסף ביטויים משלך להקראת התראת WhatsApp האחרונה.", 12, MUTED));
+        tools.addView(text("מוזאיק בוחר כלי לפי הבקשה. ביטויים אישיים עוזרים לו להבין למה התכוונת.", 12, MUTED));
 
         heading(home, "השיחה שלך", "התמלול והתשובה מופיעים כאן במהלך הפנייה");
         LinearLayout userMessage = panel(home);
