@@ -19,7 +19,9 @@ final class SpokenLinks {
             matches.appendReplacement(out,Matcher.quoteReplacement(PLACEHOLDER+found.substring(end)));
         }
         matches.appendTail(out);
-        return out.toString().replaceAll("קישור מצורף(?:\\s+קישור מצורף)+","קישורים מצורפים");
+        String speech=out.toString().replaceAll("קישור מצורף(?:\\s+קישור מצורף)+","קישורים מצורפים");
+        // Many tiny domains can expand when replaced; keep the existing bounded TTS input.
+        return speech.length()>1100?speech.replace(PLACEHOLDER,"קישור"):speech;
     }
     private SpokenLinks(){}
 }

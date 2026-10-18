@@ -42,4 +42,13 @@ public class SpokenLinksTest {
             assertEquals(WhatsAppNotificationTool.displayed(result),WhatsAppNotificationTool.spoken(result));
         }
     }
+    @Test public void manyShortLinksDoNotOverflowBoundedSpeechInput(){
+        String text="a.io פרטים ".repeat(75);
+        var result=WhatsAppNotificationTool.selectLatest(List.of(new WhatsAppNotificationTool.Snapshot("com.whatsapp","בדיקה",text,1,false,true)));
+        String speech=WhatsAppNotificationTool.spoken(result);
+        assertTrue(speech.length()<=1200);
+        assertFalse(speech.contains("a.io"));
+        assertTrue(speech.contains("פרטים"));
+        assertFalse(VoiceText.normalize(speech).isBlank());
+    }
 }

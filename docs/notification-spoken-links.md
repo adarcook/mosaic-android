@@ -19,3 +19,5 @@ Check installation identity and explicit activation. Existing 0.21 native route/
 Local build/tests, exact candidate SHA/CI/APK and device preparation will be appended. Prior route fix remains accepted for one native trial. Rollback `14bccca` / implementation `737a5e903beee3f9645dad18be0d6609678c6ce4`, rebuilt with non-decreasing version code and existing signer; preserve data. Draft #49, no merge or roadmap completion.
 
 Local controller build and all 80 tests passed, including eight new link rendering/integration tests. These use public synthetic example domains, not the user notification.
+
+A further boundary case covers many tiny bare domains: if long placeholders would expand speech beyond 1,100 characters, individual placeholders shorten to a single word, preserving surrounding message prose and the existing 1,200-character TTS input bound. Final controller build and 81 tests passed (nine new URL cases).
