@@ -28,3 +28,11 @@ After native notification permission and explicit standby preparation while unlo
 Local builds and 61 controller + 9 companion tests passed. Candidate SHA, CI, install identities and device outcomes will be appended; device screen-off acceptance, actual speedup, battery, false wakes and sustained stability remain pending. Rollback source `be78292dc4f05f5e4d8074ec2476215fd5f0926a`, rebuilt with non-decreasing versionCode and the existing signer, preserving data/models. No merge or roadmap completion.
 
 References: [Android assistant-session lifecycle](https://developer.android.com/reference/android/service/voice/VoiceInteractionSession), [foreground microphone/playback types](https://developer.android.com/develop/background-work/services/fgs/service-types).
+
+## Installation evidence — 2026-10-18, Asia/Jerusalem
+
+Implementation `f797af44a128d28fdb4edfc88d1c668e9d9dcdf6` passed all five workflows: Tensor local LLM `39119130670`, Hebrew Zipformer `39119130622`, voice-loop `39119130668`, Tensor Whisper hybrid `39119130663`, Android Build `39119130651`. Controller CI artifact `12132634559` ZIP digest `39a022343f21f657992cd0e7f81df5591a4e8b80264820165b9c4d069aa97507`; companion artifact `12133408168` ZIP digest `91eb526ce014397faa01de3e5587548bf9a6ceda9c50880cd1c883a56e881530`.
+
+Both locally rebuilt candidates and installed APKs verified matching signer `ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35` before either replacement. Data-preserving updates succeeded. Installed Voice 0.16 SHA-256 `fdfcf5675120bfb266d07c7e5d654ef21c7ce95f3f5c38109353b4773406e831`; companion 0.7 SHA-256 `99bf98a7e5b064040c4d466bee100bc5db18bc54955669031c96b185e023a521`. Private backups of 0.15 and 0.6 were retained. USB and wireless transports were verified to be the same physical Pixel before selecting USB; no device identifiers are published.
+
+At this point the phone remains locked. The new controller notification permission and explicit standby activation still require native UI while unlocked. No shell grant or keyguard bypass was attempted. Foreground-service runtime behavior, controlled screen-off microphone health/wake, two turns and latency remain **pending**, not passed by installation or CI. The user has been asked to unlock for that one-time setup.
