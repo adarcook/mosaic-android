@@ -776,6 +776,20 @@ No re-signing, installation, data/model deletion or physical audio acceptance.
 Hypothesis, exact baseline artifacts/hashes, host/device acceptance, bridge
 blockers, reproduction and timing limitations: [wake-feedback-timing.md](wake-feedback-timing.md).
 
+ASR-39 follow-up, 2026-10-30: after the owner's explicit request to make bridge
+updates operational, the repaired bridge (#55 / active queue #56) installed
+0.24.3/code25 from implementation `6dd43ad3f8fcc20679f7c1d128f594dc64d1e3ec`.
+All three implementation CI workflows passed (Tensor packaging succeeded on an
+unchanged-commit retry). The exact CI ZIP digest and APK identity were verified;
+a separate copy was signed with the existing enrolled local development key,
+with identical non-signature payload and final certificate equality. Pulled-back
+installed APK SHA-256 is `df28e5fd37b2fc04a1377ef52ca0ad59e407a1bcfe78264cf6cefeb965df1027`.
+Remote install and launch/process smoke passed; no uninstall, app-data/model
+deletion, permission change or merge. Worker restart through the saved login
+shortcut and persistent token reuse passed; a full Windows reboot was not tested.
+This supersedes the earlier blocked installation state. Real acoustic timing,
+screen-off turns, readiness sequencing, quality and power gates remain pending.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

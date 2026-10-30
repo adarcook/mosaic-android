@@ -113,3 +113,50 @@ or full remote round-trip is claimed. Resolve each blocker before installation.
 
 Decision: keep this as a draft observation candidate. No merge, roadmap completion,
 physical latency/accuracy result, new model identity or battery claim.
+
+## Owner-requested installation follow-up — 2026-10-30
+
+The preceding blocked state is retained as historical evidence. The owner then
+explicitly requested an operational, persistent bridge installation flow. Draft
+#55 adds local development signing with an enrolled device identity and pinned
+existing certificate; all 23 bridge tests passed locally and in hosted CI. It
+repairs SDK paths, accepts multiple transports only for that enrolled phone,
+verifies GitHub's ZIP digest, signs a separate APK copy with the existing local
+key, compares all non-signature ZIP entries, requires final signer equality and
+pulls the installed APK back for full hash/signature verification. No mismatched
+final APK is installed, and no signing key or private token is uploaded.
+
+Implementation source: `6dd43ad3f8fcc20679f7c1d128f594dc64d1e3ec`; this follow-up
+changes documentation only. All three implementation CI workflows passed:
+[Tensor](https://github.com/adarcook/mosaic-android/actions/runs/41086006863),
+[Zipformer](https://github.com/adarcook/mosaic-android/actions/runs/41086006717),
+[Android](https://github.com/adarcook/mosaic-android/actions/runs/41086007549).
+Tensor attempt 1 passed compilation/tests but failed at packageDebug without a
+detailed cause; unchanged-source attempt 2 passed. Root cause is unestablished.
+
+Exact candidate artifact `12991432977`, ZIP SHA-256
+`b181ee4be8fb614d37a1e2310deea0e9f2c929c330855c75220ae31699923238`,
+original CI APK SHA-256
+`718a084332825e4c3a3ec34ddfa6787d59ba4c1f8524438422b1003f517fd29d`.
+Installed **0.24.3-wake-timing/code25**, locally signed/pulled-back APK SHA-256
+`df28e5fd37b2fc04a1377ef52ca0ad59e407a1bcfe78264cf6cefeb965df1027`.
+Certificate remains the original installed
+`ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35`.
+The original 0.24.2 APK backup remains private on Windows.
+
+The active worker uses [queue #56](https://github.com/adarcook/mosaic-android/issues/56),
+an independent checkpoint and loopback port 8766. The elevated old worker could
+not be stopped from the current session, so it remains isolated on historical
+queue #46, marked retired for new commands. Local install and signing opt-ins
+are enabled for the enrolled phone; private config/key remain on Windows.
+
+- [Verified remote install](https://github.com/adarcook/mosaic-android/issues/56#issuecomment-6527837120).
+- [Remote activity launch/process smoke](https://github.com/adarcook/mosaic-android/issues/56#issuecomment-6527847006).
+- [Online/install-enabled after saved-shortcut restart](https://github.com/adarcook/mosaic-android/issues/56#issuecomment-6527861450).
+
+A per-user Startup shortcut launches the repaired worker hidden with absolute
+paths. Persistent token loading and restart via that shortcut were tested; a full
+Windows reboot/logon was not performed. The PC must remain awake/logged in and
+the authorized Pixel reachable. No uninstall, data/model deletion, downgrade,
+Android permission change or PR merge was performed. Installation and smoke do
+not establish microphone/TTS, timing, screen-off reliability or battery acceptance.
