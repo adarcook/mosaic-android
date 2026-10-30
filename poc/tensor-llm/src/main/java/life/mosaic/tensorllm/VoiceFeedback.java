@@ -14,6 +14,9 @@ final class VoiceFeedback {
     VoiceFeedback(Context context){this.context=context.getApplicationContext();}
     boolean playing(){Thread current=worker;return current!=null&&current.isAlive();}
     void play(String id,java.util.function.Consumer<Boolean> done){
+        play(id,at->{},done);
+    }
+    void play(String id,java.util.function.LongConsumer started,java.util.function.Consumer<Boolean> done){
         cancel();final int token=generation;
         worker=new Thread(()->{
             boolean success=false;AudioTrack output=null;
@@ -30,6 +33,7 @@ final class VoiceFeedback {
                     public int start(int requested){int value=active.setStartThresholdInFrames(requested);active.play();return value;}
                     public int write(float[] audio,int offset,int count){return active.write(audio,offset,count,AudioTrack.WRITE_NON_BLOCKING);}
                     public long head(){return Integer.toUnsignedLong(active.getPlaybackHeadPosition());}
+                    public void started(long at){main.post(()->{if(token==generation)started.accept(at);});}
                 },new PlaybackLoop.Clock(){public long now(){return SystemClock.elapsedRealtime();}public void pause()throws InterruptedException{Thread.sleep(10);}});
                 success=true;
             }catch(Exception ignored){}

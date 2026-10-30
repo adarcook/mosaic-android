@@ -763,6 +763,19 @@ the detailed record. No actual notifications, microphone or TTS were used. Keep 
 an installed development candidate; real spoken/permission/lock/cancellation and
 repeatability gates remain pending. No merge, roadmap completion or speedup claim.
 
+### ASR-39 / VOICE-17 — מדידת מעבר מהתעוררות להקלטה, 30.10.2026
+
+Candidate 0.24.3/code25 adds status-only monotonic wake-callback, dispatch,
+fixed-ready playback-head and actual recording-state markers. Baseline/rollback
+is #52 at `30a660a9e0eac3560b3be1e204c7e49bcba5b8ee`; main and #50–#52 remain
+unmerged. Models, inference/backends and existing cue/capture order are unchanged.
+The ready-before-recording defect remains pending correction, not a passed gate.
+Installed Pixel remains 0.24.2/code24: latest baseline CI has the same app version
+and a different signer; local allow_install=false also blocks installation.
+No re-signing, installation, data/model deletion or physical audio acceptance.
+Hypothesis, exact baseline artifacts/hashes, host/device acceptance, bridge
+blockers, reproduction and timing limitations: [wake-feedback-timing.md](wake-feedback-timing.md).
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.
