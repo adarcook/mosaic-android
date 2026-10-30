@@ -763,6 +763,33 @@ the detailed record. No actual notifications, microphone or TTS were used. Keep 
 an installed development candidate; real spoken/permission/lock/cancellation and
 repeatability gates remain pending. No merge, roadmap completion or speedup claim.
 
+### ASR-39 / VOICE-17 — מדידת מעבר מהתעוררות להקלטה, 30.10.2026
+
+Candidate 0.24.3/code25 adds status-only monotonic wake-callback, dispatch,
+fixed-ready playback-head and actual recording-state markers. Baseline/rollback
+is #52 at `30a660a9e0eac3560b3be1e204c7e49bcba5b8ee`; main and #50–#52 remain
+unmerged. Models, inference/backends and existing cue/capture order are unchanged.
+The ready-before-recording defect remains pending correction, not a passed gate.
+Installed Pixel remains 0.24.2/code24: latest baseline CI has the same app version
+and a different signer; local allow_install=false also blocks installation.
+No re-signing, installation, data/model deletion or physical audio acceptance.
+Hypothesis, exact baseline artifacts/hashes, host/device acceptance, bridge
+blockers, reproduction and timing limitations: [wake-feedback-timing.md](wake-feedback-timing.md).
+
+ASR-39 follow-up, 2026-10-30: after the owner's explicit request to make bridge
+updates operational, the repaired bridge (#55 / active queue #56) installed
+0.24.3/code25 from implementation `6dd43ad3f8fcc20679f7c1d128f594dc64d1e3ec`.
+All three implementation CI workflows passed (Tensor packaging succeeded on an
+unchanged-commit retry). The exact CI ZIP digest and APK identity were verified;
+a separate copy was signed with the existing enrolled local development key,
+with identical non-signature payload and final certificate equality. Pulled-back
+installed APK SHA-256 is `df28e5fd37b2fc04a1377ef52ca0ad59e407a1bcfe78264cf6cefeb965df1027`.
+Remote install and launch/process smoke passed; no uninstall, app-data/model
+deletion, permission change or merge. Worker restart through the saved login
+shortcut and persistent token reuse passed; a full Windows reboot was not tested.
+This supersedes the earlier blocked installation state. Real acoustic timing,
+screen-off turns, readiness sequencing, quality and power gates remain pending.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

@@ -8,6 +8,8 @@ final class PlaybackLoop {
         int start(int thresholdFrames) throws IOException;
         int write(float[] audio, int offset, int count);
         long head();
+        /** First observed playback-head progress, not measured audible onset. */
+        default void started(long elapsedMs) {}
     }
     interface Clock {
         long now();
@@ -21,7 +23,14 @@ final class PlaybackLoop {
             throw new IOException("Playback start threshold exceeds chunk: " + threshold + "/" + audio.length);
         long deadline = clock.now() + (long)Math.ceil(audio.length * 1000.0 / rate) + 5000;
         int offset = 0;
-        while (offset < audio.length || output.head() < audio.length) {
+        boolean observedStart = false;
+        while (true) {
+            long head = output.head();
+            if (!observedStart && head > 0) {
+                observedStart = true;
+                output.started(clock.now());
+            }
+            if (offset >= audio.length && head >= audio.length) break;
             if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Playback cancelled");
             if (clock.now() >= deadline)
                 throw new IOException("Playback timeout: written=" + offset + "/" + audio.length + ", head=" + output.head());

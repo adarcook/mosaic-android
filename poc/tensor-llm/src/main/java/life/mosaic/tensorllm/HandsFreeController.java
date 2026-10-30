@@ -17,6 +17,14 @@ final class HandsFreeController {
     private static String token="",launchToken="",session="";
     private static WakeHandoff handoff;
     private static boolean bound, enabled, standbyRequested;
+    private static String timingId="";
+    enum TimingPoint { WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
+    static String timingId(){return timingId;}
+    static void mark(Context c,String id,TimingPoint point,long at){
+        if(id.isEmpty())return;
+        try{append(c,new org.json.JSONObject().put("type","interaction_timing").put("wake_id",id)
+                .put("point",point.name()).put("elapsed_realtime_ms",at));}catch(Exception ignored){}
+    }
 
     static boolean selected(Context c){return VoiceInteractionService.isActiveService(c,new ComponentName(c,MosaicAssistantService.class));}
     static boolean enabled(){return enabled;}
@@ -82,6 +90,8 @@ final class HandsFreeController {
         if(!"wake".equals(state)&&!"error".equals(state)&&!"stopped".equals(state))return;
         handoff.result(state);
         if("wake".equals(state)){
+            timingId=UUID.randomUUID().toString();
+            mark(c,timingId,TimingPoint.WAKE_CALLBACK_RECEIVED,SystemClock.elapsedRealtime());
             status(c,"זוהתה מילת העוררות · ממתין לשחרור מנוע");
             dispatch(c);
             final String current=token;
@@ -95,6 +105,7 @@ final class HandsFreeController {
     }
     private static void dispatch(Context c){
         if(handoff!=null&&handoff.takeReady()){
+            mark(c,timingId,TimingPoint.TURN_DISPATCHED,SystemClock.elapsedRealtime());
             enabled=false;token="";unbind(c);
             status(c,"מפעיל שיחה מעל מסך הנעילה");
             if(!MosaicAssistantService.wake())status(c,"עוזר המערכת אינו זמין; פתח את מוזאיק");

@@ -19,6 +19,7 @@ public final class VoiceActivity extends Activity {
     private VoiceScreen screen;
     private boolean handsfreeTurn, autoCapture, armOnResume, armingStandby;
     private VoiceFeedback feedback;
+    private String wakeTimingId="";
     private boolean serviceProbeRunning;
     private android.app.AlertDialog feedbackPreviewDialog;
     private void dismissFeedbackPreview(){if(feedbackPreviewDialog!=null){feedbackPreviewDialog.dismiss();feedbackPreviewDialog=null;}}
@@ -43,7 +44,7 @@ public final class VoiceActivity extends Activity {
         try{startActivityForResult(new Intent().setComponent(new ComponentName(HandsFreeController.COMPANION,HandsFreeController.COMPANION+".WakeSetupActivity")),78);}
         catch(Exception e){status.setText("נדרש עדכון חבילת Zipformer להפעלה בלי מגע");}
     }
-    private void acceptWake(Intent intent){if(HandsFreeController.consume(intent)){dismissFeedbackPreview();handsfreeTurn=true;autoCapture=true;setShowWhenLocked(true);setTurnScreenOn(true);}}
+    private void acceptWake(Intent intent){if(HandsFreeController.consume(intent)){wakeTimingId=HandsFreeController.timingId();dismissFeedbackPreview();handsfreeTurn=true;autoCapture=true;setShowWhenLocked(true);setTurnScreenOn(true);}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptWake(intent);if(foreground&&autoCapture&&!active){autoCapture=false;readyCapture();}}
 
     private final Handler main=new Handler(Looper.getMainLooper());
@@ -100,7 +101,9 @@ public final class VoiceActivity extends Activity {
         if(HandsFreeController.session().isEmpty()||(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)){HandsFreeController.status(this,"יש להכין האזנה עם התראת עצירה מתוך מוזאיק");endHandsFree(false);return;}
         try{TurnForegroundService.start(this);}catch(Exception error){HandsFreeController.status(this,"Android חסם שיחה כשהמסך כבוי");endHandsFree(false);return;}
         HandsFreeController.status(this,"משוב מוכן · אני פה, דבר אליי");
-        feedback.play("ready",ok->{if(!handsfreeTurn||active)return;if(!ok||!TurnForegroundService.active()){endHandsFree(false);return;}HandsFreeController.status(this,"מוכן לבקשה · אפשר לדבר עכשיו");main.postDelayed(()->{if(canRunTurn()&&handsfreeTurn&&!active)begin(false);},100);});
+        final String timing=wakeTimingId;
+        HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_REQUESTED,SystemClock.elapsedRealtime());
+        feedback.play("ready",at->HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_PLAYBACK_HEAD,at),ok->{if(!handsfreeTurn||active)return;if(!ok||!TurnForegroundService.active()){endHandsFree(false);return;}HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_COMPLETED,SystemClock.elapsedRealtime());HandsFreeController.status(this,"מוכן לבקשה · אפשר לדבר עכשיו");main.postDelayed(()->{if(canRunTurn()&&handsfreeTurn&&!active)begin(false);},100);});
     }
     private void prepareStandby(){armingStandby=true;HandsFreeController.stop(this,"מכין הפעלה ללא מסך ומשוב קולי · הכנה חד־פעמית להפעלה");begin(true);if(!active){armingStandby=false;HandsFreeController.stop(this,"הכנת ההאזנה לא התחילה; יש לבדוק אבחון");}}
     private void pollServiceProbe(int completed,long deadline){
@@ -154,9 +157,14 @@ public final class VoiceActivity extends Activity {
         }catch(Exception e){if(active)finish("error",e.getMessage());else{status.setText(e.getMessage());screen.problem();if(handsfreeTurn)endHandsFree(false);controls(true);}}
     }
     private void capture(AudioRecord mic,File target,int idTurn){
+        final String timing=handsfreeTurn?wakeTimingId:"";
         byte[] pcm=null;Throwable failure=null;
         try(FileOutputStream output=new FileOutputStream(target)){
-            if(!recording||turn!=idTurn)return;mic.startRecording();short[] block=new short[1024];ByteBuffer bytes=ByteBuffer.allocate(2048).order(ByteOrder.LITTLE_ENDIAN);int count=0;SpeechEndpoint endpoint=new SpeechEndpoint();
+            if(!recording||turn!=idTurn)return;mic.startRecording();
+            if(mic.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING)throw new IOException("Microphone did not start");
+            final long recordingAt=SystemClock.elapsedRealtime();
+            main.post(()->HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.CAPTURE_RECORDING_STARTED,recordingAt));
+            short[] block=new short[1024];ByteBuffer bytes=ByteBuffer.allocate(2048).order(ByteOrder.LITTLE_ENDIAN);int count=0;SpeechEndpoint endpoint=new SpeechEndpoint();
             while(recording&&turn==idTurn&&count<192000){int n=mic.read(block,0,Math.min(block.length,192000-count),AudioRecord.READ_BLOCKING);if(n<=0){if(!recording)break;throw new IOException("Microphone read failed: "+n);}bytes.clear();for(int i=0;i<n;i++)bytes.putShort(block[i]);output.write(bytes.array(),0,n*2);count+=n;if(handsfreeTurn&&endpoint.accept(block,n)){recording=false;break;}}
             output.getFD().sync();if(target.length()<16000)throw new IOException("דבר לפחות חצי שנייה");pcm=java.nio.file.Files.readAllBytes(target.toPath());
         }catch(Throwable e){failure=e;}finally{try{mic.stop();}catch(RuntimeException ignored){}mic.release();if(recorder==mic)recorder=null;}
