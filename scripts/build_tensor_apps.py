@@ -76,7 +76,7 @@ def build(root: Path, modules: list[str], env: dict) -> None:
         # No --model-dir: these prepare public runtime libraries only.
         subprocess.run([sys.executable, str(root / "scripts" / script)], cwd=root, env=env, check=True)
         tasks = ["testDebugUnitTest", "assembleDebug"] if module == "llm" else ["assembleDebug"]
-        subprocess.run(["bash", str(root / "gradlew"), "-p", MODULES[module], *tasks],
+        subprocess.run(["bash", str(root / "gradlew"), "-p", MODULES[module], "--stacktrace", *tasks],
                        cwd=root, env=env, check=True)
         if module == "llm":
             apk = root / MODULES[module] / "build/outputs/apk/debug/MosaicTensorLlm-debug.apk"
