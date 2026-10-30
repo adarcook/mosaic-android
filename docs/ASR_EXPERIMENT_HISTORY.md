@@ -856,6 +856,20 @@ not real spoken wake/answer/rearm or battery acceptance. Full Android reboot and
 owner acoustic retry remain pending. Hashes, CI/receipt links, failed privileged
 refresh attempt (not bypassed) and limits are appended in the detailed record.
 
+ASR-41 no-touch recovery follow-up (2026-10-30): live 0.26 status remained active
+with advancing non-interactive audio health, but source review found stop-only
+paths after unexpected wake process death, null binding, start/release timeout,
+session launch failure and activity interruption. Voice 0.26.1/code29 routes these
+through bounded persistent recovery, deduplicates delayed retries and invalidates
+stale callbacks after explicit Stop/new sessions. Companion 0.8.2/code9, models,
+CPU/NPU placement and inference/search settings are unchanged. Baseline/rollback
+is `d39b266ec8cc6db8d7f8270447ad0d554cd22a06`. Acceptance is tests/build plus exact
+CI/guarded install and an ordinary app-owned wake-process termination while
+non-interactive, followed by a fresh listener/audio health without UI activation.
+Those candidate results are pending; real spoken interaction, reboot, battery
+and daily reliability are not inferred. Detailed controls/limits are appended in
+[voice-wake-recovery.md](voice-wake-recovery.md).
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

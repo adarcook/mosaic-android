@@ -248,3 +248,36 @@ or the local user profile. No merge or roadmap completion.
 - [Pinned KeywordSpotter Kotlin API](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/kotlin-api/KeywordSpotter.kt).
 - [Pinned keyword token parser](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/csrc/utils.cc).
 - [Voice v0.1 acceptance](https://github.com/adarcook/mosaic-docs/blob/main/docs/releases/VOICE_V1_HANDSFREE_ACCEPTANCE.md).
+
+## ASR-41 follow-up — no-touch recovery after listener interruption
+
+The owner reiterates that opening the app or pressing activation is not the
+intended interaction. A read-only live check on 2026-10-30 found the installed
+0.26 listener still active with non-interactive audio health advancing. Source
+review nevertheless found a real recovery gap: unexpected companion death,
+null binding, startup/release timeouts and foreground-start failures stopped the
+controller without scheduling its existing persistent recovery. Session launch
+and activity interruption had equivalent stop-only paths.
+
+Hypothesis: routing transient interruptions through a single stop/recover path
+will restore listening without UI interaction, while explicit owner Stop still
+disables it. Candidate Voice **0.26.1-background-recovery/code29** keeps companion
+0.8.2/code9, models, runtime versions, KWS threshold, CPU/NPU placement, permission
+and keyguard checks unchanged. Baseline/rollback implementation is
+`d39b266ec8cc6db8d7f8270447ad0d554cd22a06`; documentation base is
+`7bd06efa5bbe2c74999ddfb72e53a0c3b9623481`.
+
+Recovery remains limited to three consecutive unsuccessful attempts until healthy
+audio or explicit setup. Pending recovery is deduplicated and stale callbacks
+cannot restart a newer/stopped session. Explicit owner Stop cancels pending
+recovery and clears the durable choice; no endless blocked-permission loop.
+
+Acceptance, defined before installation: relevant JVM tests and APK/package checks
+pass; exact-source CI is green; the guarded bridge preserves certificate/data;
+with the screen non-interactive, terminating only the app-owned companion wake
+process leads to a new listener and new processed-audio health without opening
+an activity, pressing activation, changing role or granting permissions. The
+ordinary process-death test does not use force-stop. Capture baseline and candidate
+timestamps privately and publish only numeric/state evidence. Full owner acoustic
+wake/request/rearm, reboot, battery use and daily reliability remain separate
+unverified gates. Build, CI, installation and fault-injection results are pending.
