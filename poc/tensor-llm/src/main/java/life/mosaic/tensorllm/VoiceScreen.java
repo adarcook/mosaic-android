@@ -119,7 +119,7 @@ final class VoiceScreen {
         handsfree.addView(text("מוזאיק, בלי לגעת", 20, INK));
         handsfreeStatus = content(handsfree, "האזנה כבויה");
         assistantButton = button("בחירת מוזאיק כעוזר", false);
-        handsfreeButton = button("הפעלת האזנה מקומית", false);
+        handsfreeButton = button("הפעלת האזנה קבועה", false);
         addButton(handsfree, assistantButton);
         addButton(handsfree, handsfreeButton);
         feedbackPreview = button("איך מוזאיק נשמע?", false);

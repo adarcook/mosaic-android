@@ -790,6 +790,86 @@ shortcut and persistent token reuse passed; a full Windows reboot was not tested
 This supersedes the earlier blocked installation state. Real acoustic timing,
 screen-off turns, readiness sequencing, quality and power gates remain pending.
 
+### ASR-40 / VOICE-18 — תיקון כשלים בבדיקת המשתמש, 30.10.2026
+
+Owner's physical test of 0.24.3 failed: late wake acknowledgement while lit,
+no response while screen-off, and the personal update alias fell through to
+conversation. Local diagnostics found quiet speech below RMS450, an omitted
+pronoun preventing exact alias expansion, and off-screen audio/decode health with
+no wake callback. These are failed integration results; prior synthetic 5/5 is
+not acoustic acceptance. Private PCM/journals/dictionary remain local.
+
+Candidate Voice 0.25/code26 + companion 0.8/code7 starts the microphone before the
+ready cue, adapts the quiet endpoint, handles narrow saved-alias variants, avoids
+heavy preparation when fixed clips are verified, and uses native keyword spotting
+on the existing CPU Hebrew Zipformer model. Weights, request ASR, Gemma/NPU and
+BlueTTS/CPU remain unchanged; keyword search/settings and orchestration are changed
+factors. Local tests 130+11 and APK builds pass. Identical private PCM endpoint
+replay ends at 6.528 s vs 8.000 s; Windows native KWS loads and rejects that
+non-wake request. No screen-off/acoustic/accuracy/power success is claimed.
+Baseline/rollback source `6dd43ad3f8fcc20679f7c1d128f594dc64d1e3ec`, documentation
+base #54 `89c98aa21d35cfcd93a04ed779f1ffed01e37492`. CI, two-package installation
+and real device retry are pending. See [voice-wake-recovery.md](voice-wake-recovery.md)
+for controls, exact timing limits, reproduction, acceptance and primary API sources.
+
+ASR-40 follow-up: initial b8085e0 passed four CI workflows and guarded bridge
+installation of both packages. Real Pixel Gemma/NPU with synthetic NO_MESSAGE
+passed 6/6, including the omitted-pronoun alias; no real notification was read.
+Native KWS .25 threshold failed synthetic positive/sanity input despite build
+success. 0.25.1/code27 + companion 0.8.1/code8 lower only that threshold to .01
+(plus version/dependency identity). A small Windows native tuning set passes 7/7:
+two fixed synthetic Mosaic voices plus attenuation, and four negative fixtures.
+The unsuccessful isolated BlueTTS positive is retained; no held-out/owner acoustic
+or screen-off reliability claim. Full failed/passing evidence and limits are
+appended in [voice-wake-recovery.md](voice-wake-recovery.md). Updated CI and
+two-package installation remain pending.
+
+### ASR-41 / VOICE-19 — האזנה קבועה ושחזור חיבור העוזר, 30.10.2026
+
+Owner explicitly requests persistent background listening without repeatedly
+enabling it. Their .25 retry logged real wake/dispatch events but Android's
+assistant binding was null/DEAD after development instrumentation, so no session
+opened. This is a separate observed handoff failure, not proof that display-off
+audio capture stopped. The stale system binding must be restored after probes.
+
+Voice 0.26/code28 + companion 0.8.2/code9 persist the owner choice, restore only
+through the selected/system-ready assistant and valid permissions/clips, preserve
+it across transient teardown and distinguish explicit owner Stop. Recovery is
+bounded; boot receivers do not start microphones. Defaults remain off for other
+installs. No private models/data/keys or keyguard/permission changes. KWS .01 and
+all model backends/settings are unchanged from the preceding threshold correction.
+Local tests 133+11/build pass; CI/install and controlled display-off observation
+are pending. Full reboot and real owner acoustic acceptance remain unverified.
+Source base/rollback `60ad977803edf4620ec9c365a1fdcb37769ade3e`; details/limits and
+primary Android sources in [voice-wake-recovery.md](voice-wake-recovery.md).
+
+ASR-41 installation/observation: source `d39b266ec8cc6db8d7f8270447ad0d554cd22a06`
+passed all four hosted workflows. Voice 0.26/code28 and wake 0.8.2/code9 installed
+through queue #56 with original signer, unchanged payload and pulled-back hashes.
+Owner-requested durable choice was saved privately; dictionary compared unchanged.
+An app-owned process restart (no force-stop/role/permission grant) restored the
+system binding and automatically resumed listening without pressing activation.
+After deliberate SLEEP/Dozing, 30 health windows all reported interactive=false:
+152,417 ms wall / 152,400 ms processed input; assistant connection, listener and
+preference remained active. This is short non-interactive input/lifetime evidence,
+not real spoken wake/answer/rearm or battery acceptance. Full Android reboot and
+owner acoustic retry remain pending. Hashes, CI/receipt links, failed privileged
+refresh attempt (not bypassed) and limits are appended in the detailed record.
+
+ASR-41 no-touch recovery follow-up (2026-10-30): live 0.26 status remained active
+with advancing non-interactive audio health, but source review found stop-only
+paths after unexpected wake process death, null binding, start/release timeout,
+session launch failure and activity interruption. Voice 0.26.1/code29 routes these
+through bounded persistent recovery, deduplicates delayed retries and invalidates
+stale callbacks after explicit Stop/new sessions. Companion 0.8.2/code9, models,
+CPU/NPU placement and inference/search settings are unchanged. Baseline/rollback
+is `d39b266ec8cc6db8d7f8270447ad0d554cd22a06`. Acceptance is tests/build plus exact
+CI/guarded install and an ordinary app-owned wake-process termination while
+non-interactive, followed by a fresh listener/audio health without UI activation.
+Those candidate results are pending; real spoken interaction, reboot, battery
+and daily reliability are not inferred. Detailed controls/limits are appended in
+[voice-wake-recovery.md](voice-wake-recovery.md).
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

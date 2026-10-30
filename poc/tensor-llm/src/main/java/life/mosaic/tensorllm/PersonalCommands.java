@@ -50,7 +50,7 @@ final class PersonalCommands {
         String normalized = VoiceCommandText.normalize(request);
         if (normalized.isEmpty() || VoiceCommandText.blocked(normalized)) return null;
         for (Entry entry : entries)
-            if (entry.enabled && normalized.equals(VoiceCommandText.normalize(entry.phrase))) return entry.toolId;
+            if (entry.enabled && VoiceCommandText.personalKey(request).equals(VoiceCommandText.personalKey(entry.phrase))) return entry.toolId;
         return null;
     }
 

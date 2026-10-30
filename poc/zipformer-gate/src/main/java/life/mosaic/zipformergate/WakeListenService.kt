@@ -19,6 +19,7 @@ class WakeListenService : Service() {
     @Volatile private var running = false
     @Volatile private var mic: AudioRecord? = null
     private var workerStarted = false
+    @Volatile private var ownerStopped = false
     private var reply: PendingIntent? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -33,6 +34,7 @@ class WakeListenService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP") {
+            ownerStopped = true
             running = false
             try { mic?.stop() } catch (_: Exception) {}
             if (!workerStarted) stopSelf()
@@ -66,14 +68,17 @@ class WakeListenService : Service() {
     }
 
     private fun listen() {
-        var recognizer: OnlineRecognizer? = null
+        var recognizer: KeywordSpotter? = null
         var stream: OnlineStream? = null
         var result = "stopped"
+        var detectedAt = -1L
         try {
             val dir = File(filesDir, "models/zipformer-he")
             verify(dir)
             if (!running) return
-            recognizer = OnlineRecognizer(assetManager = null, config = OnlineRecognizerConfig(
+            val keywords = File(cacheDir,"mosaic-wake-keywords-v1.txt")
+            keywords.writeText(WakeKeywords.build(File(dir,"tokens.txt").readText()))
+            recognizer = KeywordSpotter(assetManager = null, config = KeywordSpotterConfig(
                 featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80, dither = 0f),
                 modelConfig = OnlineModelConfig(transducer = OnlineTransducerModelConfig(
                     encoder = File(dir, "encoder.int8.onnx").absolutePath,
@@ -81,7 +86,8 @@ class WakeListenService : Service() {
                     joiner = File(dir, "joiner.int8.onnx").absolutePath),
                     tokens = File(dir, "tokens.txt").absolutePath,
                     numThreads = 2, provider = "cpu", modelType = "zipformer2"),
-                enableEndpoint = true, decodingMethod = "greedy_search"))
+                maxActivePaths = 4, keywordsFile = keywords.absolutePath,
+                keywordsScore = 1.5f, keywordsThreshold = 0.01f, numTrailingBlanks = 2))
             stream = recognizer.createStream()
             val minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             require(minimum > 0)
@@ -99,6 +105,7 @@ class WakeListenService : Service() {
             var healthSamples = 0L
             var nonzeroBlocks = 0L
             var decodeMs = 0L
+            var maxRms = 0L
             while (running) {
                 val count = recorder.read(samples, 0, samples.size, AudioRecord.READ_BLOCKING)
                 if (!running) break
@@ -109,6 +116,7 @@ class WakeListenService : Service() {
                 streamSamples += count
                 healthSamples += count
                 if ((0 until count).any { samples[it].toInt() != 0 }) nonzeroBlocks++
+                maxRms=maxOf(maxRms,kotlin.math.sqrt((0 until count).sumOf { samples[it].toDouble()*samples[it] }/count).toLong())
                 val decodeStart = SystemClock.elapsedRealtime()
                 var cycles = 0
                 while (recognizer.isReady(currentStream)) {
@@ -121,12 +129,13 @@ class WakeListenService : Service() {
                     try { reply?.send(this, 0, Intent().putExtra("state", "health")
                         .putExtra("wall_ms", now-healthAt).putExtra("audio_ms", healthSamples*1000/16000)
                         .putExtra("decode_ms", decodeMs).putExtra("nonzero_blocks", nonzeroBlocks)
+                        .putExtra("max_rms", maxRms)
                         .putExtra("interactive", (getSystemService(POWER_SERVICE) as PowerManager).isInteractive)) }
                     catch (_: Exception) { running=false }
-                    healthAt=now;healthSamples=0;nonzeroBlocks=0;decodeMs=0
+                    healthAt=now;healthSamples=0;nonzeroBlocks=0;decodeMs=0;maxRms=0
                 }
-                if (WakePhrase.matches(recognizer.getResult(currentStream).text)) { result = "wake"; break }
-                if (recognizer.isEndpoint(currentStream) || streamSamples >= 16000 * 30) {
+                if (WakePhrase.matches(recognizer.getResult(currentStream).keyword)) { detectedAt=SystemClock.elapsedRealtime();result = "wake"; break }
+                if (streamSamples >= 16000 * 30) {
                     currentStream.release(); stream = recognizer.createStream(); streamSamples = 0
                 }
             }
@@ -140,14 +149,14 @@ class WakeListenService : Service() {
             wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
             stopForeground(STOP_FOREGROUND_REMOVE)
             // Reply after mic/native cleanup. Controller waits for Binder death before heavy workers.
-            report(result)
+            report(result, detectedAt)
             stopSelf()
             android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
 
-    private fun report(state: String) {
-        try { reply?.send(this, 0, Intent().putExtra("state", state)) } catch (_: Exception) { running = false }
+    private fun report(state: String, detectedAt: Long = -1L) {
+        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
     }
 
     private fun verify(dir: File) {
