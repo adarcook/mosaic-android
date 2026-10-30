@@ -4,4 +4,5 @@ state.json
 __pycache__/
 .venv/
 *.apk
+*.idsig
 *.zip

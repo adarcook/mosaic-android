@@ -2,7 +2,12 @@
 
 An opt-in local worker that polls one PUBLIC GitHub issue over outbound HTTPS, performs a narrow set of Android Debug Bridge (ADB) operations, and writes status-only results to that issue. No Internet-facing desktop API and no general shell execution.
 
-Queue: https://github.com/adarcook/mosaic-android/issues/46
+Active enrolled-worker queue: https://github.com/adarcook/mosaic-android/issues/56
+
+Historical prototype queue #46 is retired for new commands. The elevated original
+worker can remain idle there until its owner closes that old terminal. The repaired
+worker uses a separate local config/checkpoint and loopback health port 8766; it
+does not compete with the old worker for commands.
 
 This first bridge can check whether the Pixel is connected, inspect whether the Mosaic voice app is installed, launch it, run a basic process smoke check and optionally install a CI-built Mosaic Voice APK. It does NOT record microphones, read WhatsApp content, capture arbitrary logcat, execute arbitrary commands, test actual ASR/LLM/TTS, click Android permission dialogs or control the screen.
 
@@ -17,7 +22,7 @@ Requirements: Python 3.10+ (3.12 recommended), Android Studio with SDK platform-
         cd ..\mosaic-pixel-bridge\tools\pixel-test-bridge
         Copy-Item config.example.json config.json
 
-2. Open config.json in Notepad. The example already contains queue issue number 46. Replace the adb, aapt and apksigner values with the installed SDK tools. For example, these JSON strings use forward slashes and need YOUR actual Windows username and build-tools version:
+2. Open config.json in Notepad. The example contains active queue issue number 56. Replace the adb, aapt and apksigner values with the installed SDK tools. For example, these JSON strings use forward slashes and need YOUR actual Windows username and build-tools version:
 
         adb: C:/Users/YOU/AppData/Local/Android/Sdk/platform-tools/adb.exe
         aapt: C:/Users/YOU/AppData/Local/Android/Sdk/build-tools/35.0.0/aapt.exe
@@ -55,7 +60,7 @@ Requirements: Python 3.10+ (3.12 recommended), Android Studio with SDK platform-
 
    Init SKIPS previously posted comments. Keep the PowerShell window running for remote actions. Stop with Ctrl+C. A local health endpoint is available only at http://127.0.0.1:8765/health. It is not reachable directly from ChatGPT or through the tailnet.
 
-6. Once the worker is running, post a NEW comment to issue #46 using exactly one of these formats (one action per comment):
+6. Once the worker is running, post a NEW comment to issue #56 using exactly one of these formats (one action per comment):
 
         /mosaic-test {"action":"status"}
         /mosaic-test {"action":"device"}
@@ -71,6 +76,16 @@ The local config has allow_install set to false. To enable the guarded install c
 
         /mosaic-test {"action":"install_ci_apk","sha":"REPLACE_WITH_EXACT_40_HEX_SHA"}
 
+The signed wake companion has its own fixed command:
+
+        /mosaic-test {"action":"install_ci_wake","sha":"REPLACE_WITH_EXACT_40_HEX_SHA"}
+
+It accepts only `life.mosaic.zipformergate` from the successful exact-SHA
+`Zipformer voice loop opt-in checks` / `mosaic-zipformer-local-wake-apk` artifact.
+All digest, enrolled device/certificate, local signing/payload, downgrade and
+pulled-back verification gates are shared. Package names/URLs cannot be supplied
+in a queue command. Install a required companion update before its controller.
+
 Requirements enforced by code:
 - Only repository adarcook/mosaic-android, an owner-repo feature/ or experiment/ branch, a successful build of that EXACT SHA, and the pinned mosaic-tensor-local-llm-apk artifact.
 - Exactly one appropriately sized APK. aapt must report package ID life.mosaic.tensorllm.
@@ -78,7 +93,47 @@ Requirements enforced by code:
 - GitHub-hosted debug signing may NOT match the APK you built with Android Studio: remote installation will then correctly refuse to proceed. A safe matching-signature strategy would be a later separate task.
 - Installing an approved source branch is security sensitive. Restrict write access to the repository and token, and disable remote install when not actively needed.
 
-## Security
+## Persistent owner development installation
+
+For an owner who explicitly requests repeated automatic development updates, local
+configuration may enable `allow_install` and `allow_local_debug_signing`, enroll
+the Pixel's private `device_identity` (`ro.serialno`), pin the installed certificate
+in `trusted_signer_sha256`, and point `local_debug_keystore` at the **existing**
+Android development keystore. Defaults remain disabled. Never replace the key,
+upload it, enroll an unknown signer, or uninstall/clear data to repair a mismatch.
+
+This supports the standard `androiddebugkey` development key only. It is not a
+release-signing or arbitrary-keystore interface. The private key stays on Windows.
+The bridge verifies a successful owner-repository exact-SHA CI run, checks the
+downloaded ZIP against GitHub's artifact SHA-256 digest, verifies package/signing,
+and checks the installed signer against the local certificate pin. When explicit
+local signing opt-in is enabled, it signs a separate copy with the enrolled key,
+compares every non-signature APK ZIP entry before/after signing, then verifies the
+final certificate against the installed app. Unknown keys, changed payloads and
+final signer mismatches still stop installation. The CI APK remains intact.
+
+The same enrolled Pixel can be connected over USB and wireless simultaneously;
+USB is preferred and another physical phone is never selected as a fallback.
+Each installation uses one selected transport throughout the transaction, refuses
+downgrades, uses only `adb install -r`, and pulls the installed APK back to compare
+its full hash and signature. Status-only receipts distinguish original CI and
+installed APK hashes. Speech/notification acceptance remains a separate test.
+
+On Windows, the worker reads the existing per-user `MOSAIC_GITHUB_TOKEN` setting
+when it is absent from its process environment, without printing it. This setting
+is the owner's existing Windows environment storage, not an encrypted vault.
+No key or token is copied to GitHub. A user-login Startup shortcut can launch the
+worker through `pythonw.exe` with absolute script/config paths and the existing
+checkpoint; do not run `init` again and discard pending requests. Its loopback
+health port also prevents concurrent workers. Windows must be logged in, awake,
+and have the authorized Pixel reachable. Repository code does not auto-enable
+installation or create a startup entry without owner setup.
+
+SDK executables may use absolute paths. On Windows `apksigner` may be a local
+argument list `["C:/path/to/java.exe", "-jar", "C:/path/to/apksigner.jar"]`,
+avoiding batch-file quoting issues. No remote command can change these settings.
+
+## Security boundaries
 
 - PUBLIC GitHub issue: no secrets, personal messages, transcripts, logcat, device serials, image or audio content should be posted. The worker processes only allowlisted JSON actions authored by GitHub login adarcook; it ignores all other comments.
 - No arbitrary shell commands, arbitrary package names, commands selected by an LLM, custom URLs, or remote filesystem paths.

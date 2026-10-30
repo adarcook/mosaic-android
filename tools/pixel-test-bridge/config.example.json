@@ -1,12 +1,16 @@
 {
   "repository": "adarcook/mosaic-android",
-  "issue_number": 46,
+  "issue_number": 56,
   "allowed_author": "adarcook",
   "adb": "adb",
   "aapt": "aapt",
   "apksigner": "apksigner",
   "serial": "",
+  "device_identity": "",
   "poll_seconds": 45,
   "local_health_port": 8765,
-  "allow_install": false
+  "allow_install": false,
+  "allow_local_debug_signing": false,
+  "local_debug_keystore": "",
+  "trusted_signer_sha256": ""
 }
