@@ -11,6 +11,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from github_queue import BridgeError, GitHub, checkpoint_write, poll_once, REPO
 from device import Pixel, process
 
+
+def github_token():
+    token = os.getenv("MOSAIC_GITHUB_TOKEN")
+    if token or os.name != "nt":
+        return token
+    # Existing per-user Windows setting, read locally without echoing its value.
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            value, kind = winreg.QueryValueEx(key, "MOSAIC_GITHUB_TOKEN")
+            return value if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ) else None
+    except OSError:
+        return None
+
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/health":
@@ -40,6 +54,13 @@ def load_config(file):
         raise BridgeError("Only adarcook may issue commands.")
     if type(obj.get("poll_seconds", 45)) is not int or not 10 <= obj.get("poll_seconds", 45) <= 3600:
         raise BridgeError("poll_seconds must be from 10 to 3600.")
+    for flag in ("allow_install", "allow_local_debug_signing"):
+        if flag in obj and type(obj[flag]) is not bool:
+            raise BridgeError("Installation flags must be JSON booleans.")
+    if obj.get("allow_local_debug_signing") is True:
+        if not (obj.get("device_identity") and obj.get("local_debug_keystore")
+                and re.fullmatch(r"[0-9a-f]{64}", obj.get("trusted_signer_sha256", ""))):
+            raise BridgeError("Local signing requires enrolled Pixel, existing key and certificate pin.")
     port = obj.get("local_health_port", 8765)
     if type(port) is not int or not 1024 <= port <= 65535:
         raise BridgeError("local_health_port out of range.")
@@ -64,7 +85,7 @@ def main():
         if args.mode == "check":
             print(json.dumps(pixel.execute({"action": "device"}, None)))
             return 0
-        github = GitHub(os.getenv("MOSAIC_GITHUB_TOKEN"))
+        github = GitHub(github_token())
         issue = config["issue_number"]
         github.assert_queue(issue)
         checkpoint = config_path.with_name("state.json")

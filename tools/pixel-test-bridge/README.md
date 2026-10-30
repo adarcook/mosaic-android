@@ -80,6 +80,48 @@ Requirements enforced by code:
 
 ## Security
 
+## Persistent owner development installation
+
+For an owner who explicitly requests repeated automatic development updates, local
+configuration may enable `allow_install` and `allow_local_debug_signing`, enroll
+the Pixel's private `device_identity` (`ro.serialno`), pin the installed certificate
+in `trusted_signer_sha256`, and point `local_debug_keystore` at the **existing**
+Android development keystore. Defaults remain disabled. Never replace the key,
+upload it, enroll an unknown signer, or uninstall/clear data to repair a mismatch.
+
+This supports the standard `androiddebugkey` development key only. It is not a
+release-signing or arbitrary-keystore interface. The private key stays on Windows.
+The bridge verifies a successful owner-repository exact-SHA CI run, checks the
+downloaded ZIP against GitHub's artifact SHA-256 digest, verifies package/signing,
+and checks the installed signer against the local certificate pin. When explicit
+local signing opt-in is enabled, it signs a separate copy with the enrolled key,
+compares every non-signature APK ZIP entry before/after signing, then verifies the
+final certificate against the installed app. Unknown keys, changed payloads and
+final signer mismatches still stop installation. The CI APK remains intact.
+
+The same enrolled Pixel can be connected over USB and wireless simultaneously;
+USB is preferred and another physical phone is never selected as a fallback.
+Each installation uses one selected transport throughout the transaction, refuses
+downgrades, uses only `adb install -r`, and pulls the installed APK back to compare
+its full hash and signature. Status-only receipts distinguish original CI and
+installed APK hashes. Speech/notification acceptance remains a separate test.
+
+On Windows, the worker reads the existing per-user `MOSAIC_GITHUB_TOKEN` setting
+when it is absent from its process environment, without printing it. This setting
+is the owner's existing Windows environment storage, not an encrypted vault.
+No key or token is copied to GitHub. A user-login Startup shortcut can launch the
+worker through `pythonw.exe` with absolute script/config paths and the existing
+checkpoint; do not run `init` again and discard pending requests. Its loopback
+health port also prevents concurrent workers. Windows must be logged in, awake,
+and have the authorized Pixel reachable. Repository code does not auto-enable
+installation or create a startup entry without owner setup.
+
+SDK executables may use absolute paths. On Windows `apksigner` may be a local
+argument list `["C:/path/to/java.exe", "-jar", "C:/path/to/apksigner.jar"]`,
+avoiding batch-file quoting issues. No remote command can change these settings.
+
+## Security boundaries
+
 - PUBLIC GitHub issue: no secrets, personal messages, transcripts, logcat, device serials, image or audio content should be posted. The worker processes only allowlisted JSON actions authored by GitHub login adarcook; it ignores all other comments.
 - No arbitrary shell commands, arbitrary package names, commands selected by an LLM, custom URLs, or remote filesystem paths.
 - Operations are checkpointed BEFORE execution. Crash/restart does not replay a prior install. If a result post fails, submit a new command rather than editing an old one.

@@ -105,7 +105,10 @@ class GitHub:
                    if a.get("name") == "mosaic-tensor-local-llm-apk" and not a.get("expired")]
         if len(matches) != 1:
             raise BridgeError("No unique current APK artifact found.")
-        return matches[0]["id"]
+        artifact = matches[0]
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact.get("digest", "")):
+            raise BridgeError("GitHub artifact SHA-256 digest is missing.")
+        return {"id": artifact["id"], "digest": artifact["digest"]}
 
 
 def checkpoint_write(path, last_seen):

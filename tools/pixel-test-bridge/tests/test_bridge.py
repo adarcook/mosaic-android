@@ -1,5 +1,6 @@
 """Unit tests for parsing, permissions, checkpointing and never-replay behavior."""
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,12 +9,13 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 from zipfile import ZipFile
+from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from github_queue import (parse_command, authorized, poll_once,
                           checkpoint_write, BridgeError)
-from device import selected_serial, signer, extract_single_apk, Pixel
-from bridge import load_config
+from device import selected_serial, signer, extract_single_apk, Pixel, apk_payload, locally_signed_copy, download_verified_artifact
+from bridge import load_config, github_token
 
 
 class CommandTests(unittest.TestCase):
@@ -93,9 +95,9 @@ class GitHubProvenanceTests(unittest.TestCase):
                     {**good, "head_sha": "b"*40, "id": 3},
                     good]}
             return {"artifacts": [{"name": "mosaic-tensor-local-llm-apk",
-                                   "expired": False, "id": 777}]}
+                                   "expired": False, "id": 777, "digest": "sha256:" + "c"*64}]}
         gh.request = fake_request
-        self.assertEqual(gh.successful_artifact(sha), 777)
+        self.assertEqual(gh.successful_artifact(sha), {"id":777, "digest":"sha256:" + "c"*64})
         self.assertIn("/actions/runs/123/artifacts?per_page=100", calls)
 
     def test_rejects_missing_trusted_success(self):
@@ -112,6 +114,46 @@ class GitHubProvenanceTests(unittest.TestCase):
 
 
 class DeviceTests(unittest.TestCase):
+    def test_enrolled_identity_accepts_duplicate_transports_but_never_another_phone(self):
+        def run(args, **kwargs):
+            if args[-1] == "devices":
+                return "List of devices attached\nwireless:1234\tdevice\nusb\tdevice\nother\tdevice\n"
+            return "another-phone" if args[2] == "other" else "enrolled-phone"
+        with patch("device.process", side_effect=run):
+            self.assertEqual(selected_serial("adb", None, "enrolled-phone"), "usb")
+            with self.assertRaises(BridgeError):
+                selected_serial("adb", None, "absent-phone")
+
+    def test_multiple_signers_are_refused(self):
+        output = "Signer #1 certificate SHA-256 digest: " + "a"*64 + "\nSigner #2 certificate SHA-256 digest: " + "b"*64
+        with patch("device.process", return_value=output):
+            with self.assertRaises(BridgeError):
+                signer("apksigner", Path("voice.apk"))
+
+    def test_payload_comparison_ignores_only_signature_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            one, two = Path(tmp)/"one.apk", Path(tmp)/"two.apk"
+            for path, signature in [(one,b"old"),(two,b"new")]:
+                with ZipFile(path,"w") as z:
+                    z.writestr("classes.dex", b"code")
+                    z.writestr("META-INF/library.version", b"library metadata")
+                    z.writestr("META-INF/CERT.RSA", signature)
+            self.assertEqual(apk_payload(one), apk_payload(two))
+            with ZipFile(two,"w") as z:
+                z.writestr("classes.dex", b"altered code")
+                z.writestr("META-INF/library.version", b"library metadata")
+            self.assertNotEqual(apk_payload(one), apk_payload(two))
+
+    def test_local_signing_refuses_changed_payload_or_wrong_certificate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key=Path(tmp)/"debug.keystore"; key.write_bytes(b"test fixture")
+            with patch("device.process"), patch("device.signer", return_value="a"*64), patch("device.apk_payload", side_effect=[{"classes.dex": "old"},{"classes.dex": "changed"}]):
+                with self.assertRaisesRegex(BridgeError, "payload changed"):
+                    locally_signed_copy("signer", Path("source"), Path("target"), key, "a"*64)
+            with patch("device.process"), patch("device.signer", return_value="b"*64), patch("device.apk_payload", return_value={}):
+                with self.assertRaisesRegex(BridgeError, "certificate"):
+                    locally_signed_copy("signer", Path("source"), Path("target"), key, "a"*64)
+
     @patch("device.process", return_value="List of devices attached\npixel-serial\tdevice\n")
     def test_one_device(self, run):
         self.assertEqual(selected_serial("adb", None), "pixel-serial")
@@ -153,7 +195,70 @@ class DeviceTests(unittest.TestCase):
         self.assertEqual(data, {"bridge": "online", "install_enabled": False})
 
 
+class InstallFlowTests(unittest.TestCase):
+    def fixture(self, root, signing=True):
+        config={"allow_install":True,"allow_local_debug_signing":signing,
+                "device_identity":"synthetic-enrolled","trusted_signer_sha256":"a"*64,
+                "local_debug_keystore":str(root/"debug.keystore"),"adb":"adb","aapt":"aapt"}
+        installs=[]
+        def write_apk(path):
+            with ZipFile(path,"w") as z: z.writestr("classes.dex",b"synthetic code")
+        def download(_gh,_sha,path):
+            apk=root/"ci.apk";write_apk(apk)
+            with ZipFile(path,"w") as z: z.write(apk,"voice.apk")
+            return {"id":777,"digest":"sha256:"+"c"*64}
+        def run(args,**kwargs):
+            if args[0]=="aapt": return "package: name='life.mosaic.tensorllm' versionCode='25'"
+            action=args[3:]
+            if action==["shell","getprop","ro.product.model"]: return "Pixel 10 Pro"
+            if action==["shell","pm","path","life.mosaic.tensorllm"]: return "package:/data/app/test/base.apk\n"
+            if action[0]=="pull": write_apk(Path(action[-1]));return ""
+            if action[0]=="install": installs.append(args);return "Success"
+            raise AssertionError("Unexpected Android operation")
+        def sign(_tool,source,target,_key,_pin): target.write_bytes(source.read_bytes())
+        def certificate(_tool,path): return "b"*64 if path.name=="voice.apk" else "a"*64
+        return config,installs,download,run,sign,certificate
+
+    def test_install_runs_only_after_enrolled_signing_and_verifies_pulled_apk(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config,calls,download,run,sign,certificate=self.fixture(Path(tmp))
+            with patch("device.selected_serial",return_value="enrolled-usb"), patch("device.download_verified_artifact",side_effect=download), patch("device.process",side_effect=run), patch("device.locally_signed_copy",side_effect=sign), patch("device.signer",side_effect=certificate):
+                result=Pixel(config).execute({"action":"install_ci_apk","sha":"d"*40},None)
+            self.assertTrue(result["verified_after_install"])
+            self.assertEqual(len(calls),1)
+            self.assertEqual(calls[0][3:5],["install","-r"])
+
+    def test_ci_signer_mismatch_without_local_signing_never_installs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config,calls,download,run,sign,certificate=self.fixture(Path(tmp),signing=False)
+            with patch("device.selected_serial",return_value="enrolled-usb"), patch("device.download_verified_artifact",side_effect=download), patch("device.process",side_effect=run), patch("device.locally_signed_copy") as sign_call, patch("device.signer",side_effect=certificate):
+                with self.assertRaisesRegex(BridgeError,"signing mismatch"):
+                    Pixel(config).execute({"action":"install_ci_apk","sha":"d"*40},None)
+            self.assertFalse(calls);sign_call.assert_not_called()
+
+    def test_unknown_installed_certificate_never_signs_or_installs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config,calls,download,run,sign,certificate=self.fixture(Path(tmp))
+            config["trusted_signer_sha256"]="e"*64
+            with patch("device.selected_serial",return_value="enrolled-usb"), patch("device.download_verified_artifact",side_effect=download), patch("device.process",side_effect=run), patch("device.locally_signed_copy") as sign_call, patch("device.signer",side_effect=certificate):
+                with self.assertRaisesRegex(BridgeError,"enrolled certificate"):
+                    Pixel(config).execute({"action":"install_ci_apk","sha":"d"*40},None)
+            self.assertFalse(calls);sign_call.assert_not_called()
+
+    def test_download_digest_mismatch_is_rejected(self):
+        gh=MagicMock();gh.root="https://api.github.com/repos/adarcook/mosaic-android";gh.token="synthetic"
+        gh.successful_artifact.return_value={"id":777,"digest":"sha256:"+"0"*64}
+        opener=MagicMock();opener.open.side_effect=HTTPError("https://api.github.com",302,"redirect",{"Location":"https://fixture.blob.core.windows.net/artifact"},None)
+        with tempfile.TemporaryDirectory() as tmp, patch("device.build_opener",return_value=opener), patch("device.urlopen",return_value=io.BytesIO(b"tampered ZIP")):
+            with self.assertRaisesRegex(BridgeError,"ZIP SHA-256 mismatch"):
+                download_verified_artifact(gh,"a"*40,Path(tmp)/"artifact.zip")
+
+
 class ConfigTests(unittest.TestCase):
+    @patch.dict(os.environ, {"MOSAIC_GITHUB_TOKEN":"synthetic-local-test"})
+    def test_process_token_takes_precedence_without_registry(self):
+        self.assertEqual(github_token(), "synthetic-local-test")
+
     def test_pinned_repo_and_issue(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"

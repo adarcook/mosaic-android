@@ -6,7 +6,11 @@
   "aapt": "aapt",
   "apksigner": "apksigner",
   "serial": "",
+  "device_identity": "",
   "poll_seconds": 45,
   "local_health_port": 8765,
-  "allow_install": false
+  "allow_install": false,
+  "allow_local_debug_signing": false,
+  "local_debug_keystore": "",
+  "trusted_signer_sha256": ""
 }
