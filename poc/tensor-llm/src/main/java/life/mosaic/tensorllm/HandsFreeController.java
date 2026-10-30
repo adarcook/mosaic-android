@@ -20,6 +20,15 @@ final class HandsFreeController {
     private static boolean turnRunning;
     private static final RecoveryBudget recovery=new RecoveryBudget(3);
     private static String timingId="";
+    private static VoiceFeedback wakeAck;
+    static Runnable stopHeadsetTurn;
+    static void headsetLost(Context c){
+        if(wakeAck!=null)wakeAck.cancel();
+        if(stopHeadsetTurn!=null)stopHeadsetTurn.run();
+        stop(c,"האזנה דרך האוזניות מושהית · חבר מחדש את האוזניות או הפעל שוב");
+    }
+    static void headsetConnected(Context c){if(HeadsetRouteService.required(c)&&persistent(c)){recovery.reset();recover(c);}}
+
     enum TimingPoint { WAKE_DETECTED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
     static String timingId(){return timingId;}
     static void mark(Context c,String id,TimingPoint point,long at){
@@ -36,7 +45,7 @@ final class HandsFreeController {
     private static boolean dataReady(Context c){android.os.UserManager u=c.getSystemService(android.os.UserManager.class);return u!=null&&u.isUserUnlocked();}
     static boolean persistent(Context c){return dataReady(c)&&ListeningIntent.open(c).enabled();}
     static boolean optIn(Context c){recovery.reset();return ListeningIntent.open(c).set(true);}
-    static void disable(Context c,String reason){recovery.cancel();if(dataReady(c))ListeningIntent.open(c).set(false);stop(c,reason);}
+    static void disable(Context c,String reason){recovery.cancel();if(dataReady(c))ListeningIntent.open(c).set(false);if(stopHeadsetTurn!=null&&HeadsetRouteService.required(c))stopHeadsetTurn.run();stop(c,reason);}
     static void restore(Context context){
         Context c=context.getApplicationContext();
         android.os.UserManager user=c.getSystemService(android.os.UserManager.class);
@@ -83,14 +92,19 @@ final class HandsFreeController {
         if(!MosaicAssistantService.ready()){status(c,"האזנה קבועה מושהית · ממתין לחיבור עוזר Android");return;}
         if(session.isEmpty()||!FeedbackClips.valid(c.getFilesDir())){stop(c,"יש להכין משוב קולי והאזנה מתוך מוזאיק");return;}
         if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){status(c,"נדרשת הרשאת מיקרופון");return;}
+        if(HeadsetRouteService.required(c)&&HeadsetRouteService.current()==null){
+            status(c,"מכין ניתוב למיקרופון האוזניות");HeadsetRouteService.ensure(c,()->arm(c));return;
+        }
         recovery.cancel();
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
-                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<9)throw new IllegalStateException();
+                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<(HeadsetRouteService.required(c)?10:9))throw new IllegalStateException();
             token=UUID.randomUUID().toString();final String current=token;
             enabled=true;standbyRequested=true;handoff=new WakeHandoff();worker=null;
             PendingIntent callback=PendingIntent.getBroadcast(c,87,new Intent(c,WakeEventReceiver.class).setAction(current),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
             Intent service=service(c).putExtra("callback",callback);
+            life.mosaic.audio.HeadsetAudio headset=HeadsetRouteService.current();
+            if(HeadsetRouteService.required(c)){if(headset==null)throw new IllegalStateException();Bundle route=new Bundle();headset.put(route);service.putExtras(route);}
             connection=new ServiceConnection(){
                 public void onServiceConnected(ComponentName name,IBinder binder){
                     if(!enabled||!current.equals(token))return;
@@ -115,6 +129,14 @@ final class HandsFreeController {
         if(!enabled||!token.equals(intent.getAction())||!selected(c))return;
         if(intent.getBooleanExtra("owner_stop",false)){disable(c,"ההאזנה הקבועה הופסקה דרך ההתראה");return;}
         String state=intent.getStringExtra("state");
+        if("detected".equals(state)){
+            timingId=UUID.randomUUID().toString();
+            long detected=intent.getLongExtra("detected_elapsed_ms",-1),now=SystemClock.elapsedRealtime();
+            if(detected>=0&&detected<=now&&now-detected<=30000)mark(c,timingId,TimingPoint.WAKE_DETECTED,detected);
+            if(wakeAck!=null)wakeAck.cancel();wakeAck=new VoiceFeedback(c);
+            wakeAck.headset(HeadsetRouteService.current(),HeadsetRouteService.required(c));
+            wakeAck.play("ack",ok->{});return;
+        }
         if("health".equals(state)){
             try{org.json.JSONObject event=new org.json.JSONObject().put("type","wake_health").put("interactive",intent.getBooleanExtra("interactive",false));
                 for(String key:new String[]{"wall_ms","audio_ms","decode_ms","nonzero_blocks","max_rms"}){long value=intent.getLongExtra(key,-1);if(value<0||value>600000)return;event.put(key,value);}append(c,event);if(intent.getLongExtra("audio_ms",0)>=4000)recovery.reset();
@@ -124,9 +146,7 @@ final class HandsFreeController {
         if(!"wake".equals(state)&&!"error".equals(state)&&!"stopped".equals(state))return;
         handoff.result(state);
         if("wake".equals(state)){
-            timingId=UUID.randomUUID().toString();
-            long detected=intent.getLongExtra("detected_elapsed_ms",-1),now=SystemClock.elapsedRealtime();
-            if(detected>=0&&detected<=now&&now-detected<=30000)mark(c,timingId,TimingPoint.WAKE_DETECTED,detected);
+            if(timingId.isEmpty())timingId=UUID.randomUUID().toString();
             mark(c,timingId,TimingPoint.WAKE_CALLBACK_RECEIVED,SystemClock.elapsedRealtime());
             status(c,"זוהתה מילת העוררות · ממתין לשחרור מנוע");
             dispatch(c);
@@ -155,12 +175,15 @@ final class HandsFreeController {
     }
     static void stop(Context context,String reason){
         Context c=context.getApplicationContext();enabled=false;standbyRequested=false;token="";launchToken="";session="";
+        if(wakeAck!=null)wakeAck.cancel();
+        HeadsetRouteService.stop(c);
         TurnForegroundService.stop(c);
         try{c.stopService(service(c));}catch(Exception ignored){}
         unbind(c);worker=null;handoff=null;status(c,reason);
     }
     private static Intent service(Context c){return new Intent().setComponent(new ComponentName(COMPANION,COMPANION+".WakeListenService"));}
     private static void unbind(Context c){if(bound&&connection!=null){bound=false;try{c.unbindService(connection);}catch(Exception ignored){}}connection=null;}
+    static void stopAck(){if(wakeAck!=null)wakeAck.cancel();}
     static Intent turnIntent(Context c){launchToken=UUID.randomUUID().toString();return new Intent(c,VoiceActivity.class).putExtra("handsfree_token",launchToken);}
     static boolean consume(Intent intent){String value=intent.getStringExtra("handsfree_token");if(value==null||!value.equals(launchToken)||launchToken.isEmpty())return false;launchToken="";return true;}
 }

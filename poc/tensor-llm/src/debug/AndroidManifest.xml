@@ -3,4 +3,5 @@
         android:targetPackage="life.mosaic.tensorllm" android:functionalTest="true" />
     <instrumentation android:name="life.mosaic.tensorllm.WakeFixtureInstrumentation"
         android:targetPackage="life.mosaic.tensorllm" android:functionalTest="true" />
+    <instrumentation android:name="life.mosaic.tensorllm.HeadsetSetupInstrumentation" android:targetPackage="life.mosaic.tensorllm" android:functionalTest="true" />
 </manifest>

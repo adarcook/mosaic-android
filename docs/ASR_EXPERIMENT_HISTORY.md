@@ -971,3 +971,22 @@ setting, host numerical parity, audio, device, thermal, quality or latency resul
 Keep the historical outcomes and remaining acceptance gates; merge authorization
 does not establish production readiness. Reproduction remains documented in
 [tensor-g5-probe.md](tensor-g5-probe.md).
+
+
+### ASR-42 / VOICE-20 — מיקרופון אוזניות לאורך שיחה, 31.10.2026
+
+Baseline/rollback: `bd8701a17a0358d80d7f7042f53919ffdcc7f3d9` (#58 foundation).
+Hypothesis: one foreground communication-route owner, verified headset input before
+ready and guarded output can connect Pixel Buds wake/capture/reply without changing
+models. Candidate Voice 0.27/code30 + wake0.9/code10; exact commit/artifacts belong
+in installation evidence, not invented here. Changed factors: headset opt-in,
+VOICE_COMMUNICATION capture, transient signed route fields, communication output,
+pre-teardown acknowledgement and headset screen-wake suppression. CPU Zipformer
+KWS/ASR + BlueTTS and Gemma NPU/model hashes/settings remain unchanged.
+154 controller and 11 companion JVM tests, local APK builds and package dispatch
+verification passed. No input audio was used by host tests. Physical acoustic
+quality, sustained screen-off turn, calls/reconnection, false wakes, battery and
+thermal effects remain pending. This is not identical-PCM model A/B or measured
+speed improvement. Protocol, contract, privacy/retention and acceptance defined
+before installation: [headset route](bluetooth-headset-route.md#asr-42--voice-20--integration-2026-10-31).
+No roadmap completion or merge. Append actual device evidence here after deployment.

@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -18,6 +19,7 @@
             </intent-filter>
         </activity>
         <receiver android:name=".WakeEventReceiver" android:exported="false" />
+        <service android:name=".HeadsetRouteService" android:exported="false" android:foregroundServiceType="microphone|mediaPlayback" />
         <service android:name=".TurnForegroundService" android:exported="false" android:foregroundServiceType="microphone|mediaPlayback" />
         <service android:name=".MosaicAssistantService" android:permission="android.permission.BIND_VOICE_INTERACTION" android:exported="true">
             <intent-filter><action android:name="android.service.voice.VoiceInteractionService" /></intent-filter>

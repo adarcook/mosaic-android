@@ -23,7 +23,7 @@ final class VoiceScreen {
     private final Activity activity;
     final TextView asr, llm, tts, transcript, answer, status;
     final Button talk, stop, setup, export, archive, warm, notificationAccess, notificationCheck;
-    final CheckBox beam2, zipformer;
+    final CheckBox beam2, zipformer, headsetMode;
     final Button handsfreeButton, assistantButton, wakeExport, serviceProbe, feedbackPreview, personalCommands;
     final TextView handsfreeStatus;
     final ProgressBar asrProgress, llmProgress, ttsProgress;
@@ -193,6 +193,8 @@ final class VoiceScreen {
         addButton(settings, warm);
         addButton(settings, setup);
         addButton(settings, archive);
+        headsetMode = checkbox("האזנה דרך האוזניות · ללא מעבר למיקרופון הטלפון");
+        settings.addView(headsetMode);
         zipformer = checkbox("ניסוי: תמלול עברי עם Zipformer");
         beam2 = checkbox("ניסוי: Beam 2 ב־Whisper (ברירת מחדל: 5)");
         settings.addView(zipformer);

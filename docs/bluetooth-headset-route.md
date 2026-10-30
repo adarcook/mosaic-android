@@ -1,6 +1,8 @@
 # Pixel Buds Pro 2 — route foundation (2026-10-31)
 
-Status: implementation slice, disabled/unwired; no physical headset test or support claim.
+Status: integrated opt-in candidate; physical headset acceptance pending.
+The earlier unwired foundation below is retained as the design baseline. The
+following integration section supersedes its disabled/unwired status.
 Baseline and rollback: #57, `0f421abc7e569d7e15d986cc01730ca8e60c1f3f`.
 Main remains `613b71ebd3d94dcb7e84f70af058a818739fb3f9` (Voice 0.22).
 Reviewed open #54 timing, #55 bridge signing/install and #57 persistent recovery;
@@ -86,3 +88,58 @@ Before enabled product acceptance on Pixel + Pixel Buds Pro 2:
    communication link active; there is no low-power or battery claim yet.
 
 All acoustic, routing, power and sustained screen-off gates remain pending.
+
+## ASR-42 / VOICE-20 — integration, 2026-10-31
+
+Candidate: Voice 0.27-headset-route/code30 + wake 0.9-headset-input/code10.
+Baseline/rollback: #58 foundation `bd8701a17a0358d80d7f7042f53919ffdcc7f3d9`.
+HeadsetRouteService is now the one foreground route/focus owner across the whole
+interaction. It promotes microphone/mediaPlayback FGS before requesting focus,
+requires existing assistant/microphone/notification opt-in, and uses the normal
+MODIFY_AUDIO_SETTINGS permission. No Bluetooth scanning, pairing, device-address
+storage or additional runtime permission grant is introduced.
+
+The visible headset checkbox defaults off. In headset mode, exactly one available
+HFP/LE communication sink and exactly one same-profile input are required; ambiguity
+or missing input pauses listening rather than choosing another device. Signed wake
+IPC and same-package TTS requests carry `headset_required`, `headset_sink`,
+`headset_input`, `headset_type` as transient positive IDs/type. These IDs expire on
+route loss and are never saved in preferences or logs. Controller requires companion
+code10 for headset mode. Companion and capture prefer VOICE_COMMUNICATION input,
+discard startup PCM until AudioRecord confirms the expected source, and check the
+source/configuration/silencing on each block before inference/storage. Source IDs
+are distinct from sink IDs. HeadsetEvidence defines directional ID/type checks.
+
+A new authenticated `detected` callback precedes companion/native teardown. It
+requests an 80ms generated acknowledgement tone without any model. Final `wake`
+plus Binder-death still gates heavy-worker dispatch. The normal ready clip follows
+verified capture; receiving an acknowledgement is not permission to start speaking.
+Headset turns do not request screen wake or KEEP_SCREEN_ON. Existing lock-screen
+private-notification refusal remains in force; headset presence is not identity.
+
+Feedback and TTS use communication AudioAttributes, explicitly prefer the chosen
+sink, and submit only silence until AudioTrack reports that sink. Silence frames
+are excluded from speech playback-head accounting. Route callbacks pause/flush on
+loss; per-write/head checks stop further speech submission. There is no application
+fallback to the speaker. Android route changes are asynchronous: device trials
+must still verify no residual buffered speech leaks during a disconnect. The route
+owner stops capture/feedback/workers before releasing focus on interruption.
+
+Stop cancels saved listening intent. Disconnect/focus loss pauses the current
+request; stale/partial requests are not resumed. A later headset-device-added event
+may initiate a fresh bounded restore only while saved listening consent remains
+on. No automatic restart after explicit Stop. Without a connected headset the
+opt-in mode remains paused and the user can select phone mode visibly.
+
+Host result: 154 controller tests (including route evidence/lifecycle tests) and
+11 unchanged companion tests pass; both local APK builds and pinned dispatch check
+pass. Exact-source CI, guarded installation and physical route observations are
+recorded in #58 follow-up evidence. No acoustic wake, latency, intelligibility,
+reconnect/call, screen-off full turn or battery pass is claimed by host tests.
+CPU keyword/ASR and BlueTTS, Gemma NPU, model hashes and thresholds are unchanged.
+No model download, notification grant or keyguard bypass is needed for installation.
+
+Owner-requested setup can use debug-only HeadsetSetupInstrumentation to set only
+`headset_mode=true`; it does not grant permissions or silently enable saved
+listening consent. The normal visible checkbox provides the same mode choice.
+Acceptance and matched phone/buds battery protocol remain the physical gate above.

@@ -5,12 +5,13 @@ plugins {
 android {
     namespace = "life.mosaic.zipformergate"
     compileSdk = 35
+    sourceSets.getByName("main").java.srcDir("../headset-audio/src/main/java")
     defaultConfig {
         applicationId = "life.mosaic.zipformergate"
         minSdk = 31
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.8.2-persistent-stop"
+        versionCode = 10
+        versionName = "0.9-headset-input"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

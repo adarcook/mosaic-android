@@ -21,6 +21,7 @@ class WakeListenService : Service() {
     private var workerStarted = false
     @Volatile private var ownerStopped = false
     private var reply: PendingIntent? = null
+    private var headset: life.mosaic.audio.HeadsetAudio? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -46,6 +47,7 @@ class WakeListenService : Service() {
         if (callback == null || callback.creatorPackage != "life.mosaic.tensorllm") {
             stopSelf(); return START_NOT_STICKY
         }
+        try { headset=life.mosaic.audio.HeadsetAudio.read(requireNotNull(intent).extras ?: Bundle()) } catch (_: Exception) { stopSelf(); return START_NOT_STICKY }
         reply = callback
         try {
             val manager = getSystemService(NotificationManager::class.java)
@@ -91,13 +93,15 @@ class WakeListenService : Service() {
             stream = recognizer.createStream()
             val minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             require(minimum > 0)
-            val recorder = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
+            val recorder = AudioRecord(if(headset!=null) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minimum * 4, 12800))
             mic = recorder
             require(recorder.state == AudioRecord.STATE_INITIALIZED)
             if (!running) return
+            headset?.prefer(getSystemService(AudioManager::class.java),recorder)
             recorder.startRecording()
             require(recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
+            headset?.awaitInput(getSystemService(AudioManager::class.java),recorder)
             report("listening")
             val samples = ShortArray(1600)
             var streamSamples = 0
@@ -110,6 +114,7 @@ class WakeListenService : Service() {
                 val count = recorder.read(samples, 0, samples.size, AudioRecord.READ_BLOCKING)
                 if (!running) break
                 require(count > 0)
+                headset?.requireInput(getSystemService(AudioManager::class.java),recorder)
                 require(recorder.activeRecordingConfiguration?.isClientSilenced != true)
                 val currentStream = requireNotNull(stream)
                 currentStream.acceptWaveform(FloatArray(count) { samples[it] / 32768f }, 16000)
@@ -134,7 +139,7 @@ class WakeListenService : Service() {
                     catch (_: Exception) { running=false }
                     healthAt=now;healthSamples=0;nonzeroBlocks=0;decodeMs=0;maxRms=0
                 }
-                if (WakePhrase.matches(recognizer.getResult(currentStream).keyword)) { detectedAt=SystemClock.elapsedRealtime();result = "wake"; break }
+                if (WakePhrase.matches(recognizer.getResult(currentStream).keyword)) { detectedAt=SystemClock.elapsedRealtime();result = "wake"; report("detected",detectedAt); break }
                 if (streamSamples >= 16000 * 30) {
                     currentStream.release(); stream = recognizer.createStream(); streamSamples = 0
                 }

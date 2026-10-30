@@ -2,14 +2,15 @@ plugins { id("com.android.application") version "8.7.3" }
 android {
     namespace = "life.mosaic.tensorllm"
     compileSdk = 35
+    sourceSets.getByName("main").java.srcDir("../headset-audio/src/main/java")
     sourceSets.getByName("main").java.srcDir("../model-storage/src/main/java")
     sourceSets.getByName("main").assets.srcDir("../../scripts/voice_metadata")
     defaultConfig {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 29
-        versionName = "0.26.1-background-recovery"
+        versionCode = 30
+        versionName = "0.27-headset-route"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

@@ -7,7 +7,7 @@ import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
 
-/** API 31+ route foundation. Not yet wired into wake IPC or enabled in the product. */
+/** API 31+ route lease owned by HeadsetRouteService across the spoken interaction. */
 final class AndroidHeadsetRoute implements AutoCloseable {
     static final long SELECTION_TIMEOUT_MS = 5000;
     private final AudioManager audio;
