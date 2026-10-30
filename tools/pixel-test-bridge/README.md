@@ -78,8 +78,6 @@ Requirements enforced by code:
 - GitHub-hosted debug signing may NOT match the APK you built with Android Studio: remote installation will then correctly refuse to proceed. A safe matching-signature strategy would be a later separate task.
 - Installing an approved source branch is security sensitive. Restrict write access to the repository and token, and disable remote install when not actively needed.
 
-## Security
-
 ## Persistent owner development installation
 
 For an owner who explicitly requests repeated automatic development updates, local

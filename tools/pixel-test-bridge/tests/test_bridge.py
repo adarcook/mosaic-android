@@ -1,6 +1,5 @@
 """Unit tests for parsing, permissions, checkpointing and never-replay behavior."""
 import io
-import hashlib
 import json
 import os
 from pathlib import Path
