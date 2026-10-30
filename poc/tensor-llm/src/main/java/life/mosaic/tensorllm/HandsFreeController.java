@@ -102,6 +102,7 @@ final class HandsFreeController {
     static void receive(Context context,Intent intent){
         Context c=context.getApplicationContext();
         if(!enabled||!token.equals(intent.getAction())||!selected(c))return;
+        if(intent.getBooleanExtra("owner_stop",false)){disable(c,"ההאזנה הקבועה הופסקה דרך ההתראה");return;}
         String state=intent.getStringExtra("state");
         if("health".equals(state)){
             try{org.json.JSONObject event=new org.json.JSONObject().put("type","wake_health").put("interactive",intent.getBooleanExtra("interactive",false));

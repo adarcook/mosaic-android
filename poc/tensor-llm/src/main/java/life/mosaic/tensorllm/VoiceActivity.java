@@ -125,7 +125,7 @@ public final class VoiceActivity extends Activity {
         handsfreeTurn=false;autoCapture=false;
         Runnable leave=()->{MosaicSessionService.close();setShowWhenLocked(false);setTurnScreenOn(false);if(locked())moveTaskToBack(true);};
         if(success){feedback.cancel();if((foreground||TurnForegroundService.active())&&HandsFreeController.requested())HandsFreeController.arm(this);else TurnForegroundService.stop(this);leave.run();}
-        else{HandsFreeController.stop(this,"הפנייה נעצרה · האזנה קבועה תתחדש כשהתנאים יאפשרו");feedback.play("error",ok->leave.run());HandsFreeController.recover(this);}
+        else{HandsFreeController.stop(this,"הפנייה נעצרה · האזנה קבועה תתחדש כשהתנאים יאפשרו");if(HandsFreeController.persistent(this))feedback.errorTone(leave);else feedback.play("error",ok->leave.run());HandsFreeController.recover(this);}
     }
     private void requestMic(){if(active||!foreground)return;if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},73);return;}begin();}
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){super.onRequestPermissionsResult(code,permissions,results);if(code==79){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)wakeSetup();else status.setText("נדרשת הרשאת התראה גלויה לעצירת שיחה ללא מסך");return;}if(code==75){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)wakeSetup();return;}if(code==73||code==74){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED&&foreground)begin(code==74);else{status.setText("לא אושרה הרשאת מיקרופון");screen.problem();controls(!active);}}}

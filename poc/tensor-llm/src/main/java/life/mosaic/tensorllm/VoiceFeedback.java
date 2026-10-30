@@ -13,6 +13,11 @@ final class VoiceFeedback {
     private volatile AudioTrack track;
     VoiceFeedback(Context context){this.context=context.getApplicationContext();}
     boolean playing(){Thread current=worker;return current!=null&&current.isAlive();}
+    void errorTone(Runnable done){
+        cancel();final int token=generation;
+        try{ToneGenerator tone=new ToneGenerator(AudioManager.STREAM_MUSIC,60);tone.startTone(ToneGenerator.TONE_PROP_NACK,120);main.postDelayed(()->{tone.release();if(token==generation)done.run();},160);}
+        catch(Exception unavailable){done.run();}
+    }
     void play(String id,java.util.function.Consumer<Boolean> done){
         play(id,at->{},done);
     }
