@@ -33,9 +33,10 @@ final class HandsFreeController {
     static boolean requested(){return standbyRequested;}
     static void turnRunning(boolean value){turnRunning=value;}
     static boolean configured(Context c){String value=android.provider.Settings.Secure.getString(c.getContentResolver(),"voice_interaction_service");return new ComponentName(c,MosaicAssistantService.class).equals(ComponentName.unflattenFromString(value==null?"":value));}
-    static boolean persistent(Context c){return ListeningIntent.open(c).enabled();}
+    private static boolean dataReady(Context c){android.os.UserManager u=c.getSystemService(android.os.UserManager.class);return u!=null&&u.isUserUnlocked();}
+    static boolean persistent(Context c){return dataReady(c)&&ListeningIntent.open(c).enabled();}
     static boolean optIn(Context c){recoveryAttempts=0;return ListeningIntent.open(c).set(true);}
-    static void disable(Context c,String reason){ListeningIntent.open(c).set(false);stop(c,reason);}
+    static void disable(Context c,String reason){if(dataReady(c))ListeningIntent.open(c).set(false);stop(c,reason);}
     static void restore(Context context){
         Context c=context.getApplicationContext();
         android.os.UserManager user=c.getSystemService(android.os.UserManager.class);
@@ -58,8 +59,9 @@ final class HandsFreeController {
         event.put("at_ms",System.currentTimeMillis());
         try(java.io.FileOutputStream out=new java.io.FileOutputStream(file,true)){out.write((event+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));}
     }
-    static String status(Context c){return c.getSharedPreferences("handsfree",0).getString("status","האזנה כבויה · צריך להפעיל פעם אחת לפני נעילה");}
+    static String status(Context c){return dataReady(c)?c.getSharedPreferences("handsfree",0).getString("status","האזנה קבועה כבויה · נדרשת הפעלה ראשונית"):"ממתין לפתיחת המכשיר הראשונה";}
     static void status(Context c,String text){
+        if(!dataReady(c))return;
         c.getSharedPreferences("handsfree",0).edit().putString("status",text).apply();
         try {
             append(c,new org.json.JSONObject().put("status",text));
