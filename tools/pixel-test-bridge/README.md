@@ -2,7 +2,12 @@
 
 An opt-in local worker that polls one PUBLIC GitHub issue over outbound HTTPS, performs a narrow set of Android Debug Bridge (ADB) operations, and writes status-only results to that issue. No Internet-facing desktop API and no general shell execution.
 
-Queue: https://github.com/adarcook/mosaic-android/issues/46
+Active enrolled-worker queue: https://github.com/adarcook/mosaic-android/issues/56
+
+Historical prototype queue #46 is retired for new commands. The elevated original
+worker can remain idle there until its owner closes that old terminal. The repaired
+worker uses a separate local config/checkpoint and loopback health port 8766; it
+does not compete with the old worker for commands.
 
 This first bridge can check whether the Pixel is connected, inspect whether the Mosaic voice app is installed, launch it, run a basic process smoke check and optionally install a CI-built Mosaic Voice APK. It does NOT record microphones, read WhatsApp content, capture arbitrary logcat, execute arbitrary commands, test actual ASR/LLM/TTS, click Android permission dialogs or control the screen.
 
@@ -17,7 +22,7 @@ Requirements: Python 3.10+ (3.12 recommended), Android Studio with SDK platform-
         cd ..\mosaic-pixel-bridge\tools\pixel-test-bridge
         Copy-Item config.example.json config.json
 
-2. Open config.json in Notepad. The example already contains queue issue number 46. Replace the adb, aapt and apksigner values with the installed SDK tools. For example, these JSON strings use forward slashes and need YOUR actual Windows username and build-tools version:
+2. Open config.json in Notepad. The example contains active queue issue number 56. Replace the adb, aapt and apksigner values with the installed SDK tools. For example, these JSON strings use forward slashes and need YOUR actual Windows username and build-tools version:
 
         adb: C:/Users/YOU/AppData/Local/Android/Sdk/platform-tools/adb.exe
         aapt: C:/Users/YOU/AppData/Local/Android/Sdk/build-tools/35.0.0/aapt.exe
@@ -55,7 +60,7 @@ Requirements: Python 3.10+ (3.12 recommended), Android Studio with SDK platform-
 
    Init SKIPS previously posted comments. Keep the PowerShell window running for remote actions. Stop with Ctrl+C. A local health endpoint is available only at http://127.0.0.1:8765/health. It is not reachable directly from ChatGPT or through the tailnet.
 
-6. Once the worker is running, post a NEW comment to issue #46 using exactly one of these formats (one action per comment):
+6. Once the worker is running, post a NEW comment to issue #56 using exactly one of these formats (one action per comment):
 
         /mosaic-test {"action":"status"}
         /mosaic-test {"action":"device"}
