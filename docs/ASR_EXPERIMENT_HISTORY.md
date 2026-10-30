@@ -843,6 +843,19 @@ are pending. Full reboot and real owner acoustic acceptance remain unverified.
 Source base/rollback `60ad977803edf4620ec9c365a1fdcb37769ade3e`; details/limits and
 primary Android sources in [voice-wake-recovery.md](voice-wake-recovery.md).
 
+ASR-41 installation/observation: source `d39b266ec8cc6db8d7f8270447ad0d554cd22a06`
+passed all four hosted workflows. Voice 0.26/code28 and wake 0.8.2/code9 installed
+through queue #56 with original signer, unchanged payload and pulled-back hashes.
+Owner-requested durable choice was saved privately; dictionary compared unchanged.
+An app-owned process restart (no force-stop/role/permission grant) restored the
+system binding and automatically resumed listening without pressing activation.
+After deliberate SLEEP/Dozing, 30 health windows all reported interactive=false:
+152,417 ms wall / 152,400 ms processed input; assistant connection, listener and
+preference remained active. This is short non-interactive input/lifetime evidence,
+not real spoken wake/answer/rearm or battery acceptance. Full Android reboot and
+owner acoustic retry remain pending. Hashes, CI/receipt links, failed privileged
+refresh attempt (not bypassed) and limits are appended in the detailed record.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

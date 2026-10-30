@@ -201,6 +201,50 @@ off, and existing settings/data/models must be preserved.
 References: [selected assistant lifetime](https://developer.android.com/reference/android/service/voice/VoiceInteractionService),
 [microphone foreground-service provider exception](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start#wiu-exempt).
 
+## ASR-41 installation and controlled non-interactive observation
+
+Implementation `d39b266ec8cc6db8d7f8270447ad0d554cd22a06` passed all four CI
+workflows: Tensor `41099281666`, voice-loop `41099281634`, Hebrew Zipformer
+`41099281659`, Android Build `41099281627`. Local tests: 133 controller + 11
+companion; bridge extension: 25 tests and exact-source bridge CI passed.
+
+Both exact-source artifacts were installed through the enrolled bridge with the
+original certificate, identical non-signature payload and pulled-back APK checks:
+
+| Component | Artifact / ZIP SHA-256 | Original CI APK SHA-256 | Installed APK SHA-256 |
+|---|---|---|---|
+| Voice 0.26/code28 | 12998960085 / `356d71b7bd712a8efa5402f0a8365b445a6071debef4d00a5be026f8148be0e7` | `6c37e0bd61faf572ee2495a9cb908aa1296b32b5ae6ad71ef13c90a0aa8093fb` | `1b2018fcb4b9b85d440584aff9f4d90721ac60419b0ea3efc720d0c37d780c9e` |
+| Wake 0.8.2/code9 | 12997696865 / `deaf76f0c9b3b529387307d8c7d68dd93dfa376d3a7716fa5501859303b9df9b` | `edf33719d0cea43afa19e118b0efe687cd0f1c8187f845b9e2d74fabf9dab4dc` | `4cb320db6698b6f109b1c7207e41e89c5f8c3f85bd6076c640b4647e09c142be` |
+
+[Controller receipt](https://github.com/adarcook/mosaic-android/issues/56#issuecomment-6529247825),
+[companion receipt](https://github.com/adarcook/mosaic-android/issues/56#issuecomment-6529196290).
+Certificate remains `ef154770847924693d77aaceda155a8ef66751f30d2219c72e967ea0a6a61e35`.
+
+The owner's explicit persistent-listening choice was saved privately, retaining
+all other preference entries and a private backup. Dictionary content compared
+unchanged against the pre-test copy; SHA-256
+`3032dda93ddc9c31217f8db5348654577ccb5390da61ef6f0f30f823577c3aa1`.
+No uninstall, data/model deletion, role selection or Android permission grant.
+
+The platform's privileged temporary-disable command was denied for lacking
+ACCESS_VOICE_INTERACTION_SERVICE; no permission was granted or denial bypassed.
+After the update, an app-owned process termination (not force-stop) let the
+ordinary system binding restart the selected assistant. Its connection became
+non-null and the saved choice automatically started the wake listener without
+pressing the activation button. No further instrumentation was run after this
+binding restoration.
+
+A deliberate SLEEP request then reported Dozing. Across **30** subsequent health
+windows, every sample reported `interactive=false`, totaling **152,417 ms wall**
+and **152,400 ms processed PCM**. The wake service, non-null assistant connection
+and durable flag remained active afterward. Zero detected-wake markers occurred
+in this interval. This establishes sustained non-interactive capture/processing
+for this short observation; it is not speech intelligibility, controlled acoustic
+wake, full spoken-turn/rearm, power, false-wake-rate or daily-use acceptance.
+Android reboot was not tested. The listener remains enabled at the owner's request.
+All private diagnostics/PCM/model copies remain under ignored local build storage
+or the local user profile. No merge or roadmap completion.
+
 - [Pinned KeywordSpotter Kotlin API](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/kotlin-api/KeywordSpotter.kt).
 - [Pinned keyword token parser](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/csrc/utils.cc).
 - [Voice v0.1 acceptance](https://github.com/adarcook/mosaic-docs/blob/main/docs/releases/VOICE_V1_HANDSFREE_ACCEPTANCE.md).
