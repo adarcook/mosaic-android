@@ -129,8 +129,8 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def download_verified_artifact(github, sha, target):
-    artifact = github.successful_artifact(sha)
+def download_verified_artifact(github, sha, target, component="voice"):
+    artifact = github.successful_artifact(sha, component)
     artifact_id = artifact["id"]
     # First request uses PAT; redirected short-lived blob request does not.
     source_url = github.root + "/actions/artifacts/%d/zip" % artifact_id
@@ -207,10 +207,12 @@ class Pixel:
             pid = self.adb_command("shell", "pidof", PACKAGE, success=(0, 1))
             return {"activity_start_sent": True, "voice_process_detected": bool(pid.strip()),
                     "note": "Basic launch smoke only; not voice or notification acceptance."}
-        if action == "install_ci_apk":
+        if action in ("install_ci_apk", "install_ci_wake"):
             if not self.allow_install:
                 raise BridgeError("Remote installation disabled locally (allow_install=false).")
             sha = command["sha"]
+            component = "wake" if action == "install_ci_wake" else "voice"
+            package = "life.mosaic.zipformergate" if component == "wake" else PACKAGE
             serial = selected_serial(self.adb, self.serial, self.identity)
             # Freeze one enrolled transport for the complete update transaction.
             def adb(*args, timeout=35):
@@ -220,14 +222,14 @@ class Pixel:
             with tempfile.TemporaryDirectory(prefix="mosaic-test-") as tmp:
                 folder = Path(tmp)
                 archive, apk = folder / "artifact.zip", folder / "voice.apk"
-                artifact = download_verified_artifact(github, sha, archive)
+                artifact = download_verified_artifact(github, sha, archive, component)
                 extract_single_apk(archive, apk)
                 manifest = process([self.aapt, "dump", "badging", str(apk)])
-                if not re.search(r"^package: name='life\.mosaic\.tensorllm'", manifest, re.MULTILINE):
-                    raise BridgeError("APK package does not match the voice-app allowlist.")
+                if not re.search(r"^package: name='%s'" % re.escape(package), manifest, re.MULTILINE):
+                    raise BridgeError("APK package does not match the fixed component allowlist.")
                 new_signer = signer(self.apksigner, apk)
                 original_hash = sha256(apk)
-                installed = adb("shell", "pm", "path", PACKAGE)
+                installed = adb("shell", "pm", "path", package)
                 if "package:" in installed:
                     base = next((line.removeprefix("package:") for line in installed.splitlines()
                                  if line.startswith("package:") and line.endswith("/base.apk")), None)
@@ -258,7 +260,7 @@ class Pixel:
                 result = adb("install", "-r", str(apk), timeout=180)
                 if "Success" not in result:
                     raise BridgeError("Android did not confirm successful installation.")
-                current = adb("shell", "pm", "path", PACKAGE)
+                current = adb("shell", "pm", "path", package)
                 current_base = next((line.removeprefix("package:").strip() for line in current.splitlines()
                                      if line.startswith("package:") and line.strip().endswith("/base.apk")), None)
                 if not current_base:
@@ -267,7 +269,7 @@ class Pixel:
                 adb("pull", current_base, str(pulled), timeout=150)
                 if sha256(pulled) != candidate_hash or signer(self.apksigner, pulled) != signer(self.apksigner, apk):
                     raise BridgeError("Update reported success but installed hash/signer verification failed.")
-                return {"installed": True, "commit": sha[:12], "package": PACKAGE,
+                return {"installed": True, "commit": sha[:12], "package": package,
                         "artifact_id": artifact["id"], "ci_apk_sha256": original_hash,
                         "installed_apk_sha256": candidate_hash,
                         "local_signing": original_hash != candidate_hash, "verified_after_install": True}

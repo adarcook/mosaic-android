@@ -76,6 +76,16 @@ The local config has allow_install set to false. To enable the guarded install c
 
         /mosaic-test {"action":"install_ci_apk","sha":"REPLACE_WITH_EXACT_40_HEX_SHA"}
 
+The signed wake companion has its own fixed command:
+
+        /mosaic-test {"action":"install_ci_wake","sha":"REPLACE_WITH_EXACT_40_HEX_SHA"}
+
+It accepts only `life.mosaic.zipformergate` from the successful exact-SHA
+`Zipformer voice loop opt-in checks` / `mosaic-zipformer-local-wake-apk` artifact.
+All digest, enrolled device/certificate, local signing/payload, downgrade and
+pulled-back verification gates are shared. Package names/URLs cannot be supplied
+in a queue command. Install a required companion update before its controller.
+
 Requirements enforced by code:
 - Only repository adarcook/mosaic-android, an owner-repo feature/ or experiment/ branch, a successful build of that EXACT SHA, and the pinned mosaic-tensor-local-llm-apk artifact.
 - Exactly one appropriately sized APK. aapt must report package ID life.mosaic.tensorllm.

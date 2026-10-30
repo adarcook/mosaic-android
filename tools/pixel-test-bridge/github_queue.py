@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 REPO = "adarcook/mosaic-android"
 OWNER = "adarcook"
 PREFIX = "/mosaic-test "
-ACTIONS = {"status", "device", "inspect", "launch", "smoke", "install_ci_apk"}
+ACTIONS = {"status", "device", "inspect", "launch", "smoke", "install_ci_apk", "install_ci_wake"}
 
 
 class BridgeError(Exception):
@@ -25,7 +25,7 @@ def parse_command(body):
         return None
     if not isinstance(data, dict) or data.get("action") not in ACTIONS:
         return None
-    if data["action"] == "install_ci_apk":
+    if data["action"] in ("install_ci_apk", "install_ci_wake"):
         if set(data) != {"action", "sha"} or not re.fullmatch("[0-9a-f]{40}", str(data["sha"])):
             return None
     elif set(data) != {"action"}:
@@ -88,10 +88,15 @@ class GitHub:
         content = "Mosaic bridge result\n\n" + json.dumps(body, ensure_ascii=False, sort_keys=True)[:900]
         self.request("/issues/%d/comments" % issue, {"body": content})
 
-    def successful_artifact(self, sha):
+    def successful_artifact(self, sha, component="voice"):
+        builds={"voice":("Tensor local LLM gate","mosaic-tensor-local-llm-apk"),
+                "wake":("Zipformer voice loop opt-in checks","mosaic-zipformer-local-wake-apk")}
+        if component not in builds:
+            raise BridgeError("Unsupported fixed APK component.")
+        workflow_name,artifact_name=builds[component]
         result = self.request("/actions/runs?head_sha=%s&per_page=100" % sha)
         candidates = [run for run in result.get("workflow_runs", [])
-                      if run.get("name") == "Tensor local LLM gate"
+                      if run.get("name") == workflow_name
                       and run.get("head_sha") == sha
                       and run.get("conclusion") == "success"
                       and run.get("event") == "pull_request"
@@ -102,7 +107,7 @@ class GitHub:
         run = sorted(candidates, key=lambda x: x.get("run_started_at") or "", reverse=True)[0]
         artifacts = self.request("/actions/runs/%d/artifacts?per_page=100" % run["id"])
         matches = [a for a in artifacts.get("artifacts", [])
-                   if a.get("name") == "mosaic-tensor-local-llm-apk" and not a.get("expired")]
+                   if a.get("name") == artifact_name and not a.get("expired")]
         if len(matches) != 1:
             raise BridgeError("No unique current APK artifact found.")
         artifact = matches[0]

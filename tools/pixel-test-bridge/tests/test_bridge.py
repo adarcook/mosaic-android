@@ -23,6 +23,9 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(parse_command('/mosaic-test {"action":"%s"}' % action), {"action": action})
         self.assertEqual(parse_command('/mosaic-test {"action":"install_ci_apk","sha":"%s"}' % ("a" * 40)),
                          {"action": "install_ci_apk", "sha": "a" * 40})
+        self.assertEqual(parse_command('/mosaic-test {"action":"install_ci_wake","sha":"%s"}' % ("a" * 40)),
+                         {"action": "install_ci_wake", "sha": "a" * 40})
+        self.assertIsNone(parse_command('/mosaic-test {"action":"install_ci_wake","sha":"%s","package":"evil"}' % ("a"*40)))
 
     def test_reject_malformed_commands(self):
         for text in (
@@ -75,6 +78,14 @@ class CommandTests(unittest.TestCase):
 
 
 class GitHubProvenanceTests(unittest.TestCase):
+    def test_wake_requires_its_own_exact_workflow_and_artifact(self):
+        from github_queue import GitHub
+        gh=GitHub("synthetic-test")
+        run={"name":"Zipformer voice loop opt-in checks","head_sha":"a"*40,"conclusion":"success","event":"pull_request","head_repository":{"full_name":"adarcook/mosaic-android"},"head_branch":"feature/wake","id":321}
+        gh.request=lambda path: {"workflow_runs":[run]} if path.startswith("/actions/runs?") else {"artifacts":[{"name":"mosaic-zipformer-local-wake-apk","id":888,"expired":False,"digest":"sha256:"+"b"*64}]}
+        self.assertEqual(gh.successful_artifact("a"*40,"wake")["id"],888)
+        with self.assertRaises(BridgeError):gh.successful_artifact("a"*40,"voice")
+        with self.assertRaises(BridgeError):gh.successful_artifact("a"*40,"arbitrary")
     def test_exact_sha_owner_repo_and_success_required(self):
         from github_queue import GitHub
         sha = "a" * 40
@@ -195,22 +206,23 @@ class DeviceTests(unittest.TestCase):
 
 
 class InstallFlowTests(unittest.TestCase):
-    def fixture(self, root, signing=True):
+    def fixture(self, root, signing=True, component="voice"):
+        package="life.mosaic.zipformergate" if component=="wake" else "life.mosaic.tensorllm"
         config={"allow_install":True,"allow_local_debug_signing":signing,
                 "device_identity":"synthetic-enrolled","trusted_signer_sha256":"a"*64,
                 "local_debug_keystore":str(root/"debug.keystore"),"adb":"adb","aapt":"aapt"}
         installs=[]
         def write_apk(path):
             with ZipFile(path,"w") as z: z.writestr("classes.dex",b"synthetic code")
-        def download(_gh,_sha,path):
+        def download(_gh,_sha,path,_component="voice"):
             apk=root/"ci.apk";write_apk(apk)
             with ZipFile(path,"w") as z: z.write(apk,"voice.apk")
             return {"id":777,"digest":"sha256:"+"c"*64}
         def run(args,**kwargs):
-            if args[0]=="aapt": return "package: name='life.mosaic.tensorllm' versionCode='25'"
+            if args[0]=="aapt": return "package: name='%s' versionCode='25'" % package
             action=args[3:]
             if action==["shell","getprop","ro.product.model"]: return "Pixel 10 Pro"
-            if action==["shell","pm","path","life.mosaic.tensorllm"]: return "package:/data/app/test/base.apk\n"
+            if action==["shell","pm","path",package]: return "package:/data/app/test/base.apk\n"
             if action[0]=="pull": write_apk(Path(action[-1]));return ""
             if action[0]=="install": installs.append(args);return "Success"
             raise AssertionError("Unexpected Android operation")
@@ -226,6 +238,19 @@ class InstallFlowTests(unittest.TestCase):
             self.assertTrue(result["verified_after_install"])
             self.assertEqual(len(calls),1)
             self.assertEqual(calls[0][3:5],["install","-r"])
+
+    def test_wake_update_is_fixed_to_companion_and_rejects_controller_artifact(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for component in ["wake","voice"]:
+                config,calls,download,run,sign,certificate=self.fixture(Path(tmp),component=component)
+                with patch("device.selected_serial",return_value="enrolled-usb"), patch("device.download_verified_artifact",side_effect=download), patch("device.process",side_effect=run), patch("device.locally_signed_copy",side_effect=sign), patch("device.signer",side_effect=certificate):
+                    if component=="wake":
+                        result=Pixel(config).execute({"action":"install_ci_wake","sha":"d"*40},None)
+                        self.assertEqual(result["package"],"life.mosaic.zipformergate");self.assertEqual(len(calls),1)
+                    else:
+                        with self.assertRaisesRegex(BridgeError,"fixed component allowlist"):
+                            Pixel(config).execute({"action":"install_ci_wake","sha":"d"*40},None)
+                        self.assertFalse(calls)
 
     def test_ci_signer_mismatch_without_local_signing_never_installs(self):
         with tempfile.TemporaryDirectory() as tmp:
