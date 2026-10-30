@@ -29,7 +29,7 @@ final class HandsFreeController {
     }
     static void headsetConnected(Context c){if(HeadsetRouteService.required(c)&&persistent(c)){recovery.reset();recover(c);}}
 
-    enum TimingPoint { WAKE_DETECTED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
+    enum TimingPoint { WAKE_DETECTED, ACK_REQUESTED, ACK_PLAYBACK_HEAD, ACK_COMPLETED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
     static String timingId(){return timingId;}
     static void mark(Context c,String id,TimingPoint point,long at){
         if(id.isEmpty())return;
@@ -135,14 +135,23 @@ final class HandsFreeController {
             if(detected>=0&&detected<=now&&now-detected<=30000)mark(c,timingId,TimingPoint.WAKE_DETECTED,detected);
             if(wakeAck!=null)wakeAck.cancel();wakeAck=new VoiceFeedback(c);
             wakeAck.headset(HeadsetRouteService.current(),HeadsetRouteService.required(c));
-            wakeAck.play("ack",ok->{});return;
+            final String current=token,id=timingId;handoff.ackStarted();
+            mark(c,id,TimingPoint.ACK_REQUESTED,SystemClock.elapsedRealtime());
+            wakeAck.play("ack",at->mark(c,id,TimingPoint.ACK_PLAYBACK_HEAD,at),ok->{
+                if(!enabled||!current.equals(token)||handoff==null)return;
+                if(!ok&&HeadsetRouteService.required(c)){interrupted(c,"משוב האוזניות לא הושמע · ההאזנה מושהית");return;}
+                if(ok)mark(c,id,TimingPoint.ACK_COMPLETED,SystemClock.elapsedRealtime());
+                handoff.ackCompleted();dispatch(c);
+            });return;
         }
+        if(("health".equals(state)||"listening".equals(state))&&HeadsetRouteService.required(c)&&!intent.getBooleanExtra("headset_verified",false)){headsetLost(c);return;}
         if("health".equals(state)){
             try{org.json.JSONObject event=new org.json.JSONObject().put("type","wake_health").put("interactive",intent.getBooleanExtra("interactive",false));
+                if(HeadsetRouteService.required(c))event.put("headset_verified",true).put("headset_route_type",intent.getIntExtra("headset_route_type",-1));
                 for(String key:new String[]{"wall_ms","audio_ms","decode_ms","nonzero_blocks","max_rms"}){long value=intent.getLongExtra(key,-1);if(value<0||value>600000)return;event.put(key,value);}append(c,event);if(intent.getLongExtra("audio_ms",0)>=4000)recovery.reset();
             }catch(Exception ignored){}return;
         }
-        if("listening".equals(state)){status(c,"ממתין ל־מוזאיק · האזנה מקומית פעילה");TurnForegroundService.stop(c);return;}
+        if("listening".equals(state)){status(c,HeadsetRouteService.required(c)?"ממתין ל־מוזאיק באוזניות · המיקרופון אומת":"ממתין ל־מוזאיק · האזנה מקומית פעילה");TurnForegroundService.stop(c);return;}
         if(!"wake".equals(state)&&!"error".equals(state)&&!"stopped".equals(state))return;
         handoff.result(state);
         if("wake".equals(state)){

@@ -131,7 +131,7 @@ may initiate a fresh bounded restore only while saved listening consent remains
 on. No automatic restart after explicit Stop. Without a connected headset the
 opt-in mode remains paused and the user can select phone mode visibly.
 
-Host result: 154 controller tests (including route evidence/lifecycle tests) and
+Host result: 157 controller tests (including route evidence/lifecycle tests) and
 11 unchanged companion tests pass; both local APK builds and pinned dispatch check
 pass. Exact-source CI, guarded installation and physical route observations are
 recorded in #58 follow-up evidence. No acoustic wake, latency, intelligibility,
@@ -143,3 +143,9 @@ Owner-requested setup can use debug-only HeadsetSetupInstrumentation to set only
 `headset_mode=true`; it does not grant permissions or silently enable saved
 listening consent. The normal visible checkbox provides the same mode choice.
 Acceptance and matched phone/buds battery protocol remain the physical gate above.
+
+ASR-42 integration refinement: request dispatch also waits for acknowledgement
+completion so a fast native teardown cannot cancel the short ack. Three new JVM
+race tests pass. ACK_REQUESTED/ACK_PLAYBACK_HEAD/ACK_COMPLETED are monotonic
+software markers, not measured audibility. Verified headset health records contain
+only a boolean and route type, never device IDs or addresses.

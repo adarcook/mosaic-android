@@ -983,10 +983,16 @@ in installation evidence, not invented here. Changed factors: headset opt-in,
 VOICE_COMMUNICATION capture, transient signed route fields, communication output,
 pre-teardown acknowledgement and headset screen-wake suppression. CPU Zipformer
 KWS/ASR + BlueTTS and Gemma NPU/model hashes/settings remain unchanged.
-154 controller and 11 companion JVM tests, local APK builds and package dispatch
+157 controller and 11 companion JVM tests, local APK builds and package dispatch
 verification passed. No input audio was used by host tests. Physical acoustic
 quality, sustained screen-off turn, calls/reconnection, false wakes, battery and
 thermal effects remain pending. This is not identical-PCM model A/B or measured
 speed improvement. Protocol, contract, privacy/retention and acceptance defined
 before installation: [headset route](bluetooth-headset-route.md#asr-42--voice-20--integration-2026-10-31).
 No roadmap completion or merge. Append actual device evidence here after deployment.
+
+ASR-42 integration refinement: request dispatch also waits for acknowledgement
+completion so a fast native teardown cannot cancel the short ack. Three new JVM
+race tests pass. ACK_REQUESTED/ACK_PLAYBACK_HEAD/ACK_COMPLETED are monotonic
+software markers, not measured audibility. Verified headset health records contain
+only a boolean and route type, never device IDs or addresses.

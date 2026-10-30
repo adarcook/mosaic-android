@@ -132,6 +132,7 @@ class WakeListenService : Service() {
                 val now = SystemClock.elapsedRealtime()
                 if (now - healthAt >= 5000) {
                     try { reply?.send(this, 0, Intent().putExtra("state", "health")
+                        .putExtra("headset_verified",headset!=null).putExtra("headset_route_type",headset?.type ?: -1)
                         .putExtra("wall_ms", now-healthAt).putExtra("audio_ms", healthSamples*1000/16000)
                         .putExtra("decode_ms", decodeMs).putExtra("nonzero_blocks", nonzeroBlocks)
                         .putExtra("max_rms", maxRms)
@@ -161,7 +162,7 @@ class WakeListenService : Service() {
     }
 
     private fun report(state: String, detectedAt: Long = -1L) {
-        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
+        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("headset_verified",state=="listening" && headset!=null).putExtra("headset_route_type",headset?.type ?: -1).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
     }
 
     private fun verify(dir: File) {
