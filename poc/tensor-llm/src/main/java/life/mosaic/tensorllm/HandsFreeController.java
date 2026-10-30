@@ -17,6 +17,8 @@ final class HandsFreeController {
     private static String token="",launchToken="",session="";
     private static WakeHandoff handoff;
     private static boolean bound, enabled, standbyRequested;
+    private static boolean turnRunning;
+    private static int recoveryAttempts;
     private static String timingId="";
     enum TimingPoint { WAKE_DETECTED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
     static String timingId(){return timingId;}
@@ -29,6 +31,25 @@ final class HandsFreeController {
     static boolean selected(Context c){return VoiceInteractionService.isActiveService(c,new ComponentName(c,MosaicAssistantService.class));}
     static boolean enabled(){return enabled;}
     static boolean requested(){return standbyRequested;}
+    static void turnRunning(boolean value){turnRunning=value;}
+    static boolean configured(Context c){String value=android.provider.Settings.Secure.getString(c.getContentResolver(),"voice_interaction_service");return new ComponentName(c,MosaicAssistantService.class).equals(ComponentName.unflattenFromString(value==null?"":value));}
+    static boolean persistent(Context c){return ListeningIntent.open(c).enabled();}
+    static boolean optIn(Context c){recoveryAttempts=0;return ListeningIntent.open(c).set(true);}
+    static void disable(Context c,String reason){ListeningIntent.open(c).set(false);stop(c,reason);}
+    static void restore(Context context){
+        Context c=context.getApplicationContext();
+        android.os.UserManager user=c.getSystemService(android.os.UserManager.class);
+        if(user==null||!user.isUserUnlocked())return;
+        if(!persistent(c)||enabled||turnRunning||TurnForegroundService.expected()||!selected(c)||!MosaicAssistantService.ready())return;
+        if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED
+                ||(Build.VERSION.SDK_INT>=33&&c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)){
+            status(c,"האזנה קבועה מושהית · נדרשות הרשאות מיקרופון והתראה");return;
+        }
+        if(!FeedbackClips.valid(c.getFilesDir())){status(c,"האזנה קבועה מושהית · יש להכין משוב קולי פעם אחת");return;}
+        if(session.isEmpty())verifiedSession(UUID.randomUUID().toString());
+        arm(c);
+    }
+    static void recover(Context context){Context c=context.getApplicationContext();if(!persistent(c))return;if(recoveryAttempts++>=3){status(c,"האזנה קבועה מושהית אחרי תקלה חוזרת · בדוק הרשאות וחיבור עוזר Android");return;}main.postDelayed(()->restore(c),3000);}
     static String session(){return session;}
     static void verifiedSession(String value){if(value==null||!value.matches("[a-f0-9-]{36}"))throw new IllegalArgumentException("Invalid standby session");session=value;}
     private static void append(Context c,org.json.JSONObject event)throws Exception{
@@ -50,11 +71,12 @@ final class HandsFreeController {
         Context c=context.getApplicationContext();
         if(enabled)return;
         if(!selected(c)){status(c,"יש לבחור את מוזאיק כעוזר ברירת המחדל");return;}
+        if(!MosaicAssistantService.ready()){status(c,"האזנה קבועה מושהית · ממתין לחיבור עוזר Android");return;}
         if(session.isEmpty()||!FeedbackClips.valid(c.getFilesDir())){stop(c,"יש להכין משוב קולי והאזנה מתוך מוזאיק");return;}
         if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){status(c,"נדרשת הרשאת מיקרופון");return;}
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
-                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<8)throw new IllegalStateException();
+                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<9)throw new IllegalStateException();
             token=UUID.randomUUID().toString();final String current=token;
             enabled=true;standbyRequested=true;handoff=new WakeHandoff();worker=null;
             PendingIntent callback=PendingIntent.getBroadcast(c,87,new Intent(c,WakeEventReceiver.class).setAction(current),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
@@ -83,7 +105,7 @@ final class HandsFreeController {
         String state=intent.getStringExtra("state");
         if("health".equals(state)){
             try{org.json.JSONObject event=new org.json.JSONObject().put("type","wake_health").put("interactive",intent.getBooleanExtra("interactive",false));
-                for(String key:new String[]{"wall_ms","audio_ms","decode_ms","nonzero_blocks","max_rms"}){long value=intent.getLongExtra(key,-1);if(value<0||value>600000)return;event.put(key,value);}append(c,event);
+                for(String key:new String[]{"wall_ms","audio_ms","decode_ms","nonzero_blocks","max_rms"}){long value=intent.getLongExtra(key,-1);if(value<0||value>600000)return;event.put(key,value);}append(c,event);if(intent.getLongExtra("audio_ms",0)>=4000)recoveryAttempts=0;
             }catch(Exception ignored){}return;
         }
         if("listening".equals(state)){status(c,"ממתין ל־מוזאיק · האזנה מקומית פעילה");TurnForegroundService.stop(c);return;}
@@ -98,7 +120,11 @@ final class HandsFreeController {
             dispatch(c);
             final String current=token;
             main.postDelayed(()->{if(enabled&&current.equals(token)&&worker!=null)stop(c,"מנוע ההמתנה לא השתחרר; הפנייה לא התחילה");},5000);
-        }else stop(c,"error".equals(state)?"ההאזנה נעצרה בתקלה או שהמיקרופון אינו זמין":"ההאזנה הופסקה");
+        }else{
+            String reason="error".equals(state)?"ההאזנה הושהתה בתקלה או שהמיקרופון אינו זמין":"ההאזנה הופסקה";
+            if(intent.getBooleanExtra("owner_stop",false))disable(c,reason);
+            else {stop(c,reason);recover(c);}
+        }
     }
     private static void died(Context c,String current){
         if(!current.equals(token)||handoff==null)return;
@@ -110,7 +136,9 @@ final class HandsFreeController {
             mark(c,timingId,TimingPoint.TURN_DISPATCHED,SystemClock.elapsedRealtime());
             enabled=false;token="";unbind(c);
             status(c,"מפעיל שיחה מעל מסך הנעילה");
-            if(!MosaicAssistantService.wake())status(c,"עוזר המערכת אינו זמין; פתח את מוזאיק");
+            if(!MosaicAssistantService.wake()){
+                status(c,"חיבור עוזר Android אינו זמין · ההאזנה תתחדש כשהעוזר יתחבר");recover(c);
+            }
         }
     }
     static void stop(Context context,String reason){

@@ -9,8 +9,8 @@ android {
         applicationId = "life.mosaic.zipformergate"
         minSdk = 31
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8.1-keyword-wake"
+        versionCode = 9
+        versionName = "0.8.2-persistent-stop"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

@@ -20,7 +20,7 @@ public final class TurnForegroundService extends Service {
     @Override public void onCreate(){super.onCreate();ownedGeneration=gate.current();}
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public int onStartCommand(Intent intent,int flags,int startId){
-        if(intent!=null&&"STOP".equals(intent.getAction())){requestStop();return START_NOT_STICKY;}
+        if(intent!=null&&"STOP".equals(intent.getAction())){HandsFreeController.disable(this,"ההאזנה הקבועה הופסקה דרך התראת העצירה");requestStop();return START_NOT_STICKY;}
         long request=intent==null?-1:intent.getLongExtra("turn_generation",-1);ownedGeneration=request;
         try{
             if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)throw new SecurityException("Visible notification required");

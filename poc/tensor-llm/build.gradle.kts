@@ -8,8 +8,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 27
-        versionName = "0.25.1-voice-recovery"
+        versionCode = 28
+        versionName = "0.26-persistent-listening"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

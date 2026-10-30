@@ -824,6 +824,25 @@ or screen-off reliability claim. Full failed/passing evidence and limits are
 appended in [voice-wake-recovery.md](voice-wake-recovery.md). Updated CI and
 two-package installation remain pending.
 
+### ASR-41 / VOICE-19 — האזנה קבועה ושחזור חיבור העוזר, 30.10.2026
+
+Owner explicitly requests persistent background listening without repeatedly
+enabling it. Their .25 retry logged real wake/dispatch events but Android's
+assistant binding was null/DEAD after development instrumentation, so no session
+opened. This is a separate observed handoff failure, not proof that display-off
+audio capture stopped. The stale system binding must be restored after probes.
+
+Voice 0.26/code28 + companion 0.8.2/code9 persist the owner choice, restore only
+through the selected/system-ready assistant and valid permissions/clips, preserve
+it across transient teardown and distinguish explicit owner Stop. Recovery is
+bounded; boot receivers do not start microphones. Defaults remain off for other
+installs. No private models/data/keys or keyguard/permission changes. KWS .01 and
+all model backends/settings are unchanged from the preceding threshold correction.
+Local tests 133+11/build pass; CI/install and controlled display-off observation
+are pending. Full reboot and real owner acoustic acceptance remain unverified.
+Source base/rollback `60ad977803edf4620ec9c365a1fdcb37769ade3e`; details/limits and
+primary Android sources in [voice-wake-recovery.md](voice-wake-recovery.md).
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

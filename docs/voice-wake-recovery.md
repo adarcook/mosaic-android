@@ -150,6 +150,57 @@ under ignored build/recovery-probes; fixed synthetic source hashes:
 
 ## Primary implementation references (continued)
 
+## ASR-41 / VOICE-19 — Durable always-listening owner choice
+
+The owner clarified that manually enabling listening each time is not the desired
+product: after explicit setup it must remain active in the background. Their retry
+also produced two real wake-detected/dispatch markers, followed by “assistant
+unavailable”. Android state showed the configured service bound with a null
+connection, and its activity-service connection marked DEAD after development
+instrumentation. This is an actual handoff failure, distinct from the earlier
+display-off interval with no detection. The test harness state must be restored
+after instrumentation; do not treat it as a passed acoustic test or silently ask
+the owner to configure everything again.
+
+Candidate Voice **0.26-persistent-listening/code28**, companion
+**0.8.2-persistent-stop/code9**, supersedes the not-yet-deployed 0.25.1/code27.
+Baseline installed implementation remains b8085e0 / 0.25+0.8; source rollback base
+for this addition is `60ad977803edf4620ec9c365a1fdcb37769ade3e`. No model, sampler,
+request-ASR, KWS threshold .01 or backend change in this lifetime follow-up.
+
+- Durable `always_listen` owner preference is separate from transient process,
+  session and turn state. Setup saves it once; app resume and actual selected
+  VoiceInteractionService.onReady restore standby, and the first user unlock
+  after boot can restore it. No microphone is started from a boot receiver.
+- Restoration requires the owner's selected, system-ready assistant, first
+  credential unlock, existing microphone/notification permissions, signed/current
+  companion and verified feedback clips. No permission/role is shell-granted.
+  Active turns prevent a simultaneous restore. Heavy models remain on demand.
+- Ordinary service teardown preserves the preference. Actual assistant replacement
+  and explicit Stop clear it. The companion reports owner Stop separately from a
+  transient failure; the turn notification also clears the durable choice.
+  Deferred recovery rechecks that choice and is bounded to three attempts until
+  healthy audio or explicit setup, rather than retrying permanently in an error.
+- The UI distinguishes stopping a persistent choice from the current listener
+  process state. No microphone-permission/keyguard/privacy boundary is relaxed.
+  Idle audio/text remains volatile; the existing foreground notification remains.
+- Android documents the selected VoiceInteractionService as system-kept-alive and
+  grants its provider an exception for while-in-use foreground microphone start.
+  This is the intended assistant path, not a promise that force-stop, permission
+  revocation, role removal, reboot/unlock policy or OS restrictions can be bypassed.
+
+Local tests include durable opt-in/default-off, explicit Stop surviving store
+recreation/late recovery reads and failed opt-in remaining off. Local APK builds,
+133 controller and 11 companion tests pass. Exact-source CI, guarded installation,
+restoration of the stale Android binding and sustained display-off observation
+are pending. A full Android reboot and actual owner screen-off spoken turn remain
+separate physical gates. The owner's explicit always-on request authorizes setting
+the private durable flag locally for this enrolled device; other installs default
+off, and existing settings/data/models must be preserved.
+
+References: [selected assistant lifetime](https://developer.android.com/reference/android/service/voice/VoiceInteractionService),
+[microphone foreground-service provider exception](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start#wiu-exempt).
+
 - [Pinned KeywordSpotter Kotlin API](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/kotlin-api/KeywordSpotter.kt).
 - [Pinned keyword token parser](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/csrc/utils.cc).
 - [Voice v0.1 acceptance](https://github.com/adarcook/mosaic-docs/blob/main/docs/releases/VOICE_V1_HANDSFREE_ACCEPTANCE.md).

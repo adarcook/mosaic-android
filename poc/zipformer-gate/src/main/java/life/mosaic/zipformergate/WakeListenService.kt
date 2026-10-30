@@ -19,6 +19,7 @@ class WakeListenService : Service() {
     @Volatile private var running = false
     @Volatile private var mic: AudioRecord? = null
     private var workerStarted = false
+    @Volatile private var ownerStopped = false
     private var reply: PendingIntent? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -33,6 +34,7 @@ class WakeListenService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "STOP") {
+            ownerStopped = true
             running = false
             try { mic?.stop() } catch (_: Exception) {}
             if (!workerStarted) stopSelf()
@@ -154,7 +156,7 @@ class WakeListenService : Service() {
     }
 
     private fun report(state: String, detectedAt: Long = -1L) {
-        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("detected_elapsed_ms",detectedAt)) } catch (_: Exception) { running = false }
+        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
     }
 
     private fun verify(dir: File) {
