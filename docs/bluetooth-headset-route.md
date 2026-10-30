@@ -149,3 +149,39 @@ completion so a fast native teardown cannot cancel the short ack. Three new JVM
 race tests pass. ACK_REQUESTED/ACK_PLAYBACK_HEAD/ACK_COMPLETED are monotonic
 software markers, not measured audibility. Verified headset health records contain
 only a boolean and route type, never device IDs or addresses.
+
+
+## ASR-42 deployment outcome — 2026-10-31 (Asia/Hebron)
+
+Implementation source `c82b174e2e3c293e413b70434fc99394a85ecf17` passed all five
+exact-source hosted gates: Tensor 41140691759, voice-loop 41140691731, Hebrew
+Zipformer 41140691728, Tensor probe 41140691714 and Android Build 41140691761.
+157 controller tests and 11 companion tests pass. Both CI ZIPs were obtained via
+GitHub connector after a stalled direct bridge download was terminated before
+extraction/install. Downloaded hashes match GitHub artifact digests:
+
+- Wake artifact 13017579262, ZIP SHA-256
+  `7dfd9f308950ed0cc5cc16ff561bcc16f36f850663da176238836b88d024906d`;
+  original CI APK `f70ffed4ea51e36f7c4625eb447414e3abb6aae37dd2d2b61da2477a606623b5`.
+- Voice artifact 13018803223, ZIP SHA-256
+  `9428d1ba9e4762b56a727bd381b372102617062543ab92387066efe179260494`;
+  original CI APK `1b776f8ec52b1e0c5a77419d7584008ad4c0dacde293a065d045e076c155faa8`.
+
+The existing bridge's exact-source, digest, enrolled-device, package, signer and
+payload checks were retained with the verified local ZIP as its download source.
+Installation stopped before adb install: configured enrolled development key is
+absent on this computer. The existing standard local development key was tested
+on a separate temporary APK copy and failed the unchanged installed-certificate
+check. No certificate pin was changed, no key replaced/generated/uploaded, no
+uninstall/data/model deletion, no runtime setting/permission or headset opt-in
+change. The user confirms the other computer is currently unavailable.
+
+**Not installed.** Pixel still has Voice 0.26/code28 + wake0.8.2/code9.
+User reports buds connected/worn, but no new-route microphone/playback or acoustic
+probe was performed. Physical acceptance and battery/latency remain pending.
+Resume with the existing matching key on its original machine (or an existing
+local backup), reverify exact artifacts and installed certificate, install companion
+before controller, then enable the visible headset mode and verify source/output.
+The remote queue #56 received status only; no deferred install command was queued.
+Local queue/config is #59 on port8766. Private local evidence stays under ignored
+build/qa-headset. No merge or roadmap completion.
