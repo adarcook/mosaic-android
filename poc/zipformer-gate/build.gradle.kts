@@ -9,8 +9,8 @@ android {
         applicationId = "life.mosaic.zipformergate"
         minSdk = 31
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.7-wake-health"
+        versionCode = 7
+        versionName = "0.8-keyword-wake"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

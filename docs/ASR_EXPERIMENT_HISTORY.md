@@ -790,6 +790,28 @@ shortcut and persistent token reuse passed; a full Windows reboot was not tested
 This supersedes the earlier blocked installation state. Real acoustic timing,
 screen-off turns, readiness sequencing, quality and power gates remain pending.
 
+### ASR-40 / VOICE-18 — תיקון כשלים בבדיקת המשתמש, 30.10.2026
+
+Owner's physical test of 0.24.3 failed: late wake acknowledgement while lit,
+no response while screen-off, and the personal update alias fell through to
+conversation. Local diagnostics found quiet speech below RMS450, an omitted
+pronoun preventing exact alias expansion, and off-screen audio/decode health with
+no wake callback. These are failed integration results; prior synthetic 5/5 is
+not acoustic acceptance. Private PCM/journals/dictionary remain local.
+
+Candidate Voice 0.25/code26 + companion 0.8/code7 starts the microphone before the
+ready cue, adapts the quiet endpoint, handles narrow saved-alias variants, avoids
+heavy preparation when fixed clips are verified, and uses native keyword spotting
+on the existing CPU Hebrew Zipformer model. Weights, request ASR, Gemma/NPU and
+BlueTTS/CPU remain unchanged; keyword search/settings and orchestration are changed
+factors. Local tests 130+11 and APK builds pass. Identical private PCM endpoint
+replay ends at 6.528 s vs 8.000 s; Windows native KWS loads and rejects that
+non-wake request. No screen-off/acoustic/accuracy/power success is claimed.
+Baseline/rollback source `6dd43ad3f8fcc20679f7c1d128f594dc64d1e3ec`, documentation
+base #54 `89c98aa21d35cfcd93a04ed779f1ffed01e37492`. CI, two-package installation
+and real device retry are pending. See [voice-wake-recovery.md](voice-wake-recovery.md)
+for controls, exact timing limits, reproduction, acceptance and primary API sources.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.

@@ -8,6 +8,15 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ManualToolAgentTest {
+    @Test public void reportedAsrUpdateVariantUsesSavedMeaningWithoutBroadeningCommands(){
+        PersonalCommands dictionary=PersonalCommands.empty().put(new PersonalCommands.Entry("owner","תן לי עדכון",WhatsAppNotificationTool.ID,true));
+        for(String request:List.of("תן עדכון","תן לי עידכון","תן עידכון"))
+            assertEquals(AgentTools.WHATSAPP_FUNCTION,AgentTools.personalHint(request,dictionary));
+        for(String request:List.of("אל תן עדכון","איך תן עדכון","תן עדכון מחר","תן עדכון על מזג האוויר","עדכון"))
+            assertEquals("",AgentTools.personalHint(request,dictionary));
+        assertEquals("",AgentTools.personalHint("תן עדכון",PersonalCommands.empty()));
+        assertEquals("",AgentTools.personalHint("תן עדכון",dictionary.put(new PersonalCommands.Entry("owner","תן לי עדכון",WhatsAppNotificationTool.ID,false))));
+    }
     private ManualToolAgent.Reply text(String text) { return new ManualToolAgent.Reply(text,List.of()); }
     private ManualToolAgent.Reply call() { return new ManualToolAgent.Reply("",List.of(new ToolCall(AgentTools.WHATSAPP_FUNCTION,Map.of()))); }
     private VoiceTool.Result result(VoiceTool.Status status) { return new VoiceTool.Result(status,"SYNTHETIC_TOOL_DATA","SYNTHETIC_TOOL_DATA"); }

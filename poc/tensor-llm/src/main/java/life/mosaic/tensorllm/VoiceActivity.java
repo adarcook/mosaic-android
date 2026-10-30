@@ -53,6 +53,7 @@ public final class VoiceActivity extends Activity {
     private volatile boolean recording;private boolean active,foreground,prewarming,prepared,toolTurn,agentToolUsed;
     private VoiceTool.Status agentStatus;
     private volatile AudioRecord recorder;
+    private volatile CaptureGate captureGate;
     private static final class Worker {Messenger remote;ServiceConnection connection;boolean bound;}
     private final java.util.Map<String,Worker> workers=new java.util.HashMap<>();
     private String sessionId=java.util.UUID.randomUUID().toString();
@@ -100,12 +101,12 @@ public final class VoiceActivity extends Activity {
         if(!foreground||!handsfreeTurn||active)return;
         if(HandsFreeController.session().isEmpty()||(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)){HandsFreeController.status(this,"יש להכין האזנה עם התראת עצירה מתוך מוזאיק");endHandsFree(false);return;}
         try{TurnForegroundService.start(this);}catch(Exception error){HandsFreeController.status(this,"Android חסם שיחה כשהמסך כבוי");endHandsFree(false);return;}
-        HandsFreeController.status(this,"משוב מוכן · אני פה, דבר אליי");
-        final String timing=wakeTimingId;
-        HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_REQUESTED,SystemClock.elapsedRealtime());
-        feedback.play("ready",at->HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_PLAYBACK_HEAD,at),ok->{if(!handsfreeTurn||active)return;if(!ok||!TurnForegroundService.active()){endHandsFree(false);return;}HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_COMPLETED,SystemClock.elapsedRealtime());HandsFreeController.status(this,"מוכן לבקשה · אפשר לדבר עכשיו");main.postDelayed(()->{if(canRunTurn()&&handsfreeTurn&&!active)begin(false);},100);});
+        HandsFreeController.status(this,"מכין מיקרופון לבקשה");
+        begin(false);
     }
-    private void prepareStandby(){armingStandby=true;HandsFreeController.stop(this,"מכין הפעלה ללא מסך ומשוב קולי · הכנה חד־פעמית להפעלה");begin(true);if(!active){armingStandby=false;HandsFreeController.stop(this,"הכנת ההאזנה לא התחילה; יש לבדוק אבחון");}}
+    private void prepareStandby(){armingStandby=true;HandsFreeController.stop(this,"מכין הפעלה ללא מסך ומשוב קולי · הכנה חד־פעמית להפעלה");
+        if(FeedbackClips.valid(getFilesDir())){HandsFreeController.verifiedSession(java.util.UUID.randomUUID().toString());armingStandby=false;HandsFreeController.arm(this);controls(true);return;}
+        begin(true);if(!active){armingStandby=false;HandsFreeController.stop(this,"הכנת ההאזנה לא התחילה; יש לבדוק אבחון");}}
     private void pollServiceProbe(int completed,long deadline){
         if(!serviceProbeRunning)return;
         if(!foreground||locked()){finishServiceProbe(false);return;}
@@ -151,21 +152,35 @@ public final class VoiceActivity extends Activity {
             int min=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);if(min<=0)throw new IOException("המיקרופון אינו זמין");
             AudioRecord mic=new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(min*2,8192));
             if(mic.getState()!=AudioRecord.STATE_INITIALIZED){mic.release();throw new IOException("המיקרופון לא נפתח");}
-            recorder=mic;recording=true;stop.setText("סיום משפט");int idTurn=turn;File target=audioFile;
-            main.postDelayed(()->{if(active&&turn==idTurn&&recording)stopMic();},12000);
+            recorder=mic;recording=true;captureGate=new CaptureGate(handsfreeTurn);stop.setText(handsfreeTurn?"ביטול הפעולה":"סיום משפט");int idTurn=turn;File target=audioFile;
+            if(!handsfreeTurn)main.postDelayed(()->{if(active&&turn==idTurn&&recording)stopMic();},12000);
             new Thread(()->capture(mic,target,idTurn),"mosaic-voice-capture").start();
         }catch(Exception e){if(active)finish("error",e.getMessage());else{status.setText(e.getMessage());screen.problem();if(handsfreeTurn)endHandsFree(false);controls(true);}}
     }
     private void capture(AudioRecord mic,File target,int idTurn){
         final String timing=handsfreeTurn?wakeTimingId:"";
+        final CaptureGate gate=captureGate;
         byte[] pcm=null;Throwable failure=null;
         try(FileOutputStream output=new FileOutputStream(target)){
             if(!recording||turn!=idTurn)return;mic.startRecording();
             if(mic.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING)throw new IOException("Microphone did not start");
             final long recordingAt=SystemClock.elapsedRealtime();
-            main.post(()->HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.CAPTURE_RECORDING_STARTED,recordingAt));
+            main.post(()->{
+                HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.CAPTURE_RECORDING_STARTED,recordingAt);
+                if(timing.isEmpty()||!active||turn!=idTurn||gate.cancelled())return;
+                HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_REQUESTED,SystemClock.elapsedRealtime());
+                feedback.play("ready",at->HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_PLAYBACK_HEAD,at),gate::ready,ok->{
+                    if(!active||turn!=idTurn||gate.cancelled())return;
+                    if(!ok||!TurnForegroundService.active()){gate.cancel();finish("error","משוב המוכנות או שירות השיחה אינם זמינים");return;}
+                    HandsFreeController.mark(this,timing,HandsFreeController.TimingPoint.READY_COMPLETED,SystemClock.elapsedRealtime());
+                    HandsFreeController.status(this,"מוכן לבקשה · אפשר לדבר עכשיו");stop.setText("סיום משפט");
+                    main.postDelayed(()->{if(active&&turn==idTurn&&recording)stopMic();},12000);
+                });
+            });
             short[] block=new short[1024];ByteBuffer bytes=ByteBuffer.allocate(2048).order(ByteOrder.LITTLE_ENDIAN);int count=0;SpeechEndpoint endpoint=new SpeechEndpoint();
-            while(recording&&turn==idTurn&&count<192000){int n=mic.read(block,0,Math.min(block.length,192000-count),AudioRecord.READ_BLOCKING);if(n<=0){if(!recording)break;throw new IOException("Microphone read failed: "+n);}bytes.clear();for(int i=0;i<n;i++)bytes.putShort(block[i]);output.write(bytes.array(),0,n*2);count+=n;if(handsfreeTurn&&endpoint.accept(block,n)){recording=false;break;}}
+            while(recording&&turn==idTurn&&!gate.cancelled()&&count<192000){int n=mic.read(block,0,Math.min(block.length,192000-count),AudioRecord.READ_BLOCKING);if(n<=0){if(!recording)break;throw new IOException("Microphone read failed: "+n);}
+                if(!gate.accepting()){if(SystemClock.elapsedRealtime()-recordingAt>15000)throw new IOException("Ready feedback timed out");continue;}
+                bytes.clear();for(int i=0;i<n;i++)bytes.putShort(block[i]);output.write(bytes.array(),0,n*2);count+=n;if(handsfreeTurn&&endpoint.accept(block,n)){recording=false;break;}}
             output.getFD().sync();if(target.length()<16000)throw new IOException("דבר לפחות חצי שנייה");pcm=java.nio.file.Files.readAllBytes(target.toPath());
         }catch(Throwable e){failure=e;}finally{try{mic.stop();}catch(RuntimeException ignored){}mic.release();if(recorder==mic)recorder=null;}
         byte[] captured=pcm;Throwable error=failure;main.post(()->{if(!active||turn!=idTurn)return;recording=false;if(error!=null){finish("error",error.toString());return;}
@@ -176,7 +191,7 @@ public final class VoiceActivity extends Activity {
     private Intent asrIntent(){return new Intent().setComponent(new ComponentName(
             life.mosaic.models.VoiceAsrBackend.packageName(selectedAsrEngine),
             life.mosaic.models.VoiceAsrBackend.serviceName(selectedAsrEngine)));}
-    private void stopMic(){recording=false;AudioRecord mic=recorder;if(mic!=null)try{mic.stop();}catch(RuntimeException ignored){}stop.setText("ביטול הפעולה");}
+    private void stopMic(){recording=false;CaptureGate gate=captureGate;if(gate!=null)gate.cancel();AudioRecord mic=recorder;if(mic!=null)try{mic.stop();}catch(RuntimeException ignored){}stop.setText("ביטול הפעולה");}
     private void transition(String next,String text)throws Exception{
         if(handsfreeTurn&&!prewarming&&next.equals("asr"))speakPhase("received");
         stage=next;stageStart=SystemClock.elapsedRealtime();event(new JSONObject().put("type","phase").put("stage",stage).put("state","running"));

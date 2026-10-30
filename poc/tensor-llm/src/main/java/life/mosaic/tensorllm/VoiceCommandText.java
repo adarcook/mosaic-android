@@ -19,4 +19,12 @@ final class VoiceCommandText {
         return Pattern.compile("(?:^| )(?:אל|לא|בלי|ללא|איך|כיצד|למה|מדוע|שלח|תשלח|לשלוח|מחק|תמחק|למחוק|חייג|תחייג|התקשר|תתקשר|ענה|תענה|לענות)(?: |$)")
                 .matcher(normalized).find();
     }
+
+    /** Narrow ASR variants of the owner's saved update phrase, never a built-in command. */
+    static String personalKey(String raw) {
+        String text = normalize(raw);
+        if (text.equals("תן לי עדכון") || text.equals("תן לי עידכון") || text.equals("תן עידכון"))
+            return "תן עדכון";
+        return text;
+    }
 }

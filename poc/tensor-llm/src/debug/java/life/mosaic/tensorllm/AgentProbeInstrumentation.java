@@ -28,16 +28,17 @@ public final class AgentProbeInstrumentation extends Instrumentation {
             engine=new Engine(new EngineConfig(model.getAbsolutePath(),new Backend.NPU(context.getApplicationInfo().nativeLibraryDir),
                     null,null,null,null,context.getCacheDir().getAbsolutePath()));
             progress("load",0);engine.initialize();
-            String[] ids={"greeting","read_whatsapp","personal_alias","negated","explanation"};
-            String[] requests={"שלום, מי אתה?","תקריא לי את הודעת הוואטסאפ האחרונה","תן לי עדכון",
+            String[] ids={"greeting","read_whatsapp","personal_alias","short_alias","negated","explanation"};
+            String[] requests={"שלום, מי אתה?","תקריא לי את הודעת הוואטסאפ האחרונה","תן לי עדכון","תן עדכון",
                     "אל תקריא לי את הודעת הוואטסאפ האחרונה","איך אפשר להקריא הודעות בוואטסאפ?"};
-            boolean[] expected={false,true,true,false,false};
+            boolean[] expected={false,true,true,true,false,false};
+            PersonalCommands dictionary=PersonalCommands.empty().put(new PersonalCommands.Entry("synthetic","תן לי עדכון",WhatsAppNotificationTool.ID,true));
             boolean passed=true;
             for(int i=0;i<ids.length;i++){
                 progress(ids[i],i+1);
                 Conversation conversation=null;AtomicInteger calls=new AtomicInteger();JSONObject item=new JSONObject().put("case",ids[i]);
                 try{
-                    String hint=ids[i].equals("personal_alias")?AgentTools.WHATSAPP_FUNCTION:"";
+                    String hint=AgentTools.personalHint(requests[i],dictionary);
                     conversation=engine.createConversation(new ConversationConfig(Contents.Companion.of(AgentTools.system(hint)),
                             Collections.emptyList(),NativeAgentModel.providers(),new SamplerConfig(20,0.9,0.2,0),false,
                             Collections.emptyList(),Collections.emptyMap(),null,false,512,new ThinkingConfig(false),false,false,null));

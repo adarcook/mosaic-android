@@ -18,7 +18,7 @@ final class HandsFreeController {
     private static WakeHandoff handoff;
     private static boolean bound, enabled, standbyRequested;
     private static String timingId="";
-    enum TimingPoint { WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
+    enum TimingPoint { WAKE_DETECTED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
     static String timingId(){return timingId;}
     static void mark(Context c,String id,TimingPoint point,long at){
         if(id.isEmpty())return;
@@ -54,7 +54,7 @@ final class HandsFreeController {
         if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){status(c,"נדרשת הרשאת מיקרופון");return;}
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
-                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<6)throw new IllegalStateException();
+                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<7)throw new IllegalStateException();
             token=UUID.randomUUID().toString();final String current=token;
             enabled=true;standbyRequested=true;handoff=new WakeHandoff();worker=null;
             PendingIntent callback=PendingIntent.getBroadcast(c,87,new Intent(c,WakeEventReceiver.class).setAction(current),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
@@ -71,7 +71,7 @@ final class HandsFreeController {
             };
             bound=c.bindService(service,connection,Context.BIND_AUTO_CREATE|Context.BIND_INCLUDE_CAPABILITIES);
             if(!bound)throw new IllegalStateException();
-            status(c,"מכין האזנה מקומית · Zipformer על CPU");
+            status(c,"מכין זיהוי מילת עוררות מקומי · Zipformer על CPU");
             try{c.startForegroundService(service);}catch(Exception error){stop(c,"Android חסם התחלת האזנה. הפעל אותה שוב מתוך מוזאיק.");return;}
             main.postDelayed(()->{if(current.equals(token)&&enabled&&status(c).startsWith("מכין"))stop(c,"ההאזנה לא התחילה בזמן");},30000);
         }catch(Exception error){stop(c,"נדרש עדכון חתום של Zipformer והרשאת מיקרופון בחבילת התמלול");}
@@ -83,7 +83,7 @@ final class HandsFreeController {
         String state=intent.getStringExtra("state");
         if("health".equals(state)){
             try{org.json.JSONObject event=new org.json.JSONObject().put("type","wake_health").put("interactive",intent.getBooleanExtra("interactive",false));
-                for(String key:new String[]{"wall_ms","audio_ms","decode_ms","nonzero_blocks"}){long value=intent.getLongExtra(key,-1);if(value<0||value>600000)return;event.put(key,value);}append(c,event);
+                for(String key:new String[]{"wall_ms","audio_ms","decode_ms","nonzero_blocks","max_rms"}){long value=intent.getLongExtra(key,-1);if(value<0||value>600000)return;event.put(key,value);}append(c,event);
             }catch(Exception ignored){}return;
         }
         if("listening".equals(state)){status(c,"ממתין ל־מוזאיק · האזנה מקומית פעילה");TurnForegroundService.stop(c);return;}
@@ -91,6 +91,8 @@ final class HandsFreeController {
         handoff.result(state);
         if("wake".equals(state)){
             timingId=UUID.randomUUID().toString();
+            long detected=intent.getLongExtra("detected_elapsed_ms",-1),now=SystemClock.elapsedRealtime();
+            if(detected>=0&&detected<=now&&now-detected<=30000)mark(c,timingId,TimingPoint.WAKE_DETECTED,detected);
             mark(c,timingId,TimingPoint.WAKE_CALLBACK_RECEIVED,SystemClock.elapsedRealtime());
             status(c,"זוהתה מילת העוררות · ממתין לשחרור מנוע");
             dispatch(c);
