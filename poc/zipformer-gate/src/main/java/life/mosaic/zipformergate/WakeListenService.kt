@@ -85,7 +85,7 @@ class WakeListenService : Service() {
                     tokens = File(dir, "tokens.txt").absolutePath,
                     numThreads = 2, provider = "cpu", modelType = "zipformer2"),
                 maxActivePaths = 4, keywordsFile = keywords.absolutePath,
-                keywordsScore = 1.5f, keywordsThreshold = 0.25f, numTrailingBlanks = 2))
+                keywordsScore = 1.5f, keywordsThreshold = 0.01f, numTrailingBlanks = 2))
             stream = recognizer.createStream()
             val minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             require(minimum > 0)

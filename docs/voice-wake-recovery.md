@@ -103,6 +103,53 @@ on Windows. Never uninstall or clear data to recover.
 
 ## Primary implementation references
 
+## Follow-up: native model probe and threshold correction
+
+Initial source `b8085e09899edb5df48b6cd31e280f3794d94d1a` passed all four hosted
+workflows, and both initial candidates (Voice 0.25/code26, wake 0.8/code7) were
+installed through queue #56 with unchanged payload, matching original signer,
+and pulled-back APK verification. Controller installed hash
+`a535f1c405e5f99f4d1c71948664996446ed631b67eba915261bf1a1c9c56eec`;
+companion `984b31feeb58d5283fa54b7d38ad50553eae4ee27000dbf9708e82b74e65dff7`.
+No uninstall, data/model deletion, Android permission change or merge.
+
+The real Pixel Gemma/NPU probe passed **6/6** fixed synthetic-result cases:
+explicit read, exact saved alias and the short ASR alias each emitted one call;
+greeting, negation and explanation emitted none. It did not read notifications,
+record microphones or exercise actual Binder/TTS/private output.
+
+The initial native KWS threshold .25 failed a fixed offline English TTS “Mosaic”
+positive fixture. A separate known-word sanity fixture also exposed an excessive
+acceptance threshold. This is failed recognition evidence despite build success.
+An isolated BlueTTS brand-name fixture was not recognized correctly by either
+baseline or candidate; it remains inconclusive/failed positive evidence and is
+not silently counted as a passing wake sample. No owner wake audio was saved.
+
+Correction candidate: Voice **0.25.1/code27**, wake **0.8.1/code8**. Only the
+version/dependency gate and KWS acceptance threshold change: .25 → .01, retaining
+score1.5, four active paths, two trailing blanks, 32 token paths and the same
+verified model/runtime. A lower threshold may increase false wakes; no general
+false-wake, battery or owner-voice acceptance is claimed.
+
+Before device retry, Windows native runtime tests with fixed offline synthetic
+PCM passed **7/7**: “Mosaic” from two different Windows voices, one of them also
+attenuated to 15% amplitude, was detected; English music, Hebrew music, Hebrew
+greeting and silence were not detected. The existing private non-wake request
+also produced no wake. This is a small development/tuning set, not held-out
+accuracy, Android acoustic input or screen-off proof. First detections were at
+1500 ms of fed input; host compute (62–110 ms per case) is not audible latency.
+Encoder metadata decode_chunk_len=128 also precludes inferring an instantaneous
+speech-onset detector from fast host compute. Native fixture report is private
+under ignored build/recovery-probes; fixed synthetic source hashes:
+
+- Windows Zira Mosaic: `1f07f526a92635b0f4591a0044ba884f74bbf740b0a74c30e6b366a792870266`.
+- Windows Hazel Mosaic: `c127a03531bbbad07dcea4c3ae495a336a71d0f50dfc013df21ee5a4b35e5ba7`.
+- Windows English music: `431326ae105b1981ee6858f12e1a8a8e60d4943c2af1e5ab5343b167f9fa87f7`.
+- BlueTTS Hebrew music: `4fb72b40c56bbe36d153fc0464bdcb3c627f8f8257705fe689b158967c1637cd`.
+- BlueTTS Hebrew greeting: `c8b05ac93e955cb4c0bfb008616d6ea988dbeb48123e007355fbb7a0006121a1`.
+
+## Primary implementation references (continued)
+
 - [Pinned KeywordSpotter Kotlin API](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/kotlin-api/KeywordSpotter.kt).
 - [Pinned keyword token parser](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/sherpa-onnx/csrc/utils.cc).
 - [Voice v0.1 acceptance](https://github.com/adarcook/mosaic-docs/blob/main/docs/releases/VOICE_V1_HANDSFREE_ACCEPTANCE.md).

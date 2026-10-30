@@ -812,6 +812,18 @@ base #54 `89c98aa21d35cfcd93a04ed779f1ffed01e37492`. CI, two-package installatio
 and real device retry are pending. See [voice-wake-recovery.md](voice-wake-recovery.md)
 for controls, exact timing limits, reproduction, acceptance and primary API sources.
 
+ASR-40 follow-up: initial b8085e0 passed four CI workflows and guarded bridge
+installation of both packages. Real Pixel Gemma/NPU with synthetic NO_MESSAGE
+passed 6/6, including the omitted-pronoun alias; no real notification was read.
+Native KWS .25 threshold failed synthetic positive/sanity input despite build
+success. 0.25.1/code27 + companion 0.8.1/code8 lower only that threshold to .01
+(plus version/dependency identity). A small Windows native tuning set passes 7/7:
+two fixed synthetic Mosaic voices plus attenuation, and four negative fixtures.
+The unsuccessful isolated BlueTTS positive is retained; no held-out/owner acoustic
+or screen-off reliability claim. Full failed/passing evidence and limits are
+appended in [voice-wake-recovery.md](voice-wake-recovery.md). Updated CI and
+two-package installation remain pending.
+
 ## 6. נקודות קוד ודרך לחזור אחורה
 
 ה־PRs נערמים זה על זה: `#22 → #23 → #24 → #25 → #26 → #28 → #29 → #30 → #31 → #32`. אין להסיק מזה שכל פריט עבר את כל בדיקות המכשיר. אלה עוגני קוד, **לא רשימת גרסאות מאושרות לייצור**.
