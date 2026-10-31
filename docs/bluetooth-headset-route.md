@@ -512,3 +512,38 @@ no sink was available; this is an existing failure-classification usability issu
 not evidence that the matching installed certificate failed. Owner was asked to
 reconnect before the next trial. No screen-off full-turn or candidate lifecycle
 pass is claimed yet. No Activity was manually opened to start the candidate.
+
+
+### ASR-45 owner-confirmed screen-off turn — 2026-10-31
+
+On installed 149447c (Voice0.29/code34 + wake0.10.1/code12), after reconnecting the
+buds, verified standby was confirmed and remote SLEEP reported Dozing. Owner was
+explicitly cued to say “מוזאיק” once, wait for ready, then ask a short question.
+This attempt recorded WAKE_DETECTED→ACK_COMPLETED→TURN_DISPATCHED→
+TURN_INTENT_ACCEPTED→TURN_SERVICE_REQUESTED→TURN_SERVICE_ACTIVE→
+CAPTURE_RECORDING_STARTED→READY_REQUESTED/PLAYBACK_HEAD/COMPLETED.
+Capture timestamp1254035655 preceded/was equal to ready-request timestamp1254035655;
+recording verification ran before cue submission even though millisecond ticks
+coincided. Headset health immediately before wake was interactive=false/type7.
+Power snapshots were Dozing at test start, capture/ready observation and after TTS.
+No manual app launch, permission/role change, instrumentation or setting refresh
+was used for this trial.
+
+A stage-only journal inspection (no transcript/answer/PCM content retrieval) showed
+ASR/Zipformer complete2,371ms, Gemma complete9,457ms, TTS complete13,743ms with
+3.274s output/type7; whole turn complete32,164ms. These stage totals include their
+existing preparation/compute/playback boundaries, not pure inference benchmarks.
+Owner explicitly confirms hearing “אני פה, דבר אליי” and a spoken answer to the
+question with the screen off. This is one owner-confirmed hands-free basic turn,
+not WhatsApp/private-tool acceptance, P95 latency or repeated daily reliability.
+
+Verified non-interactive headset-input health resumed after completion, establishing
+observed rearm. Several later healthy windows were followed by interruption, then
+bounded retries stopped. Actual available AudioPolicy outputs at the final check
+contained no Bluetooth sink. Owner was asked whether they disconnected/switched
+the buds; cause is pending, so no disconnect/reconnect reliability pass is claimed.
+Saved consent/headset mode stayed true; current listener is paused, not falsely
+reported active. Weak cue remains an observed issue. All five exact-source CI
+gates for149447c passed. Private stage/timing receipts remain under ignored
+build/qa-headset. No merge or release completion; battery, false/missed wakes,
+repeatability, interruption privacy and reboot gates remain open.
