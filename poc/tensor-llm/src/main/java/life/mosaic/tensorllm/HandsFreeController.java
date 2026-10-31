@@ -102,13 +102,16 @@ final class HandsFreeController {
             }
         }
         recovery.cancel();
+        boolean diagnosticRequested=BuildConfig.DEBUG&&c.getSharedPreferences("handsfree",0).getBoolean("wake_diagnostic_once",false);
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
-                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<(HeadsetRouteService.required(c)?11:9))throw new IllegalStateException();
+                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<(diagnosticRequested?12:(HeadsetRouteService.required(c)?11:9)))throw new IllegalStateException();
             token=UUID.randomUUID().toString();final String current=token;
             enabled=true;standbyRequested=true;handoff=new WakeHandoff();worker=null;
             PendingIntent callback=PendingIntent.getBroadcast(c,87,new Intent(c,WakeEventReceiver.class).setAction(current),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
             Intent service=service(c).putExtra("callback",callback);
+            boolean probe=diagnosticRequested;
+            if(probe){c.getSharedPreferences("handsfree",0).edit().remove("wake_diagnostic_once").commit();service.putExtra("wake_diagnostic",true);}
             if(HeadsetRouteService.required(c)){
                 int sink=HeadsetRouteService.standbySink(c);if(sink<=0)throw new IllegalStateException();
                 service.putExtra("headset_required",true).putExtra("headset_sink",sink).putExtra("headset_owner_version",life.mosaic.audio.WakeRouteContract.VERSION);
@@ -137,6 +140,16 @@ final class HandsFreeController {
         if(!enabled||!token.equals(intent.getAction())||!selected(c))return;
         if(intent.getBooleanExtra("owner_stop",false)){disable(c,"ההאזנה הקבועה הופסקה דרך ההתראה");return;}
         String state=intent.getStringExtra("state");
+        if("probe_listening".equals(state)){status(c,"בדיקת זיכרון בלבד · אמור מוזאיק במשך 20 שניות");return;}
+        if("probe_result".equals(state)){
+            try{org.json.JSONObject event=new org.json.JSONObject().put("type","wake_probe");
+                for(String field:new String[]{"probe_kws","probe_asr_expected","probe_asr_empty"})event.put(field,intent.getBooleanExtra(field,false));
+                int variant=intent.getIntExtra("probe_variant",-1),samples=intent.getIntExtra("probe_samples",-1);
+                if(variant<0||variant>4||samples!=320000)throw new IllegalArgumentException();
+                event.put("probe_variant",variant).put("probe_samples",samples);append(c,event);
+            }catch(Exception ignored){}return;
+        }
+        if("probe_complete".equals(state)){interrupted(c,"בדיקת המילה הסתיימה ללא שמירת אודיו או תמליל · מחדש האזנה");return;}
         if("detected".equals(state)){
             timingId=UUID.randomUUID().toString();
             long detected=intent.getLongExtra("detected_elapsed_ms",-1),now=SystemClock.elapsedRealtime();

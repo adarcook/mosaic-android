@@ -10,8 +10,8 @@ android {
         applicationId = "life.mosaic.zipformergate"
         minSdk = 31
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.10-owned-headset-wake"
+        versionCode = 12
+        versionName = "0.10.1-volatile-wake-probe"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
@@ -19,6 +19,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    buildFeatures { buildConfig = true }
     packaging { jniLibs.useLegacyPackaging = true }
 }
 dependencies {

@@ -1181,3 +1181,32 @@ request capture, reply routing, a complete turn/rearm, latency or battery accept
 The earlier owner acoustic trial failed on the old version. A new acoustic trial
 was requested only after the >60s input gate passed; owner report is pending at
 this checkpoint. No merge or roadmap completion.
+
+
+## ASR-44 / VOICE-22 — volatile same-input wake diagnostic, 2026-10-31
+
+On installed a31b6fc (0.28/code32 + wake0.10/code11), the owner again reported no
+response. Fresh verified-headset health continued with no detection/dispatch
+markers. This acoustic trial failed before feedback; sustained input is not wake
+acceptance. Do not lower thresholds or broaden matching without observing input.
+The owner explicitly agreed to a coordinated 20-second diagnostic saying only
+“מוזאיק”. Baseline/rollback is a31b6fc60383456b88ea2a66f5fe3dfa5e5ebfb2.
+
+Candidate Voice 0.28.1/code33 + wake0.10.1/code12 adds a DEBUG-only one-shot request,
+separate from saved listening consent. It consumes a debug setup flag once, then
+collects at most 320,000 verified 16kHz float samples in RAM (~1.28MB). The native
+KWS sees that exact input while normal assistant dispatch is suppressed. After
+capture, mic/route/KWS are released before loading the same pinned greedy Hebrew
+ASR. The buffer is cleared after decoding and the process exits. There are no PCM,
+transcript or arbitrary recognized-text files, exports or log fields. Closed
+result flags report KWS match, expected-word ASR match, empty ASR, sample count and
+only four fixed near-word variant codes. They do not broaden production activation.
+Normal wake restarts afterward only under the existing saved listening choice.
+No model/weight/backend/threshold or keyguard/permission grant change.
+
+The one-shot controller requires companion code12; normal owned-headset operation
+still requires code11. The debug runner never enables saved consent or captures by
+itself. Three new summary tests verify expected matching, near/music non-activation
+and absence of arbitrary text in results. Both local APK builds/tests passed after
+explicitly enabling generated BuildConfig for the diagnostic DEBUG gate. Hosted
+CI, installation and owner diagnostic results are pending, not acoustic acceptance.
