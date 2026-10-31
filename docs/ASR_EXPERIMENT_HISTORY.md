@@ -1265,3 +1265,22 @@ sent; software completion is not audible acceptance. AudioService showed SCO
 voice-call volume9/15, not muted; no system volume change was made. Weak cue is an
 observed usability issue. All five exact-source 7e470d5 CI gates passed. No new
 activation variants/threshold/backend changes were made from this probe.
+
+
+### ASR-44 audibility confirmation and single screen-off miss — 2026-10-31
+
+Owner confirms hearing both the ready sentence and a spoken answer after the weak
+cue. Together with recorded wake/capture/ASR/Gemma/TTS/rearm stages, this is one
+owner-audible ordinary pipeline observation. The nearest pre-wake health record
+was interactive=true. It is not a verified screen-off full turn, semantic tool
+request, repeated reliability or daily-use acceptance. Healthy rearm was observed.
+
+A separate coordinated single-utterance screen-off trial followed: remote SLEEP
+reported Dozing; subsequent verified headset health remained interactive=false
+and fresh. Owner reports saying “מוזאיק” once and receiving no response. No new
+detection/dispatch markers appeared. This trial failed despite continued input;
+it does not prove the screen state caused the miss. Repetition had succeeded,
+so isolated-word sensitivity versus screen state needs a controlled comparison.
+No production model/threshold/keyword or volume setting was changed. Owner was
+asked to coordinate one otherwise similar single-word trial with the display on;
+that action is pending readiness, not silently executed. Weak cue remains open.
