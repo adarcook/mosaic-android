@@ -22,6 +22,9 @@ class WakeListenService : Service() {
     @Volatile private var ownerStopped = false
     private var reply: PendingIntent? = null
     private var headset: life.mosaic.audio.HeadsetAudio? = null
+    private var headsetRequired=false
+    private var headsetSink=-1
+    private var headsetLease: life.mosaic.audio.StandbyHeadsetRoute? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -47,7 +50,9 @@ class WakeListenService : Service() {
         if (callback == null || callback.creatorPackage != "life.mosaic.tensorllm") {
             stopSelf(); return START_NOT_STICKY
         }
-        try { headset=life.mosaic.audio.HeadsetAudio.read(requireNotNull(intent).extras ?: Bundle()) } catch (_: Exception) { stopSelf(); return START_NOT_STICKY }
+        headsetRequired=intent?.getBooleanExtra("headset_required",false) ?: false
+        headsetSink=intent?.getIntExtra("headset_sink",-1) ?: -1
+        if(!life.mosaic.audio.WakeRouteContract.valid(headsetRequired,intent?.getIntExtra("headset_owner_version",0) ?: 0,headsetSink)){stopSelf();return START_NOT_STICKY}
         reply = callback
         try {
             val manager = getSystemService(NotificationManager::class.java)
@@ -59,7 +64,7 @@ class WakeListenService : Service() {
                 .setContentText("מצב ניסוי: אמור מוזאיק, המתן לצליל ואז דבר. אפשר לעצור כאן.")
                 .setOngoing(true).setCategory(Notification.CATEGORY_SERVICE)
                 .addAction(Notification.Action.Builder(null, "הפסקת האזנה", stop).build()).build()
-            startForeground(54, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            startForeground(54, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or (if(headsetRequired) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0))
             wakeLock = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mosaic:software-wake").apply { acquire() }
             running = true; workerStarted = true
             Thread({ listen() }, "mosaic-local-wake").start()
@@ -91,6 +96,10 @@ class WakeListenService : Service() {
                 maxActivePaths = 4, keywordsFile = keywords.absolutePath,
                 keywordsScore = 1.5f, keywordsThreshold = 0.01f, numTrailingBlanks = 2))
             stream = recognizer.createStream()
+            if(headsetRequired){
+                val lease=life.mosaic.audio.StandbyHeadsetRoute(this);headsetLease=lease
+                headset=lease.open(headsetSink){running}
+            }
             val minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             require(minimum > 0)
             val recorder = AudioRecord(if(headset!=null) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
@@ -114,6 +123,7 @@ class WakeListenService : Service() {
                 val count = recorder.read(samples, 0, samples.size, AudioRecord.READ_BLOCKING)
                 if (!running) break
                 require(count > 0)
+                headsetLease?.requireHealthy()
                 headset?.requireInput(getSystemService(AudioManager::class.java),recorder)
                 require(recorder.activeRecordingConfiguration?.isClientSilenced != true)
                 val currentStream = requireNotNull(stream)
@@ -140,7 +150,11 @@ class WakeListenService : Service() {
                     catch (_: Exception) { running=false }
                     healthAt=now;healthSamples=0;nonzeroBlocks=0;decodeMs=0;maxRms=0
                 }
-                if (WakePhrase.matches(recognizer.getResult(currentStream).keyword)) { detectedAt=SystemClock.elapsedRealtime();result = "wake"; report("detected",detectedAt); break }
+                if (WakePhrase.matches(recognizer.getResult(currentStream).keyword)) {
+                    detectedAt=SystemClock.elapsedRealtime();report("detected",detectedAt)
+                    if(headsetRequired){headsetLease!!.acknowledge(headset!!);report("ack_complete",detectedAt)}
+                    result="wake";break
+                }
                 if (streamSamples >= 16000 * 30) {
                     currentStream.release(); stream = recognizer.createStream(); streamSamples = 0
                 }
@@ -150,6 +164,7 @@ class WakeListenService : Service() {
             running = false
             try { mic?.stop() } catch (_: Exception) {}
             mic?.release(); mic = null
+            try{headsetLease?.close()}catch(_:Exception){};headsetLease=null
             try { stream?.release() } catch (_: Exception) {}
             try { recognizer?.release() } catch (_: Exception) {}
             wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
@@ -162,7 +177,7 @@ class WakeListenService : Service() {
     }
 
     private fun report(state: String, detectedAt: Long = -1L) {
-        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("headset_verified",state=="listening" && headset!=null).putExtra("headset_route_type",headset?.type ?: -1).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
+        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("companion_ack",headsetRequired).putExtra("headset_verified",state=="listening" && headset!=null).putExtra("headset_route_type",headset?.type ?: -1).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
     }
 
     private fun verify(dir: File) {

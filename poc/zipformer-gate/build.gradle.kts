@@ -10,8 +10,8 @@ android {
         applicationId = "life.mosaic.zipformergate"
         minSdk = 31
         targetSdk = 35
-        versionCode = 10
-        versionName = "0.9-headset-input"
+        versionCode = 11
+        versionName = "0.10-owned-headset-wake"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

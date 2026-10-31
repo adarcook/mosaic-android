@@ -9,8 +9,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 31
-        versionName = "0.27.1-service-resume"
+        versionCode = 32
+        versionName = "0.28-uid-route-handoff"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

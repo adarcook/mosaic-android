@@ -132,7 +132,8 @@ public final class VoiceActivity extends Activity {
     private void speakPhase(String cue)throws Exception{
         if(!handsfreeTurn||prewarming)return;final int id=turn;long started=SystemClock.elapsedRealtime();
         event(new JSONObject().put("type","feedback_start").put("cue",cue));
-        feedback.play(cue,ok->{if(!active||turn!=id)return;try{event(new JSONObject().put("type","feedback_end").put("cue",cue).put("played",ok).put("elapsed_ms",SystemClock.elapsedRealtime()-started));}catch(Exception e){finish("error","לא ניתן לתעד משוב קולי");return;}if(!ok)HandsFreeController.status(this,"משוב קולי לא הושמע · בדוק עוצמת מדיה ואבחון");});
+        feedback.play(cue,ok->{if(!active||turn!=id)return;try{event(new JSONObject().put("type","feedback_end").put("cue",cue).put("played",ok).put("elapsed_ms",SystemClock.elapsedRealtime()-started));}catch(Exception e){finish("error","לא ניתן לתעד משוב קולי");return;}if(!ok)HandsFreeController.status(this,"משוב קולי לא הושמע · בדוק עוצמת מדיה ואבחון");
+            if(headsetRequired&&cue.equals("received")&&!stage.equals("tts"))HeadsetRouteService.stop(this);});
     }
     private void endHandsFree(boolean success){
         handsfreeTurn=false;autoCapture=false;
@@ -215,7 +216,12 @@ public final class VoiceActivity extends Activity {
         asrProgress.setVisibility(stage.equals("capture")||stage.equals("asr")?android.view.View.VISIBLE:android.view.View.GONE);llmProgress.setVisibility(stage.equals("llm")?android.view.View.VISIBLE:android.view.View.GONE);ttsProgress.setVisibility(stage.equals("tts")?android.view.View.VISIBLE:android.view.View.GONE);
         android.util.Log.i("MosaicVoice","stage="+stage+" state=running turn="+turn);stop.setText(recording?"סיום משפט":"ביטול הפעולה");
     }
-    private void bind(Intent intent,Bundle data,long budget){if(headsetRequired&&!prewarming){if(headset==null){finish("error","Headset route unavailable");return;}headset.put(data);}data.putString("foreground_session",sessionId);final int token=++bindToken;final int id=turn;final String expected=stage;
+    private void bind(Intent intent,Bundle data,long budget){
+        if(headsetRequired&&!prewarming&&stage.equals("tts")){
+            if(HeadsetRouteService.current()==null){final int pendingTurn=turn;HeadsetRouteService.ensure(this,()->{if(active&&turn==pendingTurn&&stage.equals("tts"))bind(intent,data,budget);});return;}
+            headset=HeadsetRouteService.current();feedback.headset(headset,true);headset.put(data);
+        }
+        data.putString("foreground_session",sessionId);final int token=++bindToken;final int id=turn;final String expected=stage;
         Worker worker=workers.get(expected);if(worker==null){worker=new Worker();workers.put(expected,worker);}final Worker selected=worker;
         Messenger reply=new Messenger(new Handler(Looper.getMainLooper(),msg->{if(!active||turn!=id||bindToken!=token||!stage.equals(expected))return true;
             if(msg.what==1){}else if(msg.what==4)completeStage(msg.getData());else if(msg.what==5){try{JSONObject failure=new JSONObject().put("type","stage_end").put("stage",expected).put("state","error").put("elapsed_ms",SystemClock.elapsedRealtime()-stageStart);for(String key:msg.getData().keySet())if(VoiceStagePrivacy.journalField(key,toolTurn))failure.put(key,msg.getData().get(key));event(failure);}catch(Exception e){finish("error","לא ניתן לשמור יומן: "+e.getMessage());return true;}finish("error",msg.getData().getString("text","שגיאה"));}

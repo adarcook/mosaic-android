@@ -95,19 +95,19 @@ final class HandsFreeController {
         if(!MosaicAssistantService.ready()){status(c,"האזנה קבועה מושהית · ממתין לחיבור עוזר Android");return;}
         if(session.isEmpty()||!FeedbackClips.valid(c.getFilesDir())){stop(c,"יש להכין משוב קולי והאזנה מתוך מוזאיק");return;}
         if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){status(c,"נדרשת הרשאת מיקרופון");return;}
-        if(HeadsetRouteService.required(c)&&HeadsetRouteService.current()==null){
-            status(c,"מכין ניתוב למיקרופון האוזניות");HeadsetRouteService.ensure(c,()->arm(c));return;
-        }
+        if(HeadsetRouteService.required(c))HeadsetRouteService.stop(c);
         recovery.cancel();
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
-                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<(HeadsetRouteService.required(c)?10:9))throw new IllegalStateException();
+                    ||c.getPackageManager().getPackageInfo(COMPANION,0).getLongVersionCode()<(HeadsetRouteService.required(c)?11:9))throw new IllegalStateException();
             token=UUID.randomUUID().toString();final String current=token;
             enabled=true;standbyRequested=true;handoff=new WakeHandoff();worker=null;
             PendingIntent callback=PendingIntent.getBroadcast(c,87,new Intent(c,WakeEventReceiver.class).setAction(current),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_MUTABLE);
             Intent service=service(c).putExtra("callback",callback);
-            life.mosaic.audio.HeadsetAudio headset=HeadsetRouteService.current();
-            if(HeadsetRouteService.required(c)){if(headset==null)throw new IllegalStateException();Bundle route=new Bundle();headset.put(route);service.putExtras(route);}
+            if(HeadsetRouteService.required(c)){
+                int sink=HeadsetRouteService.standbySink(c);if(sink<=0)throw new IllegalStateException();
+                service.putExtra("headset_required",true).putExtra("headset_sink",sink).putExtra("headset_owner_version",life.mosaic.audio.WakeRouteContract.VERSION);
+            }
             connection=new ServiceConnection(){
                 public void onServiceConnected(ComponentName name,IBinder binder){
                     if(!enabled||!current.equals(token))return;
@@ -136,6 +136,9 @@ final class HandsFreeController {
             timingId=UUID.randomUUID().toString();
             long detected=intent.getLongExtra("detected_elapsed_ms",-1),now=SystemClock.elapsedRealtime();
             if(detected>=0&&detected<=now&&now-detected<=30000)mark(c,timingId,TimingPoint.WAKE_DETECTED,detected);
+            if(intent.getBooleanExtra("companion_ack",false)&&HeadsetRouteService.required(c)){
+                handoff.ackStarted();mark(c,timingId,TimingPoint.ACK_REQUESTED,SystemClock.elapsedRealtime());return;
+            }
             if(wakeAck!=null)wakeAck.cancel();wakeAck=new VoiceFeedback(c);
             wakeAck.headset(HeadsetRouteService.current(),HeadsetRouteService.required(c));
             final String current=token,id=timingId;handoff.ackStarted();
@@ -146,6 +149,9 @@ final class HandsFreeController {
                 if(ok)mark(c,id,TimingPoint.ACK_COMPLETED,SystemClock.elapsedRealtime());
                 handoff.ackCompleted();dispatch(c);
             });return;
+        }
+        if("ack_complete".equals(state)&&HeadsetRouteService.required(c)&&intent.getBooleanExtra("companion_ack",false)){
+            mark(c,timingId,TimingPoint.ACK_COMPLETED,SystemClock.elapsedRealtime());handoff.ackCompleted();dispatch(c);return;
         }
         if(("health".equals(state)||"listening".equals(state))&&HeadsetRouteService.required(c)&&!intent.getBooleanExtra("headset_verified",false)){headsetLost(c);return;}
         if("health".equals(state)){
@@ -173,16 +179,18 @@ final class HandsFreeController {
     private static void died(Context c,String current){
         if(!current.equals(token)||handoff==null)return;
         worker=null;handoff.died();unbind(c);dispatch(c);
-        main.postDelayed(()->{if(enabled&&current.equals(token)&&worker==null)interrupted(c,"תהליך ההאזנה נסגר · מחדש האזנה ברקע");},2000);
+        main.postDelayed(()->{if(enabled&&current.equals(token)&&worker==null&&handoff!=null&&!handoff.dispatched())interrupted(c,"תהליך ההאזנה נסגר · מחדש האזנה ברקע");},2000);
     }
     private static void dispatch(Context c){
         if(handoff!=null&&handoff.takeReady()){
-            mark(c,timingId,TimingPoint.TURN_DISPATCHED,SystemClock.elapsedRealtime());
-            enabled=false;token="";unbind(c);
-            status(c,"מפעיל שיחה מעל מסך הנעילה");
-            if(!MosaicAssistantService.wake()){
-                interrupted(c,"חיבור עוזר Android אינו זמין · ההאזנה תתחדש כשהעוזר יתחבר");
-            }
+            final String current=token;
+            Runnable launch=()->{
+                if(!enabled||!current.equals(token))return;
+                mark(c,timingId,TimingPoint.TURN_DISPATCHED,SystemClock.elapsedRealtime());
+                enabled=false;token="";unbind(c);status(c,"מפעיל שיחה מעל מסך הנעילה");
+                if(!MosaicAssistantService.wake())interrupted(c,"חיבור עוזר Android אינו זמין · ההאזנה תתחדש כשהעוזר יתחבר");
+            };
+            if(HeadsetRouteService.required(c))HeadsetRouteService.ensure(c,launch);else launch.run();
         }
     }
     static void stop(Context context,String reason){

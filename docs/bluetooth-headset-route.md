@@ -254,3 +254,44 @@ not actual microphone processing, sustained screen-off capture or acoustic wake.
 The earlier setup-only binding refresh is retained above and is not counted as
 this autonomous restart result. Reboot, full headset turn, mode-release restoration
 with an attached headset, audible ack, disconnect leakage and power remain pending.
+
+
+## ASR-43 / VOICE-21 — cross-UID mode ownership failure, 2026-10-31
+
+Physical failure on installed 0.27.1/code31 + wake0.9/code10: after the owner
+connected the buds, actual headset input was verified with non-interactive health
+(4.8s processed / 5.028s wall in one window), then the route stopped. The owner
+reported no wake response. Two private AudioService observations show controller
+MODE_IN_COMMUNICATION reset by Android to MODE_NORMAL after about 5.8–5.9 seconds.
+The recording UID belonged to the separate companion; controller mode owner had
+no own-UID active communication input/output. Do not call the earlier brief health
+window sustained acceptance. The owner's acoustic trial failed.
+
+This is consistent with [AOSP AudioService UID activity policy](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android15-release/services/core/java/com/android/server/audio/AudioService.java):
+CHECK_MODE_FOR_UID_PERIOD_MS is 6000; mode activity tracks matching client UID and
+VOICE_COMMUNICATION recording/playback. Device logs establish the observed reset;
+the AOSP reference explains the hypothesis, not an exact Pixel framework build.
+
+Baseline/rollback: 8dfa345556276413427e726174e04b8a75c2250e. Candidate Voice
+0.28/code32 + wake0.10/code11 changes ownership, not models: standby now acquires
+focus/mode/route inside the foreground companion that actually records the mic.
+It plays the short ack there, stops mic, releases route and native state, then
+reports final wake. Controller waits for ack plus observed companion death before
+acquiring its own turn route. No artificial silent keepalive, repeated mode reset,
+privileged permission, phone-mic fallback or extra raw-audio retention is used.
+
+Wake route contract v2 supplies the transient sink ID and assigns the companion as
+standby owner; headset mode requires code11. Older owner-version contracts are
+rejected. Per-block input/route/silence checks remain. The main route is released
+after received feedback during ASR/Gemma thinking, then reacquired in the controller
+UID immediately before TTS, refreshing transient IDs. Rearm releases the main route
+before restarting companion ownership. Heavy-worker dispatch cannot confuse its
+new route-acquisition interval with a missing native-death callback.
+
+New tests cover incompatible ownership versions and one-shot route handoff after
+ack/native death. Existing model/thread/CPU KWS+ASR/BlueTTS and Gemma NPU, privacy,
+role selection and stored consent remain unchanged. New companion normal
+MODIFY_AUDIO_SETTINGS plus mediaPlayback FGS declaration support its own ack/route;
+no Bluetooth scan/pairing grant. Exact-source CI/install and >60s non-interactive
+health must pass before asking the owner for another acoustic wake trial. Full
+screen-off request/TTS/rearm, call/disconnect, latency and battery remain pending.

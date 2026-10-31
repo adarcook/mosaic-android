@@ -9,6 +9,7 @@ import life.mosaic.audio.HeadsetAudio;
 
 /** One route/focus owner across companion wake, capture, feedback and isolated TTS. */
 public final class HeadsetRouteService extends Service {
+    private static HeadsetRouteService instance;
     private static volatile HeadsetAudio selected;
     private static boolean starting;
     private static Runnable ready;
@@ -25,7 +26,10 @@ public final class HeadsetRouteService extends Service {
         try{c.startForegroundService(new Intent(c,HeadsetRouteService.class));}
         catch(RuntimeException error){starting=false;ready=null;HandsFreeController.status(c,"Android חסם ניתוב לאוזניות · יש להפעיל מתוך מוזאיק");}
     }
-    static void stop(Context c){selected=null;starting=false;ready=null;c.stopService(new Intent(c,HeadsetRouteService.class));}
+    static void stop(Context c){selected=null;starting=false;ready=null;if(instance!=null)instance.releaseNow();c.stopService(new Intent(c,HeadsetRouteService.class));}
+    private void releaseNow(){closing=true;main.removeCallbacksAndMessages(null);try{if(route!=null)route.close();}catch(RuntimeException ignored){}}
+    @Override public void onCreate(){super.onCreate();instance=this;}
+    static int standbySink(Context c){AudioDeviceInfo device=choose(c.getSystemService(AudioManager.class));return device==null?-1:device.getId();}
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         if(intent!=null&&"STOP".equals(intent.getAction())){HandsFreeController.disable(this,"האזנת האוזניות הופסקה");return START_NOT_STICKY;}
@@ -85,6 +89,7 @@ public final class HeadsetRouteService extends Service {
         stopSelf();
     }
     @Override public void onDestroy(){
+        if(instance==this)instance=null;
         closing=true;selected=null;starting=false;ready=null;main.removeCallbacksAndMessages(null);
         try{if(route!=null)route.close();}catch(RuntimeException ignored){}
         stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();
