@@ -214,3 +214,43 @@ Baseline/rollback: c82b174e2e3c293e413b70434fc99394a85ecf17. Four new JVM tests 
 mode completion, Stop, competing turns and bounded repeated mode callbacks.
 Exact-source CI, installation and ordinary process restart proof are pending here.
 No acoustic wake, screen-off full turn or battery acceptance claim.
+
+
+### ASR-42 deployment/service evidence — 2026-10-31, 0.27.1/code31
+
+Implementation `8dfa345556276413427e726174e04b8a75c2250e` installed successfully
+from exact-source Tensor CI 41186510838 / artifact 13037018862. ZIP SHA-256
+`98d08adf2790f9b2bc8e0bb297e947fb93e72fe7419752efe87ccebfe09dbe4a` matched
+GitHub digest. Original CI APK SHA-256
+`c9d8521afe929e1f31d43023787b2a0d17cf0a8cd9d292bd4cd730ad7b4954fb`;
+locally signed, pulled-back installed APK SHA-256
+`0060a3770473b392aa36f9ef6468fe1d634065dc57c7d0a92d0563a778743c79`.
+The enrolled certificate and all non-signature payload entries matched. Existing
+wake0.9/code10 from c82b174 remains unchanged/compatible. No app/model deletion,
+new Android grant or new assistant-role selection. Local bridge key path was
+corrected to the verified user-copied original standard development key; its
+certificate pin remained unchanged and the hidden worker restarted on its saved
+queue/checkpoint. Keys/tokens stayed local.
+
+161 controller and 11 companion JVM tests pass. Exact-source Tensor, voice loop
+41186510804, Hebrew Zipformer 41186510779 and probe 41186510865 passed. General
+Android Build 41186510816 was still running at this evidence checkpoint.
+
+Live route inspection found MODE_IN_COMMUNICATION owned by ChatGPT; Mosaic
+correctly refused ownership. User ended that voice session. Later AudioPolicy's
+actual available output/input lists contained no Bluetooth headset (supported
+profile declarations alone are not connected devices). Headset mode stays enabled
+and listening consent true; no fallback to the phone microphone was started.
+
+After code31 installation, one controlled ordinary app-owned main-process TERM
+(not force-stop) produced a new main PID, a non-null system assistant binder,
+fresh "assistant connected / restore listening / prepare headset route" status,
+and then a paused-headset status because no headset was available. No Activity
+was launched, no setting refresh/instrumentation was used during this restart
+probe, and saved consent/headset choice remained true. Private PID/timestamp
+receipts are in ignored build/qa-headset/service-restart-{before,after}.json.
+This establishes automatic assistant rebinding and a background restore attempt,
+not actual microphone processing, sustained screen-off capture or acoustic wake.
+The earlier setup-only binding refresh is retained above and is not counted as
+this autonomous restart result. Reboot, full headset turn, mode-release restoration
+with an attached headset, audible ack, disconnect leakage and power remain pending.
