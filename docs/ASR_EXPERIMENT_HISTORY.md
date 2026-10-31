@@ -1331,3 +1331,31 @@ VoiceActivity preference file for the new host, avoiding a model-selection/sessi
 preference reset. The FGS-promotion gate still precedes capture independently of
 onResume. This is a candidate delivery fix, not physical acceptance or a claim
 that all orchestration has been moved out of Activity code.
+
+
+### ASR-45 controller installation — 2026-10-31
+
+Installed implementation `149447ce3eeef43072313f3a84de9886abf6df7e`, Voice
+0.29/code34, via exact-source Tensor gate41198193958/artifact13041173695.
+ZIP SHA-256 `1cea04db66b56c342439424ba829ffc6682741aa0fa09c7ac5cd507b38b7400e`
+matched GitHub digest; original CI APK
+`9653b515bbabb6f303a3daff299258adf623a23cbdfd4bb6e1d4c6b060f66e26`;
+installed/pulled-back APK `f314a73c9fd2309ce613198559b7f4f4e837541fe061378071aa1ab9321c64dd`.
+Certificate/payload/data-preserving checks passed. Companion remains installed
+0.10.1/code12 from7e470d5, no model/volume/runtime-grant changes. Existing
+VoiceActivity.xml was confirmed before installation; its preference namespace is
+preserved for the new turn host.
+
+Controller tests/build pass; exact-source Tensor, voice-loop41198193920, Hebrew
+Zipformer41198193951 and probe41198193875 passed before the device follow-up.
+General Android Build41198193876 was still running at the evidence checkpoint.
+
+ADB briefly disconnected and was reconnected only to the enrolled Pixel's
+advertised TLS endpoint; identity was verified, no re-pairing or new permission.
+After installation actual AudioPolicy available devices contained no Bluetooth
+headset. Listening consent/headset mode stayed true; restoration exhausted its
+bounded attempts. The generic status inaccurately suggested a signed update when
+no sink was available; this is an existing failure-classification usability issue,
+not evidence that the matching installed certificate failed. Owner was asked to
+reconnect before the next trial. No screen-off full-turn or candidate lifecycle
+pass is claimed yet. No Activity was manually opened to start the candidate.
