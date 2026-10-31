@@ -19,6 +19,7 @@ public final class VoiceActivity extends Activity {
     private VoiceScreen screen;
     private boolean handsfreeTurn, autoCapture, armOnResume, armingStandby;
     private VoiceFeedback feedback;
+    private final BackgroundCaptureStart autoStart=new BackgroundCaptureStart();
     private life.mosaic.audio.HeadsetAudio headset;
     private boolean headsetRequired;
     private void headsetFailure(){feedback.cancel();if(active)finish("error","ניתוב האוזניות אבד · הפנייה הופסקה");}
@@ -48,8 +49,8 @@ public final class VoiceActivity extends Activity {
         try{startActivityForResult(new Intent().setComponent(new ComponentName(HandsFreeController.COMPANION,HandsFreeController.COMPANION+".WakeSetupActivity")),78);}
         catch(Exception e){status.setText("נדרש עדכון חבילת Zipformer להפעלה בלי מגע");}
     }
-    private void acceptWake(Intent intent){if(HandsFreeController.consume(intent)){wakeTimingId=HandsFreeController.timingId();headsetRequired=HeadsetRouteService.required(this);headset=HeadsetRouteService.current();HandsFreeController.stopAck();feedback.headset(headset,headsetRequired);dismissFeedbackPreview();handsfreeTurn=true;autoCapture=true;setShowWhenLocked(true);setTurnScreenOn(!headsetRequired);}}
-    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptWake(intent);if(foreground&&autoCapture&&!active){autoCapture=false;readyCapture();}}
+    private void acceptWake(Intent intent){if(HandsFreeController.consume(intent)){wakeTimingId=HandsFreeController.timingId();headsetRequired=HeadsetRouteService.required(this);headset=HeadsetRouteService.current();HandsFreeController.stopAck();feedback.headset(headset,headsetRequired);dismissFeedbackPreview();handsfreeTurn=true;autoCapture=true;setShowWhenLocked(true);setTurnScreenOn(!headsetRequired);HandsFreeController.mark(this,wakeTimingId,HandsFreeController.TimingPoint.TURN_INTENT_ACCEPTED,SystemClock.elapsedRealtime());}}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptWake(intent);scheduleAutoCapture();}
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private TextView asr,llm,tts,transcript,answer,status;private Button talk,stop,setup,export,archive,warm,notificationAccess,notificationCheck;private CheckBox beam2,zipformer;
@@ -108,11 +109,34 @@ public final class VoiceActivity extends Activity {
         String previous=getPreferences(0).getString("journal","");if(!previous.isEmpty()){File file=new File(new File(getFilesDir(),"voice-turns"),previous);if(file.isFile())journal=file;}
         if(!locked()){transcript.setText(getPreferences(0).getString("transcript",""));answer.setText(getPreferences(0).getString("answer",""));status.setText(getPreferences(0).getString("result","כל שלב מוצג בנפרד. התמליל, התשובה והיומן נשמרים מקומית."));}
         if(getPreferences(0).getBoolean("active",false)&&journal!=null){status.setText("השיחה הקודמת הופרעה. היומן והאודיו שכבר נשמרו נשארו במכשיר.\n"+journal.getName());getPreferences(0).edit().putBoolean("active",false).apply();}
+        scheduleAutoCapture();
+    }
+    private void scheduleAutoCapture(){
+        if(!handsfreeTurn||!autoCapture||active)return;
+        long ticket=autoStart.request();if(ticket==0)return;
+        try{
+            if(!TurnForegroundService.expected()){
+                HandsFreeController.mark(this,wakeTimingId,HandsFreeController.TimingPoint.TURN_SERVICE_REQUESTED,SystemClock.elapsedRealtime());
+                TurnForegroundService.start(this);
+            }
+            pollAutoCapture(ticket,SystemClock.elapsedRealtime()+3000);
+        }catch(RuntimeException error){autoStart.cancel();autoCapture=false;HandsFreeController.status(this,"Android חסם התחלת שירות שיחה ברקע");endHandsFree(false);}
+    }
+    private void pollAutoCapture(long ticket,long deadline){
+        BackgroundCaptureStart.Result result=autoStart.observe(ticket,
+            handsfreeTurn&&autoCapture&&!active&&!isFinishing()&&HandsFreeController.requested(),
+            TurnForegroundService.active(),SystemClock.elapsedRealtime()>=deadline);
+        if(result==BackgroundCaptureStart.Result.WAIT){main.postDelayed(()->pollAutoCapture(ticket,deadline),50);return;}
+        if(result==BackgroundCaptureStart.Result.STALE)return;
+        autoCapture=false;
+        if(result==BackgroundCaptureStart.Result.ABORT){HandsFreeController.status(this,"שירות השיחה לא אושר בזמן או שהפנייה נעצרה");if(handsfreeTurn)endHandsFree(false);return;}
+        HandsFreeController.mark(this,wakeTimingId,HandsFreeController.TimingPoint.TURN_SERVICE_ACTIVE,SystemClock.elapsedRealtime());
+        readyCapture();
     }
     private void readyCapture(){
-        if(!foreground||!handsfreeTurn||active)return;
+        if(!handsfreeTurn||active)return;
+        if(!TurnForegroundService.active()){autoCapture=true;scheduleAutoCapture();return;}
         if(HandsFreeController.session().isEmpty()||(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)){HandsFreeController.status(this,"יש להכין האזנה עם התראת עצירה מתוך מוזאיק");endHandsFree(false);return;}
-        try{TurnForegroundService.start(this);}catch(Exception error){HandsFreeController.status(this,"Android חסם שיחה כשהמסך כבוי");endHandsFree(false);return;}
         if(headsetRequired&&headset==null){endHandsFree(false);return;}
         HandsFreeController.status(this,"מכין מיקרופון לבקשה");
         begin(false);
@@ -136,7 +160,7 @@ public final class VoiceActivity extends Activity {
             if(headsetRequired&&cue.equals("received")&&!stage.equals("tts"))HeadsetRouteService.stop(this);});
     }
     private void endHandsFree(boolean success){
-        handsfreeTurn=false;autoCapture=false;
+        autoStart.cancel();handsfreeTurn=false;autoCapture=false;
         Runnable leave=()->{MosaicSessionService.close();setShowWhenLocked(false);setTurnScreenOn(false);if(locked())moveTaskToBack(true);};
         if(success){feedback.cancel();if((foreground||TurnForegroundService.active())&&HandsFreeController.requested())HandsFreeController.arm(this);else {TurnForegroundService.stop(this);HandsFreeController.recover(this);}leave.run();}
         else{HandsFreeController.stop(this,"הפנייה נעצרה · האזנה קבועה תתחדש כשהתנאים יאפשרו");if(HandsFreeController.persistent(this))feedback.errorTone(leave);else if(!headsetRequired)feedback.play("error",ok->leave.run());else leave.run();HandsFreeController.recover(this);}
@@ -364,7 +388,7 @@ public final class VoiceActivity extends Activity {
         File source=request==76?new File(getFilesDir(),"handsfree-status.jsonl"):journal;if(source==null)return;
         try(InputStream input=new FileInputStream(source);OutputStream output=getContentResolver().openOutputStream(data.getData())){if(output==null)throw new IOException("יעד אינו זמין");input.transferTo(output);status.setText(request==76?"אבחון ההאזנה יוצא ללא אודיו או תמלילים":"יומן השיחה יוצא. הוא כולל תמליל ותשובה אישיים.");}catch(Exception e){status.setText("הייצוא נכשל: "+e.getMessage());}}
     @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(level>=TRIM_MEMORY_RUNNING_LOW){if(active)finish("error","לחץ זיכרון במכשיר — המנועים שוחררו");else{main.removeCallbacks(idleRelease);clearWorkers();controls(true);status.setText("המנועים שוחררו בגלל לחץ זיכרון. הכן אותם שוב כדי להמשיך.");}}}
-    @Override protected void onResume(){super.onResume();foreground=true;if(locked()){transcript.setText("");answer.setText("");}controls(!active);if(armOnResume){armOnResume=false;prepareStandby();}else if(!active&&!handsfreeTurn&&!armingStandby)HandsFreeController.restore(this);if(autoCapture&&!active){autoCapture=false;readyCapture();}notificationAccess.setText(WhatsAppNotificationListener.hasAccess(this)?"גישה להתראות מאושרת — שינוי הרשאה":"אישור גישה להתראות WhatsApp");}
-    @Override protected void onDestroy(){HandsFreeController.stopHeadsetTurn=null;dismissFeedbackPreview();if(handsfreeTurn||armingStandby||active){handsfreeTurn=false;armingStandby=false;if(active)finish("cancelled","מסך השיחה נסגר; הפנייה נשמרה והופסקה");HandsFreeController.interrupted(this,"מסך השיחה נסגר · מנסה לחדש האזנה קבועה");MosaicSessionService.close();}feedback.cancel();unregisterReceiver(handsfreeChanged);super.onDestroy();}
+    @Override protected void onResume(){super.onResume();foreground=true;if(locked()){transcript.setText("");answer.setText("");}controls(!active);if(armOnResume){armOnResume=false;prepareStandby();}else if(!active&&!handsfreeTurn&&!armingStandby)HandsFreeController.restore(this);scheduleAutoCapture();notificationAccess.setText(WhatsAppNotificationListener.hasAccess(this)?"גישה להתראות מאושרת — שינוי הרשאה":"אישור גישה להתראות WhatsApp");}
+    @Override protected void onDestroy(){autoStart.cancel();HandsFreeController.stopHeadsetTurn=null;dismissFeedbackPreview();if(handsfreeTurn||armingStandby||active){handsfreeTurn=false;armingStandby=false;if(active)finish("cancelled","מסך השיחה נסגר; הפנייה נשמרה והופסקה");HandsFreeController.interrupted(this,"מסך השיחה נסגר · מנסה לחדש האזנה קבועה");MosaicSessionService.close();}feedback.cancel();unregisterReceiver(handsfreeChanged);super.onDestroy();}
     @Override protected void onPause(){foreground=false;if(toolTurn)answer.setText("");dismissFeedbackPreview();if(serviceProbeRunning)finishServiceProbe(false);if(handsfreeTurn&&TurnForegroundService.expected()){main.removeCallbacks(idleRelease);super.onPause();return;}feedback.cancel();if(active)finish("cancelled","השיחה נעצרה במעבר לרקע; הנתונים שכבר נשמרו נשארו במכשיר");if(handsfreeTurn){handsfreeTurn=false;autoCapture=false;MosaicSessionService.close();HandsFreeController.interrupted(this,"השיחה הופרעה · מנסה לחדש האזנה קבועה");setShowWhenLocked(false);setTurnScreenOn(false);}if(toolTurn){answer.setText("");response="";}main.removeCallbacks(idleRelease);clearWorkers();super.onPause();}
 }

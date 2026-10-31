@@ -437,3 +437,36 @@ so isolated-word sensitivity versus screen state needs a controlled comparison.
 No production model/threshold/keyword or volume setting was changed. Owner was
 asked to coordinate one otherwise similar single-word trial with the display on;
 that action is pending readiness, not silently executed. Weak cue remains open.
+
+
+## ASR-45 / VOICE-23 — background capture after acknowledgement, 2026-10-31
+
+Owner's new ordinary attempt heard only a weak beep. This time telemetry confirms
+WAKE_DETECTED/ACK_COMPLETED/WAKE_CALLBACK_RECEIVED/TURN_DISPATCHED, then rearm;
+no CAPTURE_RECORDING_STARTED or READY marker followed. Do not classify this event
+as a keyword miss. The previous audible full pipeline remains a separate trial.
+
+Source review found request startup tied to Activity foreground/onResume:
+onNewIntent only started auto capture when foreground=true, and readyCapture
+returned when foreground=false. This can explain an ack-only turn when an
+assistant Activity exists but is not resumed (screen off/dreaming/lock state).
+New intent-accepted/FGS-requested/FGS-active monotonic markers will distinguish that
+hypothesis from an Activity delivery failure on the next physical attempt.
+
+Baseline/rollback implementation: 7e470d5ee66784cca04c072604ddb8448bf061b0,
+installed Voice 0.28.1/code33 + wake0.10.1/code12. Candidate Voice
+0.29-background-capture/code34 keeps companion/model/IPC/route ownership and cue
+level unchanged. An accepted wake schedules request startup from onCreate or
+onNewIntent without waiting for UI resume. It first requests the existing visible
+microphone/mediaPlayback FGS, waits up to 3s for actual promotion and only then
+starts capture. Duplicate resume/intent callbacks share one generation; explicit
+Stop, lost authorization, destruction and timeout invalidate delayed promotion.
+No role/grant/background restriction or keyguard bypass. Headset screen wake and
+KEEP_SCREEN_ON remain disabled. Push-to-talk still requires foreground UI.
+
+168 controller JVM tests pass (five new FGS-promotion/cancellation/race tests),
+local APK build and whitespace checks pass. Companion's 14 unchanged tests passed
+on its installed implementation. No ASR threshold/backend/model tuning, microphone
+data capture or volume change was made for this slice. Exact-source CI, guarded
+controller installation and screen-off ack→capture→ready→reply/rearm acceptance
+remain pending. Weak beep is retained as an unresolved usability observation.

@@ -9,8 +9,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 33
-        versionName = "0.28.1-wake-probe"
+        versionCode = 34
+        versionName = "0.29-background-capture"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {

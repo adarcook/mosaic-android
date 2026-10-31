@@ -32,7 +32,7 @@ final class HandsFreeController {
     }
     static void headsetConnected(Context c){if(HeadsetRouteService.required(c)&&persistent(c)){recovery.reset();recover(c);}}
 
-    enum TimingPoint { WAKE_DETECTED, ACK_REQUESTED, ACK_PLAYBACK_HEAD, ACK_COMPLETED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
+    enum TimingPoint { WAKE_DETECTED, ACK_REQUESTED, ACK_PLAYBACK_HEAD, ACK_COMPLETED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, TURN_INTENT_ACCEPTED, TURN_SERVICE_REQUESTED, TURN_SERVICE_ACTIVE, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }
     static String timingId(){return timingId;}
     static void mark(Context c,String id,TimingPoint point,long at){
         if(id.isEmpty())return;
