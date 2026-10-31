@@ -1317,3 +1317,17 @@ on its installed implementation. No ASR threshold/backend/model tuning, micropho
 data capture or volume change was made for this slice. Exact-source CI, guarded
 controller installation and screen-off ack→capture→ready→reply/rearm acceptance
 remain pending. Weak beep is retained as an unresolved usability observation.
+
+
+ASR-45 delivery refinement before installation: read-only ActivityTaskManager
+inspection of the failed installed turn showed VoiceActivity STOPPED, not visible,
+and Pending New Intents. Therefore foreground-gate removal alone would not ensure
+that onNewIntent executes. Candidate headset wakes now target a separate,
+non-exported HeadsetTurnActivity whose lock visibility is declared before intent
+delivery. It never requests screen-on, starts only from the consumed internal wake
+nonce, and finishes after the turn so the next wake gets a fresh host. Manual UI
+lock visibility is unchanged. Base getPreferences explicitly retains the existing
+VoiceActivity preference file for the new host, avoiding a model-selection/session
+preference reset. The FGS-promotion gate still precedes capture independently of
+onResume. This is a candidate delivery fix, not physical acceptance or a claim
+that all orchestration has been moved out of Activity code.

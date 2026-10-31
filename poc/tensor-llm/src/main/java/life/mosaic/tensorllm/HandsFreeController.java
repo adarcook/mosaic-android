@@ -222,6 +222,6 @@ final class HandsFreeController {
     private static Intent service(Context c){return new Intent().setComponent(new ComponentName(COMPANION,COMPANION+".WakeListenService"));}
     private static void unbind(Context c){if(bound&&connection!=null){bound=false;try{c.unbindService(connection);}catch(Exception ignored){}}connection=null;}
     static void stopAck(){if(wakeAck!=null)wakeAck.cancel();}
-    static Intent turnIntent(Context c){launchToken=UUID.randomUUID().toString();return new Intent(c,VoiceActivity.class).putExtra("handsfree_token",launchToken);}
+    static Intent turnIntent(Context c){launchToken=UUID.randomUUID().toString();return new Intent(c,HeadsetRouteService.required(c)?HeadsetTurnActivity.class:VoiceActivity.class).putExtra("handsfree_token",launchToken);}
     static boolean consume(Intent intent){String value=intent.getStringExtra("handsfree_token");if(value==null||!value.equals(launchToken)||launchToken.isEmpty())return false;launchToken="";return true;}
 }

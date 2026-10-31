@@ -18,6 +18,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".HeadsetTurnActivity" android:exported="false"
+            android:showWhenLocked="true" android:turnScreenOn="false" android:excludeFromRecents="true"
+            android:taskAffinity="life.mosaic.tensorllm.handsfree"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode"
+            android:theme="@style/Theme.Mosaic.Voice" />
         <receiver android:name=".WakeEventReceiver" android:exported="false" />
         <service android:name=".HeadsetRouteService" android:exported="false" android:foregroundServiceType="microphone|mediaPlayback" />
         <service android:name=".TurnForegroundService" android:exported="false" android:foregroundServiceType="microphone|mediaPlayback" />

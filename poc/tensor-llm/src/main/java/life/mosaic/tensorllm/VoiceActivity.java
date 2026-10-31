@@ -13,7 +13,8 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
 /** Foreground warm session. Sequential turns, durable stages and isolated native runtimes. */
-public final class VoiceActivity extends Activity {
+public class VoiceActivity extends Activity {
+    @Override public android.content.SharedPreferences getPreferences(int mode){return getSharedPreferences("VoiceActivity",mode);}
     private final VoiceToolRouter toolRouter = new VoiceToolRouter(java.util.List.of(
             new WhatsAppVoiceTool(() -> WhatsAppNotificationListener.readLatest(this))));
     private VoiceScreen screen;
@@ -161,7 +162,7 @@ public final class VoiceActivity extends Activity {
     }
     private void endHandsFree(boolean success){
         autoStart.cancel();handsfreeTurn=false;autoCapture=false;
-        Runnable leave=()->{MosaicSessionService.close();setShowWhenLocked(false);setTurnScreenOn(false);if(locked())moveTaskToBack(true);};
+        Runnable leave=()->{MosaicSessionService.close();setShowWhenLocked(false);setTurnScreenOn(false);if(this instanceof HeadsetTurnActivity)finish();else if(locked())moveTaskToBack(true);};
         if(success){feedback.cancel();if((foreground||TurnForegroundService.active())&&HandsFreeController.requested())HandsFreeController.arm(this);else {TurnForegroundService.stop(this);HandsFreeController.recover(this);}leave.run();}
         else{HandsFreeController.stop(this,"הפנייה נעצרה · האזנה קבועה תתחדש כשהתנאים יאפשרו");if(HandsFreeController.persistent(this))feedback.errorTone(leave);else if(!headsetRequired)feedback.play("error",ok->leave.run());else leave.run();HandsFreeController.recover(this);}
     }
