@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "poc/zipformer-gate/**"
+      - "poc/headset-audio/**"
       - "poc/tensor-llm/**"
       - "poc/model-storage/src/main/java/life/mosaic/models/VoiceAsrBackend.java"
       - "docs/zipformer-voice-loop.md"

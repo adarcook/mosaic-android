@@ -21,6 +21,11 @@ class WakeListenService : Service() {
     private var workerStarted = false
     @Volatile private var ownerStopped = false
     private var reply: PendingIntent? = null
+    private var headset: life.mosaic.audio.HeadsetAudio? = null
+    private var diagnostic=false
+    private var headsetRequired=false
+    private var headsetSink=-1
+    private var headsetLease: life.mosaic.audio.StandbyHeadsetRoute? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -46,6 +51,10 @@ class WakeListenService : Service() {
         if (callback == null || callback.creatorPackage != "life.mosaic.tensorllm") {
             stopSelf(); return START_NOT_STICKY
         }
+        diagnostic=BuildConfig.DEBUG && (intent?.getBooleanExtra("wake_diagnostic",false) ?: false)
+        headsetRequired=intent?.getBooleanExtra("headset_required",false) ?: false
+        headsetSink=intent?.getIntExtra("headset_sink",-1) ?: -1
+        if(!life.mosaic.audio.WakeRouteContract.valid(headsetRequired,intent?.getIntExtra("headset_owner_version",0) ?: 0,headsetSink)){stopSelf();return START_NOT_STICKY}
         reply = callback
         try {
             val manager = getSystemService(NotificationManager::class.java)
@@ -57,7 +66,7 @@ class WakeListenService : Service() {
                 .setContentText("מצב ניסוי: אמור מוזאיק, המתן לצליל ואז דבר. אפשר לעצור כאן.")
                 .setOngoing(true).setCategory(Notification.CATEGORY_SERVICE)
                 .addAction(Notification.Action.Builder(null, "הפסקת האזנה", stop).build()).build()
-            startForeground(54, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            startForeground(54, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or (if(headsetRequired) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK else 0))
             wakeLock = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "mosaic:software-wake").apply { acquire() }
             running = true; workerStarted = true
             Thread({ listen() }, "mosaic-local-wake").start()
@@ -80,25 +89,30 @@ class WakeListenService : Service() {
             keywords.writeText(WakeKeywords.build(File(dir,"tokens.txt").readText()))
             recognizer = KeywordSpotter(assetManager = null, config = KeywordSpotterConfig(
                 featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80, dither = 0f),
-                modelConfig = OnlineModelConfig(transducer = OnlineTransducerModelConfig(
-                    encoder = File(dir, "encoder.int8.onnx").absolutePath,
-                    decoder = File(dir, "decoder.int8.onnx").absolutePath,
-                    joiner = File(dir, "joiner.int8.onnx").absolutePath),
-                    tokens = File(dir, "tokens.txt").absolutePath,
-                    numThreads = 2, provider = "cpu", modelType = "zipformer2"),
+                modelConfig = wakeModel(dir),
                 maxActivePaths = 4, keywordsFile = keywords.absolutePath,
                 keywordsScore = 1.5f, keywordsThreshold = 0.01f, numTrailingBlanks = 2))
             stream = recognizer.createStream()
+            if(headsetRequired){
+                val lease=life.mosaic.audio.StandbyHeadsetRoute(this);headsetLease=lease
+                headset=lease.open(headsetSink){running}
+            }
             val minimum = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             require(minimum > 0)
-            val recorder = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
+            val recorder = AudioRecord(if(headset!=null) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minimum * 4, 12800))
             mic = recorder
             require(recorder.state == AudioRecord.STATE_INITIALIZED)
             if (!running) return
+            headset?.prefer(getSystemService(AudioManager::class.java),recorder)
             recorder.startRecording()
             require(recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING)
-            report("listening")
+            headset?.awaitInput(getSystemService(AudioManager::class.java),recorder)
+            report(if(diagnostic) "probe_listening" else "listening")
+            if(diagnostic)headsetLease?.acknowledge(headset!!)
+            val probeAudio=if(diagnostic) FloatArray(16000*20) else null
+            var probeCount=0
+            var probeKeyword=false
             val samples = ShortArray(1600)
             var streamSamples = 0
             var healthAt = SystemClock.elapsedRealtime()
@@ -110,7 +124,10 @@ class WakeListenService : Service() {
                 val count = recorder.read(samples, 0, samples.size, AudioRecord.READ_BLOCKING)
                 if (!running) break
                 require(count > 0)
+                headsetLease?.requireHealthy()
+                headset?.requireInput(getSystemService(AudioManager::class.java),recorder)
                 require(recorder.activeRecordingConfiguration?.isClientSilenced != true)
+                if(probeAudio!=null){val keep=minOf(count,probeAudio.size-probeCount);for(i in 0 until keep)probeAudio[probeCount+i]=samples[i]/32768f;probeCount+=keep}
                 val currentStream = requireNotNull(stream)
                 currentStream.acceptWaveform(FloatArray(count) { samples[it] / 32768f }, 16000)
                 streamSamples += count
@@ -127,6 +144,7 @@ class WakeListenService : Service() {
                 val now = SystemClock.elapsedRealtime()
                 if (now - healthAt >= 5000) {
                     try { reply?.send(this, 0, Intent().putExtra("state", "health")
+                        .putExtra("headset_verified",headset!=null).putExtra("headset_route_type",headset?.type ?: -1)
                         .putExtra("wall_ms", now-healthAt).putExtra("audio_ms", healthSamples*1000/16000)
                         .putExtra("decode_ms", decodeMs).putExtra("nonzero_blocks", nonzeroBlocks)
                         .putExtra("max_rms", maxRms)
@@ -134,16 +152,35 @@ class WakeListenService : Service() {
                     catch (_: Exception) { running=false }
                     healthAt=now;healthSamples=0;nonzeroBlocks=0;decodeMs=0;maxRms=0
                 }
-                if (WakePhrase.matches(recognizer.getResult(currentStream).keyword)) { detectedAt=SystemClock.elapsedRealtime();result = "wake"; break }
+                val keywordMatched=WakePhrase.matches(recognizer.getResult(currentStream).keyword)
+                if(diagnostic){
+                    probeKeyword=probeKeyword||keywordMatched
+                    if(probeCount>=16000*20){result="probe_complete";break}
+                } else if (keywordMatched) {
+                    detectedAt=SystemClock.elapsedRealtime();report("detected",detectedAt)
+                    if(headsetRequired){headsetLease!!.acknowledge(headset!!);report("ack_complete",detectedAt)}
+                    result="wake";break
+                }
                 if (streamSamples >= 16000 * 30) {
                     currentStream.release(); stream = recognizer.createStream(); streamSamples = 0
                 }
+            }
+            if(result=="probe_complete" && probeAudio!=null && running){
+                recorder.stop();headsetLease?.close();headsetLease=null
+                stream?.release();stream=null;recognizer.release();recognizer=null
+                val summary=decodeProbe(dir,probeAudio)
+                java.util.Arrays.fill(probeAudio,0f)
+                reply?.send(this,0,Intent().putExtra("state","probe_result")
+                    .putExtra("probe_kws",probeKeyword).putExtra("probe_asr_expected",summary.expected)
+                    .putExtra("probe_asr_empty",summary.empty).putExtra("probe_variant",summary.variant)
+                    .putExtra("probe_samples",probeCount))
             }
         } catch (_: Throwable) { if (running) result = "error" }
         finally {
             running = false
             try { mic?.stop() } catch (_: Exception) {}
             mic?.release(); mic = null
+            try{headsetLease?.close()}catch(_:Exception){};headsetLease=null
             try { stream?.release() } catch (_: Exception) {}
             try { recognizer?.release() } catch (_: Exception) {}
             wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null
@@ -155,8 +192,28 @@ class WakeListenService : Service() {
         }
     }
 
+    private fun wakeModel(dir: File)=OnlineModelConfig(transducer=OnlineTransducerModelConfig(
+        encoder=File(dir,"encoder.int8.onnx").absolutePath,decoder=File(dir,"decoder.int8.onnx").absolutePath,
+        joiner=File(dir,"joiner.int8.onnx").absolutePath),tokens=File(dir,"tokens.txt").absolutePath,
+        numThreads=2,provider="cpu",modelType="zipformer2")
+
+    private fun decodeProbe(dir:File,audio:FloatArray):WakeProbeSummary {
+        val engine=OnlineRecognizer(assetManager=null,config=OnlineRecognizerConfig(
+            featConfig=FeatureConfig(sampleRate=16000,featureDim=80,dither=0f),modelConfig=wakeModel(dir),
+            enableEndpoint=false,decodingMethod="greedy_search"))
+        val stream=engine.createStream()
+        try{
+            var offset=0
+            while(offset<audio.size){val end=minOf(offset+1600,audio.size);stream.acceptWaveform(audio.copyOfRange(offset,end),16000);offset=end
+                var cycles=0;while(engine.isReady(stream)){require(++cycles<=500);engine.decode(stream)}}
+            ZipformerTailPadding.finish(16000,{ samples,rate->stream.acceptWaveform(samples,rate) },{ stream.inputFinished() })
+            var cycles=0;while(engine.isReady(stream)){require(++cycles<=500);engine.decode(stream)}
+            return WakeProbeSummary.analyze(engine.getResult(stream).text)
+        }finally{stream.release();engine.release();java.util.Arrays.fill(audio,0f)}
+    }
+
     private fun report(state: String, detectedAt: Long = -1L) {
-        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
+        try { reply?.send(this, 0, Intent().putExtra("state", state).putExtra("companion_ack",headsetRequired).putExtra("headset_verified",state=="listening" && headset!=null).putExtra("headset_route_type",headset?.type ?: -1).putExtra("detected_elapsed_ms",detectedAt).putExtra("owner_stop",ownerStopped)) } catch (_: Exception) { running = false }
     }
 
     private fun verify(dir: File) {

@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -15,7 +17,7 @@
         <activity android:name=".WakeSetupActivity" android:exported="true" android:permission="life.mosaic.permission.LOCAL_VOICE_ASR" />
         <service android:name=".WakeListenService" android:exported="true"
             android:permission="life.mosaic.permission.LOCAL_VOICE_ASR"
-            android:foregroundServiceType="microphone" android:process=":wake" />
+            android:foregroundServiceType="microphone|mediaPlayback" android:process=":wake" />
         <service android:name=".ZipformerVoiceService"
             android:exported="true"
             android:permission="life.mosaic.permission.LOCAL_VOICE_ASR"

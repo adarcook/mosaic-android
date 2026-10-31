@@ -971,3 +971,426 @@ setting, host numerical parity, audio, device, thermal, quality or latency resul
 Keep the historical outcomes and remaining acceptance gates; merge authorization
 does not establish production readiness. Reproduction remains documented in
 [tensor-g5-probe.md](tensor-g5-probe.md).
+
+
+### ASR-42 / VOICE-20 — מיקרופון אוזניות לאורך שיחה, 31.10.2026
+
+Baseline/rollback: `bd8701a17a0358d80d7f7042f53919ffdcc7f3d9` (#58 foundation).
+Hypothesis: one foreground communication-route owner, verified headset input before
+ready and guarded output can connect Pixel Buds wake/capture/reply without changing
+models. Candidate Voice 0.27/code30 + wake0.9/code10; exact commit/artifacts belong
+in installation evidence, not invented here. Changed factors: headset opt-in,
+VOICE_COMMUNICATION capture, transient signed route fields, communication output,
+pre-teardown acknowledgement and headset screen-wake suppression. CPU Zipformer
+KWS/ASR + BlueTTS and Gemma NPU/model hashes/settings remain unchanged.
+157 controller and 11 companion JVM tests, local APK builds and package dispatch
+verification passed. No input audio was used by host tests. Physical acoustic
+quality, sustained screen-off turn, calls/reconnection, false wakes, battery and
+thermal effects remain pending. This is not identical-PCM model A/B or measured
+speed improvement. Protocol, contract, privacy/retention and acceptance defined
+before installation: [headset route](bluetooth-headset-route.md#asr-42--voice-20--integration-2026-10-31).
+No roadmap completion or merge. Append actual device evidence here after deployment.
+
+ASR-42 integration refinement: request dispatch also waits for acknowledgement
+completion so a fast native teardown cannot cancel the short ack. Three new JVM
+race tests pass. ACK_REQUESTED/ACK_PLAYBACK_HEAD/ACK_COMPLETED are monotonic
+software markers, not measured audibility. Verified headset health records contain
+only a boolean and route type, never device IDs or addresses.
+
+
+## ASR-42 deployment outcome — 2026-10-31 (Asia/Hebron)
+
+Implementation source `c82b174e2e3c293e413b70434fc99394a85ecf17` passed all five
+exact-source hosted gates: Tensor 41140691759, voice-loop 41140691731, Hebrew
+Zipformer 41140691728, Tensor probe 41140691714 and Android Build 41140691761.
+157 controller tests and 11 companion tests pass. Both CI ZIPs were obtained via
+GitHub connector after a stalled direct bridge download was terminated before
+extraction/install. Downloaded hashes match GitHub artifact digests:
+
+- Wake artifact 13017579262, ZIP SHA-256
+  `7dfd9f308950ed0cc5cc16ff561bcc16f36f850663da176238836b88d024906d`;
+  original CI APK `f70ffed4ea51e36f7c4625eb447414e3abb6aae37dd2d2b61da2477a606623b5`.
+- Voice artifact 13018803223, ZIP SHA-256
+  `9428d1ba9e4762b56a727bd381b372102617062543ab92387066efe179260494`;
+  original CI APK `1b776f8ec52b1e0c5a77419d7584008ad4c0dacde293a065d045e076c155faa8`.
+
+The existing bridge's exact-source, digest, enrolled-device, package, signer and
+payload checks were retained with the verified local ZIP as its download source.
+Installation stopped before adb install: configured enrolled development key is
+absent on this computer. The existing standard local development key was tested
+on a separate temporary APK copy and failed the unchanged installed-certificate
+check. No certificate pin was changed, no key replaced/generated/uploaded, no
+uninstall/data/model deletion, no runtime setting/permission or headset opt-in
+change. The user confirms the other computer is currently unavailable.
+
+**Not installed.** Pixel still has Voice 0.26/code28 + wake0.8.2/code9.
+User reports buds connected/worn, but no new-route microphone/playback or acoustic
+probe was performed. Physical acceptance and battery/latency remain pending.
+Resume with the existing matching key on its original machine (or an existing
+local backup), reverify exact artifacts and installed certificate, install companion
+before controller, then enable the visible headset mode and verify source/output.
+The remote queue #56 received status only; no deferred install command was queued.
+Local queue/config is #59 on port8766. Private local evidence stays under ignored
+build/qa-headset. No merge or roadmap completion.
+
+
+### ASR-42 follow-up — service restoration after a communication session, 2026-10-31
+
+Source c82b174 was installed with the user-copied original development key after
+certificate/payload/digest verification: Voice 0.27/code30 installed APK SHA-256
+`256ff8a60e4dc26ec0cc8ddc22eb8ec4648887d60dce14d80c949532a22da3ba`,
+wake0.9/code10 installed APK `5ad7144849e0f27b59374340c8a90aeafcd076b05f730b7c49e5e93c9c667c41`.
+Saved listening consent was already true; debug owner setup changed only headset_mode.
+No model/data deletion or new permission/assistant-role grant. Earlier missing-key
+block remains historical, superseded by these verified installation receipts.
+
+After setup instrumentation, the system assistant binding was null; ordinary main
+process termination and reasserting the same setting did not repair it. A controlled
+refresh of the voice_interaction_service setting restored the original selected
+Mosaic component and unchanged assistant setting, without activity launch. This is
+setup repair, not evidence of autonomous recovery. The restored service correctly
+refused to take audio while ChatGPT owned MODE_IN_COMMUNICATION. User ended that
+voice session. Review exposed a missing automatic mode-release restore trigger.
+
+Candidate 0.27.1/code31 adds OnModeChangedListener: return to MODE_NORMAL can trigger
+bounded background restore under existing headset/listening consent, only when no
+listener/turn is active. It never resets the three-attempt failure budget; explicit
+Stop still wins. Headset reconnection triggers now consider sink additions only,
+not source endpoints created by routing. Companion/model/IPC/backend unchanged.
+Baseline/rollback: c82b174e2e3c293e413b70434fc99394a85ecf17. Four new JVM tests cover
+mode completion, Stop, competing turns and bounded repeated mode callbacks.
+Exact-source CI, installation and ordinary process restart proof are pending here.
+No acoustic wake, screen-off full turn or battery acceptance claim.
+
+
+### ASR-42 deployment/service evidence — 2026-10-31, 0.27.1/code31
+
+Implementation `8dfa345556276413427e726174e04b8a75c2250e` installed successfully
+from exact-source Tensor CI 41186510838 / artifact 13037018862. ZIP SHA-256
+`98d08adf2790f9b2bc8e0bb297e947fb93e72fe7419752efe87ccebfe09dbe4a` matched
+GitHub digest. Original CI APK SHA-256
+`c9d8521afe929e1f31d43023787b2a0d17cf0a8cd9d292bd4cd730ad7b4954fb`;
+locally signed, pulled-back installed APK SHA-256
+`0060a3770473b392aa36f9ef6468fe1d634065dc57c7d0a92d0563a778743c79`.
+The enrolled certificate and all non-signature payload entries matched. Existing
+wake0.9/code10 from c82b174 remains unchanged/compatible. No app/model deletion,
+new Android grant or new assistant-role selection. Local bridge key path was
+corrected to the verified user-copied original standard development key; its
+certificate pin remained unchanged and the hidden worker restarted on its saved
+queue/checkpoint. Keys/tokens stayed local.
+
+161 controller and 11 companion JVM tests pass. Exact-source Tensor, voice loop
+41186510804, Hebrew Zipformer 41186510779 and probe 41186510865 passed. General
+Android Build 41186510816 was still running at this evidence checkpoint.
+
+Live route inspection found MODE_IN_COMMUNICATION owned by ChatGPT; Mosaic
+correctly refused ownership. User ended that voice session. Later AudioPolicy's
+actual available output/input lists contained no Bluetooth headset (supported
+profile declarations alone are not connected devices). Headset mode stays enabled
+and listening consent true; no fallback to the phone microphone was started.
+
+After code31 installation, one controlled ordinary app-owned main-process TERM
+(not force-stop) produced a new main PID, a non-null system assistant binder,
+fresh "assistant connected / restore listening / prepare headset route" status,
+and then a paused-headset status because no headset was available. No Activity
+was launched, no setting refresh/instrumentation was used during this restart
+probe, and saved consent/headset choice remained true. Private PID/timestamp
+receipts are in ignored build/qa-headset/service-restart-{before,after}.json.
+This establishes automatic assistant rebinding and a background restore attempt,
+not actual microphone processing, sustained screen-off capture or acoustic wake.
+The earlier setup-only binding refresh is retained above and is not counted as
+this autonomous restart result. Reboot, full headset turn, mode-release restoration
+with an attached headset, audible ack, disconnect leakage and power remain pending.
+
+
+## ASR-43 / VOICE-21 — cross-UID mode ownership failure, 2026-10-31
+
+Physical failure on installed 0.27.1/code31 + wake0.9/code10: after the owner
+connected the buds, actual headset input was verified with non-interactive health
+(4.8s processed / 5.028s wall in one window), then the route stopped. The owner
+reported no wake response. Two private AudioService observations show controller
+MODE_IN_COMMUNICATION reset by Android to MODE_NORMAL after about 5.8–5.9 seconds.
+The recording UID belonged to the separate companion; controller mode owner had
+no own-UID active communication input/output. Do not call the earlier brief health
+window sustained acceptance. The owner's acoustic trial failed.
+
+This is consistent with [AOSP AudioService UID activity policy](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android15-release/services/core/java/com/android/server/audio/AudioService.java):
+CHECK_MODE_FOR_UID_PERIOD_MS is 6000; mode activity tracks matching client UID and
+VOICE_COMMUNICATION recording/playback. Device logs establish the observed reset;
+the AOSP reference explains the hypothesis, not an exact Pixel framework build.
+
+Baseline/rollback: 8dfa345556276413427e726174e04b8a75c2250e. Candidate Voice
+0.28/code32 + wake0.10/code11 changes ownership, not models: standby now acquires
+focus/mode/route inside the foreground companion that actually records the mic.
+It plays the short ack there, stops mic, releases route and native state, then
+reports final wake. Controller waits for ack plus observed companion death before
+acquiring its own turn route. No artificial silent keepalive, repeated mode reset,
+privileged permission, phone-mic fallback or extra raw-audio retention is used.
+
+Wake route contract v2 supplies the transient sink ID and assigns the companion as
+standby owner; headset mode requires code11. Older owner-version contracts are
+rejected. Per-block input/route/silence checks remain. The main route is released
+after received feedback during ASR/Gemma thinking, then reacquired in the controller
+UID immediately before TTS, refreshing transient IDs. Rearm releases the main route
+before restarting companion ownership. Heavy-worker dispatch cannot confuse its
+new route-acquisition interval with a missing native-death callback.
+
+New tests cover incompatible ownership versions and one-shot route handoff after
+ack/native death. Existing model/thread/CPU KWS+ASR/BlueTTS and Gemma NPU, privacy,
+role selection and stored consent remain unchanged. New companion normal
+MODIFY_AUDIO_SETTINGS plus mediaPlayback FGS declaration support its own ack/route;
+no Bluetooth scan/pairing grant. Exact-source CI/install and >60s non-interactive
+health must pass before asking the owner for another acoustic wake trial. Full
+screen-off request/TTS/rearm, call/disconnect, latency and battery remain pending.
+
+
+### ASR-43 device installation and sustained-input result — 2026-10-31
+
+Implementation `a31b6fc60383456b88ea2a66f5fe3dfa5e5ebfb2`, Voice 0.28/code32 and
+wake0.10/code11, installed companion first via the enrolled bridge signer after
+exact-source ZIP digest, package, certificate and unchanged-payload verification.
+Pulled-back installed hashes matched candidates. No data/model removal, runtime
+grant, mode preference or assistant-role change during this update.
+
+- Voice run 41192553567 / artifact13039591795: ZIP SHA-256
+  `c637b8d04525791f8e84cae5293e6b69427241f4cf4a57a3b089a8e170a2e7f8`;
+  CI APK `7867278d193b3e9f47ae3459a23ac2ded3f525d87efa9fa461df9f44d7af620e`;
+  installed APK `94d7dc171d360c0a8b2b8cbe093b791bc7f4d5b22b3fa76659deb2f9d5be50fc`.
+- Wake run 41192553600 / artifact13040075141: ZIP SHA-256
+  `942082dd127138aa2ee2bc46344c11acad1f1ffe14bf7f093cbc6db7d2f64eb8`;
+  CI APK `ff52dcf6b0ab98a86d6e3e85754f964913f314e2af11d3e96bc63ed15307e5c9`;
+  installed APK `f66ca8762f25f88f90e957d57a9cd62d56fb11b2538b966c12cf563c2175e96d`.
+
+163 controller and 11 companion tests pass. Tensor, voice-loop, Hebrew Zipformer
+41192553530 and Tensor probe 41192553586 exact-source gates pass; general Android
+Build 41192553526 was still running at this checkpoint.
+
+Without opening an Activity, the update resumed verified SCO headset microphone
+capture. A deliberately bounded observation recorded **17 consecutive healthy
+windows**, all `interactive=false`, `headset_verified=true`, type7 (HFP/SCO), totaling
+**86,300 ms processed PCM / 86,286 ms window wall time**. No interruption/status
+transition occurred in the 87s observation. Fresh health continued afterward.
+AudioService mode owner UID was separately compared with the companion package UID
+and matched while MODE_IN_COMMUNICATION remained active. No UID/device-address or
+private audio was published. Numeric local receipts remain ignored under
+build/qa-headset/uid-sustained-health.json and uid-mode-ownership.json.
+
+This is physical sustained screen-off headset-input evidence beyond the previous
+six-second expiry. It does **not** establish wake accuracy, audible acknowledgement,
+request capture, reply routing, a complete turn/rearm, latency or battery acceptance.
+The earlier owner acoustic trial failed on the old version. A new acoustic trial
+was requested only after the >60s input gate passed; owner report is pending at
+this checkpoint. No merge or roadmap completion.
+
+
+## ASR-44 / VOICE-22 — volatile same-input wake diagnostic, 2026-10-31
+
+On installed a31b6fc (0.28/code32 + wake0.10/code11), the owner again reported no
+response. Fresh verified-headset health continued with no detection/dispatch
+markers. This acoustic trial failed before feedback; sustained input is not wake
+acceptance. Do not lower thresholds or broaden matching without observing input.
+The owner explicitly agreed to a coordinated 20-second diagnostic saying only
+“מוזאיק”. Baseline/rollback is a31b6fc60383456b88ea2a66f5fe3dfa5e5ebfb2.
+
+Candidate Voice 0.28.1/code33 + wake0.10.1/code12 adds a DEBUG-only one-shot request,
+separate from saved listening consent. It consumes a debug setup flag once, then
+collects at most 320,000 verified 16kHz float samples in RAM (~1.28MB). The native
+KWS sees that exact input while normal assistant dispatch is suppressed. After
+capture, mic/route/KWS are released before loading the same pinned greedy Hebrew
+ASR. The buffer is cleared after decoding and the process exits. There are no PCM,
+transcript or arbitrary recognized-text files, exports or log fields. Closed
+result flags report KWS match, expected-word ASR match, empty ASR, sample count and
+only four fixed near-word variant codes. They do not broaden production activation.
+Normal wake restarts afterward only under the existing saved listening choice.
+No model/weight/backend/threshold or keyguard/permission grant change.
+
+The one-shot controller requires companion code12; normal owned-headset operation
+still requires code11. The debug runner never enables saved consent or captures by
+itself. Three new summary tests verify expected matching, near/music non-activation
+and absence of arbitrary text in results. Both local APK builds/tests passed after
+explicitly enabling generated BuildConfig for the diagnostic DEBUG gate. Hosted
+CI, installation and owner diagnostic results are pending, not acoustic acceptance.
+
+
+### ASR-44 initial diagnostic result — 2026-10-31
+
+Installed exact implementation `7e470d5ee66784cca04c072604ddb8448bf061b0`, Voice
+0.28.1/code33 + wake0.10.1/code12. Guarded exact-SHA artifact/digest/certificate/
+payload checks and pulled-back installed hashes passed. Voice artifact13039334785,
+installed APK SHA-256 `ee54db46678062fefdd9ace2b000f932efbb127b4b6ba9222e141ef7b5b2f180`;
+wake artifact13040236427, installed APK
+`3b3695e2fb0da0d1b8a478cc888da9a101f586589facaa0b0a2aa5b1354ad62d`.
+No data/model deletion, new role/grant or automatic listening-consent change.
+163 controller and 14 companion tests passed locally; Tensor 41194900958 and
+voice-loop 41194900960 exact-source APK gates passed before installation.
+
+After the owner confirmed availability, the one-shot debug flag was requested and
+the unchanged assistant binding refreshed for setup. probe_listening was followed
+by exactly 320,000 RAM samples. Result flags: KWS=false, ASR expected=false,
+ASR empty=false, known-variant code=0. Buffer/text were not written or exported;
+only these flags and lifecycle status were retained. Normal verified-headset wake
+listening automatically restarted afterward under existing consent.
+
+Interpretation remains limited: no expected word was recognized in this window.
+Owner confirmation of hearing the cue/speaking within the window is pending, so
+this is not proof of a specific acoustic/model defect. No threshold/matching or
+production backend change is justified from this result alone. The preceding
+owner full-wake trial on 0.28 failed. Acoustic acceptance remains unpassed.
+
+
+### ASR-44 coordinated repeat — 2026-10-31
+
+Owner said the first utterance may have been late; the initial negative diagnostic
+is timing-inconclusive. Repeated without code/model/settings changes: owner pressed
+start and repeated the fixed wake word for ~40s to overlap setup plus the 20s RAM
+window. The 320,000-sample repeat returned KWS=true, ASR expected=false,
+ASR empty=false, variant=0. Owner reports hearing the short cue, but very quietly.
+No raw diagnostic PCM/transcript was persisted or exported.
+
+After the diagnostic ended and normal standby resumed, a subsequent repetition
+triggered the ordinary wake path. Monotonic points for that one observed turn:
+WAKE_DETECTED 1251841175, ACK_REQUESTED 1251841231, ACK_COMPLETED 1251841507,
+WAKE_CALLBACK_RECEIVED 1251841657, TURN_DISPATCHED 1251842633,
+CAPTURE_RECORDING_STARTED 1251842787, READY_REQUESTED 1251842855,
+READY_PLAYBACK_HEAD 1251842967, READY_COMPLETED 1251844012 (all elapsed ms).
+These are software boundaries; no measured human-audible onset/P95 is claimed.
+Capture preceded ready request. The owner's only requested utterance was repeated
+wake words, not a semantic tool request; do not call this WhatsApp/task acceptance.
+
+A stage-only inspection (no transcript/answer/audio readout) of the resulting
+ordinary turn reported ASR/Gemma/TTS completion, final complete at 35,644ms, TTS
+3.831s audio with playback route type7. Reply audibility/intelligibility and owner
+perception of the ready cue remain pending. A request for that observation was
+sent; software completion is not audible acceptance. AudioService showed SCO
+voice-call volume9/15, not muted; no system volume change was made. Weak cue is an
+observed usability issue. All five exact-source 7e470d5 CI gates passed. No new
+activation variants/threshold/backend changes were made from this probe.
+
+
+### ASR-44 audibility confirmation and single screen-off miss — 2026-10-31
+
+Owner confirms hearing both the ready sentence and a spoken answer after the weak
+cue. Together with recorded wake/capture/ASR/Gemma/TTS/rearm stages, this is one
+owner-audible ordinary pipeline observation. The nearest pre-wake health record
+was interactive=true. It is not a verified screen-off full turn, semantic tool
+request, repeated reliability or daily-use acceptance. Healthy rearm was observed.
+
+A separate coordinated single-utterance screen-off trial followed: remote SLEEP
+reported Dozing; subsequent verified headset health remained interactive=false
+and fresh. Owner reports saying “מוזאיק” once and receiving no response. No new
+detection/dispatch markers appeared. This trial failed despite continued input;
+it does not prove the screen state caused the miss. Repetition had succeeded,
+so isolated-word sensitivity versus screen state needs a controlled comparison.
+No production model/threshold/keyword or volume setting was changed. Owner was
+asked to coordinate one otherwise similar single-word trial with the display on;
+that action is pending readiness, not silently executed. Weak cue remains open.
+
+
+## ASR-45 / VOICE-23 — background capture after acknowledgement, 2026-10-31
+
+Owner's new ordinary attempt heard only a weak beep. This time telemetry confirms
+WAKE_DETECTED/ACK_COMPLETED/WAKE_CALLBACK_RECEIVED/TURN_DISPATCHED, then rearm;
+no CAPTURE_RECORDING_STARTED or READY marker followed. Do not classify this event
+as a keyword miss. The previous audible full pipeline remains a separate trial.
+
+Source review found request startup tied to Activity foreground/onResume:
+onNewIntent only started auto capture when foreground=true, and readyCapture
+returned when foreground=false. This can explain an ack-only turn when an
+assistant Activity exists but is not resumed (screen off/dreaming/lock state).
+New intent-accepted/FGS-requested/FGS-active monotonic markers will distinguish that
+hypothesis from an Activity delivery failure on the next physical attempt.
+
+Baseline/rollback implementation: 7e470d5ee66784cca04c072604ddb8448bf061b0,
+installed Voice 0.28.1/code33 + wake0.10.1/code12. Candidate Voice
+0.29-background-capture/code34 keeps companion/model/IPC/route ownership and cue
+level unchanged. An accepted wake schedules request startup from onCreate or
+onNewIntent without waiting for UI resume. It first requests the existing visible
+microphone/mediaPlayback FGS, waits up to 3s for actual promotion and only then
+starts capture. Duplicate resume/intent callbacks share one generation; explicit
+Stop, lost authorization, destruction and timeout invalidate delayed promotion.
+No role/grant/background restriction or keyguard bypass. Headset screen wake and
+KEEP_SCREEN_ON remain disabled. Push-to-talk still requires foreground UI.
+
+168 controller JVM tests pass (five new FGS-promotion/cancellation/race tests),
+local APK build and whitespace checks pass. Companion's 14 unchanged tests passed
+on its installed implementation. No ASR threshold/backend/model tuning, microphone
+data capture or volume change was made for this slice. Exact-source CI, guarded
+controller installation and screen-off ack→capture→ready→reply/rearm acceptance
+remain pending. Weak beep is retained as an unresolved usability observation.
+
+
+ASR-45 delivery refinement before installation: read-only ActivityTaskManager
+inspection of the failed installed turn showed VoiceActivity STOPPED, not visible,
+and Pending New Intents. Therefore foreground-gate removal alone would not ensure
+that onNewIntent executes. Candidate headset wakes now target a separate,
+non-exported HeadsetTurnActivity whose lock visibility is declared before intent
+delivery. It never requests screen-on, starts only from the consumed internal wake
+nonce, and finishes after the turn so the next wake gets a fresh host. Manual UI
+lock visibility is unchanged. Base getPreferences explicitly retains the existing
+VoiceActivity preference file for the new host, avoiding a model-selection/session
+preference reset. The FGS-promotion gate still precedes capture independently of
+onResume. This is a candidate delivery fix, not physical acceptance or a claim
+that all orchestration has been moved out of Activity code.
+
+
+### ASR-45 controller installation — 2026-10-31
+
+Installed implementation `149447ce3eeef43072313f3a84de9886abf6df7e`, Voice
+0.29/code34, via exact-source Tensor gate41198193958/artifact13041173695.
+ZIP SHA-256 `1cea04db66b56c342439424ba829ffc6682741aa0fa09c7ac5cd507b38b7400e`
+matched GitHub digest; original CI APK
+`9653b515bbabb6f303a3daff299258adf623a23cbdfd4bb6e1d4c6b060f66e26`;
+installed/pulled-back APK `f314a73c9fd2309ce613198559b7f4f4e837541fe061378071aa1ab9321c64dd`.
+Certificate/payload/data-preserving checks passed. Companion remains installed
+0.10.1/code12 from7e470d5, no model/volume/runtime-grant changes. Existing
+VoiceActivity.xml was confirmed before installation; its preference namespace is
+preserved for the new turn host.
+
+Controller tests/build pass; exact-source Tensor, voice-loop41198193920, Hebrew
+Zipformer41198193951 and probe41198193875 passed before the device follow-up.
+General Android Build41198193876 was still running at the evidence checkpoint.
+
+ADB briefly disconnected and was reconnected only to the enrolled Pixel's
+advertised TLS endpoint; identity was verified, no re-pairing or new permission.
+After installation actual AudioPolicy available devices contained no Bluetooth
+headset. Listening consent/headset mode stayed true; restoration exhausted its
+bounded attempts. The generic status inaccurately suggested a signed update when
+no sink was available; this is an existing failure-classification usability issue,
+not evidence that the matching installed certificate failed. Owner was asked to
+reconnect before the next trial. No screen-off full-turn or candidate lifecycle
+pass is claimed yet. No Activity was manually opened to start the candidate.
+
+
+### ASR-45 owner-confirmed screen-off turn — 2026-10-31
+
+On installed 149447c (Voice0.29/code34 + wake0.10.1/code12), after reconnecting the
+buds, verified standby was confirmed and remote SLEEP reported Dozing. Owner was
+explicitly cued to say “מוזאיק” once, wait for ready, then ask a short question.
+This attempt recorded WAKE_DETECTED→ACK_COMPLETED→TURN_DISPATCHED→
+TURN_INTENT_ACCEPTED→TURN_SERVICE_REQUESTED→TURN_SERVICE_ACTIVE→
+CAPTURE_RECORDING_STARTED→READY_REQUESTED/PLAYBACK_HEAD/COMPLETED.
+Capture timestamp1254035655 preceded/was equal to ready-request timestamp1254035655;
+recording verification ran before cue submission even though millisecond ticks
+coincided. Headset health immediately before wake was interactive=false/type7.
+Power snapshots were Dozing at test start, capture/ready observation and after TTS.
+No manual app launch, permission/role change, instrumentation or setting refresh
+was used for this trial.
+
+A stage-only journal inspection (no transcript/answer/PCM content retrieval) showed
+ASR/Zipformer complete2,371ms, Gemma complete9,457ms, TTS complete13,743ms with
+3.274s output/type7; whole turn complete32,164ms. These stage totals include their
+existing preparation/compute/playback boundaries, not pure inference benchmarks.
+Owner explicitly confirms hearing “אני פה, דבר אליי” and a spoken answer to the
+question with the screen off. This is one owner-confirmed hands-free basic turn,
+not WhatsApp/private-tool acceptance, P95 latency or repeated daily reliability.
+
+Verified non-interactive headset-input health resumed after completion, establishing
+observed rearm. Several later healthy windows were followed by interruption, then
+bounded retries stopped. Actual available AudioPolicy outputs at the final check
+contained no Bluetooth sink. Owner was asked whether they disconnected/switched
+the buds; cause is pending, so no disconnect/reconnect reliability pass is claimed.
+Saved consent/headset mode stayed true; current listener is paused, not falsely
+reported active. Weak cue remains an observed issue. All five exact-source CI
+gates for149447c passed. Private stage/timing receipts remain under ignored
+build/qa-headset. No merge or release completion; battery, false/missed wakes,
+repeatability, interruption privacy and reboot gates remain open.
