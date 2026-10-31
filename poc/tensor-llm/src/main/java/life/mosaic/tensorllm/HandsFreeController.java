@@ -95,7 +95,12 @@ final class HandsFreeController {
         if(!MosaicAssistantService.ready()){status(c,"האזנה קבועה מושהית · ממתין לחיבור עוזר Android");return;}
         if(session.isEmpty()||!FeedbackClips.valid(c.getFilesDir())){stop(c,"יש להכין משוב קולי והאזנה מתוך מוזאיק");return;}
         if(c.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){status(c,"נדרשת הרשאת מיקרופון");return;}
-        if(HeadsetRouteService.required(c))HeadsetRouteService.stop(c);
+        if(HeadsetRouteService.required(c)){
+            HeadsetRouteService.stop(c);
+            if(c.getSystemService(android.media.AudioManager.class).getMode()!=android.media.AudioManager.MODE_NORMAL){
+                status(c,"האזנה באוזניות מושהית עד לסיום השיחה · תתחדש ברקע");return;
+            }
+        }
         recovery.cancel();
         try{
             if(c.getPackageManager().checkSignatures(c.getPackageName(),COMPANION)!=PackageManager.SIGNATURE_MATCH
