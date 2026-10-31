@@ -363,3 +363,29 @@ itself. Three new summary tests verify expected matching, near/music non-activat
 and absence of arbitrary text in results. Both local APK builds/tests passed after
 explicitly enabling generated BuildConfig for the diagnostic DEBUG gate. Hosted
 CI, installation and owner diagnostic results are pending, not acoustic acceptance.
+
+
+### ASR-44 initial diagnostic result — 2026-10-31
+
+Installed exact implementation `7e470d5ee66784cca04c072604ddb8448bf061b0`, Voice
+0.28.1/code33 + wake0.10.1/code12. Guarded exact-SHA artifact/digest/certificate/
+payload checks and pulled-back installed hashes passed. Voice artifact13039334785,
+installed APK SHA-256 `ee54db46678062fefdd9ace2b000f932efbb127b4b6ba9222e141ef7b5b2f180`;
+wake artifact13040236427, installed APK
+`3b3695e2fb0da0d1b8a478cc888da9a101f586589facaa0b0a2aa5b1354ad62d`.
+No data/model deletion, new role/grant or automatic listening-consent change.
+163 controller and 14 companion tests passed locally; Tensor 41194900958 and
+voice-loop 41194900960 exact-source APK gates passed before installation.
+
+After the owner confirmed availability, the one-shot debug flag was requested and
+the unchanged assistant binding refreshed for setup. probe_listening was followed
+by exactly 320,000 RAM samples. Result flags: KWS=false, ASR expected=false,
+ASR empty=false, known-variant code=0. Buffer/text were not written or exported;
+only these flags and lifecycle status were retained. Normal verified-headset wake
+listening automatically restarted afterward under existing consent.
+
+Interpretation remains limited: no expected word was recognized in this window.
+Owner confirmation of hearing the cue/speaking within the window is pending, so
+this is not proof of a specific acoustic/model defect. No threshold/matching or
+production backend change is justified from this result alone. The preceding
+owner full-wake trial on 0.28 failed. Acoustic acceptance remains unpassed.
