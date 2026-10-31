@@ -1236,3 +1236,32 @@ Owner confirmation of hearing the cue/speaking within the window is pending, so
 this is not proof of a specific acoustic/model defect. No threshold/matching or
 production backend change is justified from this result alone. The preceding
 owner full-wake trial on 0.28 failed. Acoustic acceptance remains unpassed.
+
+
+### ASR-44 coordinated repeat — 2026-10-31
+
+Owner said the first utterance may have been late; the initial negative diagnostic
+is timing-inconclusive. Repeated without code/model/settings changes: owner pressed
+start and repeated the fixed wake word for ~40s to overlap setup plus the 20s RAM
+window. The 320,000-sample repeat returned KWS=true, ASR expected=false,
+ASR empty=false, variant=0. Owner reports hearing the short cue, but very quietly.
+No raw diagnostic PCM/transcript was persisted or exported.
+
+After the diagnostic ended and normal standby resumed, a subsequent repetition
+triggered the ordinary wake path. Monotonic points for that one observed turn:
+WAKE_DETECTED 1251841175, ACK_REQUESTED 1251841231, ACK_COMPLETED 1251841507,
+WAKE_CALLBACK_RECEIVED 1251841657, TURN_DISPATCHED 1251842633,
+CAPTURE_RECORDING_STARTED 1251842787, READY_REQUESTED 1251842855,
+READY_PLAYBACK_HEAD 1251842967, READY_COMPLETED 1251844012 (all elapsed ms).
+These are software boundaries; no measured human-audible onset/P95 is claimed.
+Capture preceded ready request. The owner's only requested utterance was repeated
+wake words, not a semantic tool request; do not call this WhatsApp/task acceptance.
+
+A stage-only inspection (no transcript/answer/audio readout) of the resulting
+ordinary turn reported ASR/Gemma/TTS completion, final complete at 35,644ms, TTS
+3.831s audio with playback route type7. Reply audibility/intelligibility and owner
+perception of the ready cue remain pending. A request for that observation was
+sent; software completion is not audible acceptance. AudioService showed SCO
+voice-call volume9/15, not muted; no system volume change was made. Weak cue is an
+observed usability issue. All five exact-source 7e470d5 CI gates passed. No new
+activation variants/threshold/backend changes were made from this probe.
