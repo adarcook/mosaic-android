@@ -27,6 +27,9 @@ final class HandsFreeController {
         if(stopHeadsetTurn!=null)stopHeadsetTurn.run();
         stop(c,"האזנה דרך האוזניות מושהית · חבר מחדש את האוזניות או הפעל שוב");
     }
+    static void communicationModeChanged(Context c,int mode){
+        if(HeadsetResumeGate.allowed(mode,persistent(c),HeadsetRouteService.required(c),enabled,turnRunning))recover(c);
+    }
     static void headsetConnected(Context c){if(HeadsetRouteService.required(c)&&persistent(c)){recovery.reset();recover(c);}}
 
     enum TimingPoint { WAKE_DETECTED, ACK_REQUESTED, ACK_PLAYBACK_HEAD, ACK_COMPLETED, WAKE_CALLBACK_RECEIVED, TURN_DISPATCHED, READY_REQUESTED, READY_PLAYBACK_HEAD, READY_COMPLETED, CAPTURE_RECORDING_STARTED }

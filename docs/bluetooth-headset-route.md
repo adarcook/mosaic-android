@@ -185,3 +185,32 @@ before controller, then enable the visible headset mode and verify source/output
 The remote queue #56 received status only; no deferred install command was queued.
 Local queue/config is #59 on port8766. Private local evidence stays under ignored
 build/qa-headset. No merge or roadmap completion.
+
+
+### ASR-42 follow-up — service restoration after a communication session, 2026-10-31
+
+Source c82b174 was installed with the user-copied original development key after
+certificate/payload/digest verification: Voice 0.27/code30 installed APK SHA-256
+`256ff8a60e4dc26ec0cc8ddc22eb8ec4648887d60dce14d80c949532a22da3ba`,
+wake0.9/code10 installed APK `5ad7144849e0f27b59374340c8a90aeafcd076b05f730b7c49e5e93c9c667c41`.
+Saved listening consent was already true; debug owner setup changed only headset_mode.
+No model/data deletion or new permission/assistant-role grant. Earlier missing-key
+block remains historical, superseded by these verified installation receipts.
+
+After setup instrumentation, the system assistant binding was null; ordinary main
+process termination and reasserting the same setting did not repair it. A controlled
+refresh of the voice_interaction_service setting restored the original selected
+Mosaic component and unchanged assistant setting, without activity launch. This is
+setup repair, not evidence of autonomous recovery. The restored service correctly
+refused to take audio while ChatGPT owned MODE_IN_COMMUNICATION. User ended that
+voice session. Review exposed a missing automatic mode-release restore trigger.
+
+Candidate 0.27.1/code31 adds OnModeChangedListener: return to MODE_NORMAL can trigger
+bounded background restore under existing headset/listening consent, only when no
+listener/turn is active. It never resets the three-attempt failure budget; explicit
+Stop still wins. Headset reconnection triggers now consider sink additions only,
+not source endpoints created by routing. Companion/model/IPC/backend unchanged.
+Baseline/rollback: c82b174e2e3c293e413b70434fc99394a85ecf17. Four new JVM tests cover
+mode completion, Stop, competing turns and bounded repeated mode callbacks.
+Exact-source CI, installation and ordinary process restart proof are pending here.
+No acoustic wake, screen-off full turn or battery acceptance claim.

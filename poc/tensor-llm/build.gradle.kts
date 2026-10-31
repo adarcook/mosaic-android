@@ -9,8 +9,8 @@ android {
         applicationId = "life.mosaic.tensorllm"
         minSdk = 31
         targetSdk = 35
-        versionCode = 30
-        versionName = "0.27-headset-route"
+        versionCode = 31
+        versionName = "0.27.1-service-resume"
         ndk { abiFilters += "arm64-v8a" }
     }
     compileOptions {
