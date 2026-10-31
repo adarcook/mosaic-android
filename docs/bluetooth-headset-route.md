@@ -295,3 +295,42 @@ MODIFY_AUDIO_SETTINGS plus mediaPlayback FGS declaration support its own ack/rou
 no Bluetooth scan/pairing grant. Exact-source CI/install and >60s non-interactive
 health must pass before asking the owner for another acoustic wake trial. Full
 screen-off request/TTS/rearm, call/disconnect, latency and battery remain pending.
+
+
+### ASR-43 device installation and sustained-input result — 2026-10-31
+
+Implementation `a31b6fc60383456b88ea2a66f5fe3dfa5e5ebfb2`, Voice 0.28/code32 and
+wake0.10/code11, installed companion first via the enrolled bridge signer after
+exact-source ZIP digest, package, certificate and unchanged-payload verification.
+Pulled-back installed hashes matched candidates. No data/model removal, runtime
+grant, mode preference or assistant-role change during this update.
+
+- Voice run 41192553567 / artifact13039591795: ZIP SHA-256
+  `c637b8d04525791f8e84cae5293e6b69427241f4cf4a57a3b089a8e170a2e7f8`;
+  CI APK `7867278d193b3e9f47ae3459a23ac2ded3f525d87efa9fa461df9f44d7af620e`;
+  installed APK `94d7dc171d360c0a8b2b8cbe093b791bc7f4d5b22b3fa76659deb2f9d5be50fc`.
+- Wake run 41192553600 / artifact13040075141: ZIP SHA-256
+  `942082dd127138aa2ee2bc46344c11acad1f1ffe14bf7f093cbc6db7d2f64eb8`;
+  CI APK `ff52dcf6b0ab98a86d6e3e85754f964913f314e2af11d3e96bc63ed15307e5c9`;
+  installed APK `f66ca8762f25f88f90e957d57a9cd62d56fb11b2538b966c12cf563c2175e96d`.
+
+163 controller and 11 companion tests pass. Tensor, voice-loop, Hebrew Zipformer
+41192553530 and Tensor probe 41192553586 exact-source gates pass; general Android
+Build 41192553526 was still running at this checkpoint.
+
+Without opening an Activity, the update resumed verified SCO headset microphone
+capture. A deliberately bounded observation recorded **17 consecutive healthy
+windows**, all `interactive=false`, `headset_verified=true`, type7 (HFP/SCO), totaling
+**86,300 ms processed PCM / 86,286 ms window wall time**. No interruption/status
+transition occurred in the 87s observation. Fresh health continued afterward.
+AudioService mode owner UID was separately compared with the companion package UID
+and matched while MODE_IN_COMMUNICATION remained active. No UID/device-address or
+private audio was published. Numeric local receipts remain ignored under
+build/qa-headset/uid-sustained-health.json and uid-mode-ownership.json.
+
+This is physical sustained screen-off headset-input evidence beyond the previous
+six-second expiry. It does **not** establish wake accuracy, audible acknowledgement,
+request capture, reply routing, a complete turn/rearm, latency or battery acceptance.
+The earlier owner acoustic trial failed on the old version. A new acoustic trial
+was requested only after the >60s input gate passed; owner report is pending at
+this checkpoint. No merge or roadmap completion.
